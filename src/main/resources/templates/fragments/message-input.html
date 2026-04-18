@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<div th:fragment="message-input" class="message-input border-top bg-white p-2">
+  <div id="reply-indicator" class="d-none small text-muted mb-1 ps-2">
+    Replying to: <span id="reply-to-name"></span>
+    <button type="button" class="btn-close btn-close-sm ms-2" aria-label="Cancel reply"
+            onclick="document.getElementById('reply-indicator').classList.add('d-none')"></button>
+  </div>
+  <div class="d-flex align-items-end gap-2">
+    <button type="button" class="btn btn-outline-secondary btn-sm" title="Emoji">😊</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" title="Attach file">📎</button>
+    <textarea class="form-control form-control-sm" rows="1" placeholder="Type a message..."
+              style="resize: none; max-height: 120px;"></textarea>
+    <button type="button" class="btn btn-primary btn-sm">Send</button>
+  </div>
+</div>
+</body>
+</html>

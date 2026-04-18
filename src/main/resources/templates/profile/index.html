@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile - YAC</title>
+  <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+  <link rel="stylesheet" th:href="@{/css/chat.css}">
+</head>
+<body class="d-flex flex-column vh-100">
+
+  <div th:replace="~{fragments/navbar :: navbar}"></div>
+
+  <div class="container mt-4">
+    <div class="row justify-content-center">
+      <div class="col-md-8 col-lg-6">
+        <h4 class="mb-4">Profile</h4>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-title">Display Name</h6>
+            <form>
+              <div class="mb-3">
+                <input type="text" class="form-control" placeholder="Display name">
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-title">Email</h6>
+            <p class="text-muted mb-0">user@example.com</p>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-title">Change Password</h6>
+            <form>
+              <div class="mb-3">
+                <input type="password" class="form-control" placeholder="Current password">
+              </div>
+              <div class="mb-3">
+                <input type="password" class="form-control" placeholder="New password">
+              </div>
+              <div class="mb-3">
+                <input type="password" class="form-control" placeholder="Confirm new password">
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm">Change password</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card border-danger">
+          <div class="card-body">
+            <h6 class="card-title text-danger">Delete Account</h6>
+            <p class="small text-muted">This action is irreversible. Your rooms and their messages will be deleted.</p>
+            <button type="button" class="btn btn-danger btn-sm">Delete my account</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script th:src="@{/webjars/bootstrap/js/bootstrap.bundle.min.js}"></script>
+</body>
+</html>

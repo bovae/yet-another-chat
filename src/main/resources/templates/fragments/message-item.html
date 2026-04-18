@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<div th:fragment="message-item" class="message-item d-flex mb-3">
+  <div class="message-avatar me-2">
+    <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center"
+         style="width: 36px; height: 36px;">
+      <span th:text="'U'">U</span>
+    </div>
+  </div>
+  <div class="message-content flex-grow-1">
+    <div class="d-flex align-items-baseline">
+      <strong class="me-2" th:text="'Username'">Username</strong>
+      <small class="text-muted" th:text="'12:00'">12:00</small>
+      <small class="text-muted ms-1" th:if="${false}">(edited)</small>
+    </div>
+    <!-- Reply quote placeholder -->
+    <div th:if="${false}" class="reply-quote border-start border-3 border-primary ps-2 mb-1 small text-muted">
+      <span>Replying to message...</span>
+    </div>
+    <p class="mb-0" th:text="'Message content'">Message content</p>
+    <!-- Attachment placeholder -->
+    <div th:if="${false}" class="attachment mt-1 p-2 border rounded small">
+      <span>📎 filename.pdf</span>
+      <div class="text-muted" th:text="'comment'">comment</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
