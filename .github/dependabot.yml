@@ -5,6 +5,9 @@ updates:
     schedule:
       interval: weekly
     target-branch: develop
+    ignore:
+      - dependency-name: "org.testcontainers:*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
