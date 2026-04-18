@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<div th:fragment="member-list" class="member-list p-3 border-start bg-white h-100 overflow-auto">
+  <h6 class="text-uppercase text-muted small mb-3">Room info</h6>
+  <p class="small text-muted">Select a room to see details</p>
+
+  <hr>
+
+  <h6 class="text-uppercase text-muted small mb-2">Members</h6>
+  <ul class="list-unstyled">
+    <li class="text-muted small">No members</li>
+  </ul>
+
+  <div class="mt-3">
+    <button class="btn btn-outline-primary btn-sm w-100 mb-2">Invite user</button>
+    <button class="btn btn-outline-secondary btn-sm w-100">Manage room</button>
+  </div>
+</div>
+</body>
+</html>
