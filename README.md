@@ -1,10 +1,10 @@
 # Yet Another Chat (YAC)
 
+![Build](https://img.shields.io/github/actions/workflow/status/bovae/yet-another-chat/build-and-test.yml?branch=develop&label=Build)
 ![Java](https://img.shields.io/badge/Java-21-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.5-green)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue)
 ![Redis](https://img.shields.io/badge/Redis-7-red)
-![Build](https://img.shields.io/github/actions/workflow/status/bovae/yet-another-chat/build-and-test.yml?branch=develop&label=Build)
 
 Classic web-based online chat application with rooms, contacts, file sharing, and real-time presence.
 
