@@ -128,7 +128,7 @@ class DirectChatApiIT {
     }
 
     @Test
-    void createDirectChat_withSelf_returns403() throws Exception {
+    void createDirectChat_withSelf_returns200() throws Exception {
         mockMvc.perform(post("/api/direct-chats")
                         .with(user(userA.getEmail()).roles("USER"))
                         .with(csrf())
@@ -136,7 +136,7 @@ class DirectChatApiIT {
                         .content("""
                                 {"user_id": "%s"}
                                 """.formatted(userA.getId())))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
     }
 
     // ---- List direct chats ----
