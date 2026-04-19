@@ -25,17 +25,17 @@
           <p>No active sessions found.</p>
         </div>
 
-        <div th:each="session : ${sessions}" class="card mb-2">
+        <div th:each="sess : ${sessions}" class="card mb-2">
           <div class="card-body d-flex justify-content-between align-items-center">
             <div>
               <strong>Session</strong>
               <p class="small text-muted mb-0">
-                Created: <span th:text="${#temporals.format(session.creationTime(), 'yyyy-MM-dd HH:mm')}">time</span>
-                | Last accessed: <span th:text="${#temporals.format(session.lastAccessedTime(), 'yyyy-MM-dd HH:mm')}">time</span>
+                Created: <span th:text="${#temporals.format(sess.creationTime(), 'yyyy-MM-dd HH:mm')}">time</span>
+                | Last accessed: <span th:text="${#temporals.format(sess.lastAccessedTime(), 'yyyy-MM-dd HH:mm')}">time</span>
               </p>
             </div>
             <button class="btn btn-outline-danger btn-sm"
-                    th:attr="data-session-id=${session.sessionId()}"
+                    th:attr="data-session-id=${sess.sessionId()}"
                     onclick="terminateSession(this)">Terminate</button>
           </div>
         </div>

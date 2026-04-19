@@ -59,7 +59,7 @@
             <div class="mb-3">
               <label for="room-settings-name" class="form-label">Name</label>
               <input type="text" class="form-control" id="room-settings-name"
-                     th:value="${room.name}" placeholder="Room name">
+                     th:value="${displayName != null ? displayName : room.name}" placeholder="Room name">
             </div>
             <div class="mb-3">
               <label for="room-settings-description" class="form-label">Description</label>
@@ -97,7 +97,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <p>Are you sure you want to delete <strong th:text="${room.name}">Room</strong>?</p>
+          <p>Are you sure you want to delete <strong th:text="${displayName != null ? displayName : room.name}">Room</strong>?</p>
           <p class="text-muted small">This action is irreversible. All messages, attachments, and members will be removed.</p>
         </div>
         <div class="modal-footer">

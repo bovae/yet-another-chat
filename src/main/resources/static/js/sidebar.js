@@ -406,7 +406,7 @@
 
         var collapseDiv = document.createElement('div');
         collapseDiv.id = 'roomInvitationsCollapse';
-        collapseDiv.className = 'collapse';
+        collapseDiv.className = 'collapse show';
         section.appendChild(collapseDiv);
 
         var list = document.createElement('ul');

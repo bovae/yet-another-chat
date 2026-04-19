@@ -199,12 +199,16 @@
   function subscribeToAllVisibleUsers() {
     // Subscribe to presence for all users visible in the member list and contact list
     var dots = document.querySelectorAll('.presence-dot[data-user-id]');
+    var userIds = [];
     dots.forEach(function (dot) {
       var userId = dot.getAttribute('data-user-id');
       if (userId) {
         subscribeToFriendPresence(userId);
+        userIds.push(userId);
       }
     });
+    // Fetch initial presence so server-rendered dots get their correct status
+    fetchInitialPresence(userIds);
   }
 
   // Track cursor movement events per tab

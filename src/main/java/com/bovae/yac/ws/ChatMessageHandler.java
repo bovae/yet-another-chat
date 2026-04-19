@@ -77,7 +77,7 @@ public class ChatMessageHandler {
         LOG.debug("Broadcast message to /topic/room.{}: messageId={}, sender={}",
                 room.getId(), message.getId(), sender.getUsername());
 
-        List<RoomMember> members = roomMemberRepository.findByRoom(room);
+        List<RoomMember> members = roomMemberRepository.findByRoomWithUsers(room);
         for (RoomMember member : members) {
             if (!member.getUser().getId().equals(sender.getId())) {
                 int unread = notificationService.computeUnreadCount(member.getUser(), room);

@@ -5,6 +5,7 @@ import com.bovae.yac.model.dto.RoomMemberDto;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomRole;
+import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.NotificationService;
@@ -60,6 +61,13 @@ public class ChatWebController {
         MessagePage messagePage = messageService.getMessageHistory(room, null, INITIAL_PAGE_SIZE);
 
         model.addAttribute("room", room);
+
+        if (room.getVisibility() == RoomVisibility.DIRECT && room.getName().startsWith("saved-messages-")) {
+            model.addAttribute("displayName", "Saved Messages");
+        } else {
+            model.addAttribute("displayName", room.getName());
+        }
+
         model.addAttribute("members", members);
         model.addAttribute("messages", messagePage.messages());
         model.addAttribute("nextCursor", messagePage.nextCursor());

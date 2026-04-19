@@ -138,7 +138,7 @@ class UnreadBroadcastPropertyTest {
         // Stub dependencies
         when(roomRepository.findById(room.getId())).thenReturn(Optional.of(room));
         when(userRepository.findByEmail(sender.getEmail())).thenReturn(Optional.of(sender));
-        when(roomMemberRepository.findByRoom(room)).thenReturn(members);
+        when(roomMemberRepository.findByRoomWithUsers(room)).thenReturn(members);
 
         Message sentMessage = Message.builder()
                 .id(UUID.randomUUID())

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title th:text="${room.name} + ' - YAC'">Room - YAC</title>
+  <title th:text="${displayName} + ' - YAC'">Room - YAC</title>
   <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
   <link rel="stylesheet" th:href="@{/css/chat.css}">
   <meta name="_csrf" th:content="${_csrf.token}">
@@ -23,7 +23,7 @@
     <div class="flex-grow-1 d-flex flex-column">
       <div class="chat-header border-bottom p-2 bg-white d-flex align-items-center justify-content-between">
         <div>
-          <h6 class="mb-0" th:text="${room.name}">Room Name</h6>
+          <h6 class="mb-0" th:text="${displayName}">Room Name</h6>
           <small class="text-muted" th:text="${room.description}">Room description</small>
         </div>
         <div>
@@ -176,7 +176,7 @@
   <script th:inline="javascript">
     window.YAC_ROOM = {
       id: [[${room.id.toString()}]],
-      name: [[${room.name}]],
+      name: [[${displayName}]],
       nextCursor: [[${nextCursor}]],
       hasMore: [[${hasMore}]]
     };

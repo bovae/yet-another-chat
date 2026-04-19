@@ -110,6 +110,8 @@ class PasswordServiceTest {
 
         when(passwordResetTokenRepository.findByTokenHash(anyString()))
                 .thenReturn(Optional.of(resetToken));
+        when(userRepository.findById(existingUser.getId()))
+                .thenReturn(Optional.of(existingUser));
         when(passwordEncoder.encode(newPassword)).thenReturn(encodedNewPassword);
         when(passwordResetTokenRepository.save(any(PasswordResetToken.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));

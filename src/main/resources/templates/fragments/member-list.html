@@ -18,7 +18,7 @@
 <div th:fragment="member-list-room(members, room, currentUser)"
      class="member-list p-3 border-start bg-white h-100 overflow-auto">
   <h6 class="text-uppercase text-muted small mb-1">Room info</h6>
-  <p class="small fw-bold mb-0" th:text="${room.name}">Room</p>
+  <p class="small fw-bold mb-0" th:text="${displayName != null ? displayName : room.name}">Room</p>
   <p class="small text-muted" th:text="${room.description}">Description</p>
   <span class="badge bg-light text-dark" th:text="${room.visibility}">PUBLIC</span>
 

@@ -3,6 +3,7 @@ package com.bovae.yac.controller.api;
 import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.dto.ChatMessageRequest;
 import com.bovae.yac.model.dto.ChatMessageResponse;
+import com.bovae.yac.model.dto.EditMessageRequest;
 import com.bovae.yac.model.dto.MessagePage;
 import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
@@ -81,7 +82,7 @@ public class MessageApiController {
     public ResponseEntity<ChatMessageResponse> editMessage(
             @PathVariable UUID roomId,
             @PathVariable UUID id,
-            @Valid @RequestBody ChatMessageRequest request,
+            @Valid @RequestBody EditMessageRequest request,
             Principal principal) {
         User user = resolveUser(principal);
         roomService.getRoomById(roomId);
