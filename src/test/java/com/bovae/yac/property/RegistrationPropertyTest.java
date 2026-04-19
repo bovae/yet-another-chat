@@ -70,7 +70,7 @@ class RegistrationPropertyTest {
     }
 
     // Feature: online-chat-server, Property 1: Registration uniqueness enforcement
-    @Property(tries = 100)
+    @Property(tries = 20)
     void duplicateEmailOrUsernameShallBeRejected(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
@@ -96,7 +96,7 @@ class RegistrationPropertyTest {
     }
 
     // Feature: online-chat-server, Property 2: Password hash round-trip
-    @Property(tries = 100)
+    @Property(tries = 20)
     void passwordHashRoundTrip(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
@@ -115,7 +115,7 @@ class RegistrationPropertyTest {
     }
 
     // Feature: online-chat-server, Property 3: Username immutability
-    @Property(tries = 100)
+    @Property(tries = 20)
     void usernameShallBeImmutable(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,

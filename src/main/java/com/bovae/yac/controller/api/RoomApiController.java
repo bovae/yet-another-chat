@@ -3,11 +3,15 @@ package com.bovae.yac.controller.api;
 import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.dto.CreateRoomRequest;
 import com.bovae.yac.model.dto.MyRoomEntry;
+import com.bovae.yac.model.dto.PendingInvitationDto;
 import com.bovae.yac.model.dto.RoomCatalogEntry;
 import com.bovae.yac.model.dto.RoomDto;
 import com.bovae.yac.model.dto.UpdateRoomRequest;
 import com.bovae.yac.model.entity.Room;
+import com.bovae.yac.model.entity.RoomInvitation;
 import com.bovae.yac.model.entity.User;
+import com.bovae.yac.model.enums.RoomVisibility;
+import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
@@ -40,6 +44,7 @@ public class RoomApiController {
 
     private final RoomService roomService;
     private final RoomMemberService roomMemberService;
+    private final RoomInvitationRepository roomInvitationRepository;
     private final UserRepository userRepository;
 
     @GetMapping
@@ -57,6 +62,9 @@ public class RoomApiController {
     public ResponseEntity<RoomDto> createRoom(
             @Valid @RequestBody CreateRoomRequest request,
             Principal principal) {
+        if (request.visibility() == RoomVisibility.DIRECT) {
+            return ResponseEntity.badRequest().build();
+        }
         User user = resolveUser(principal);
         RoomDto room = roomService.createRoom(request.name(), request.description(), request.visibility(), user);
         return ResponseEntity.status(HttpStatus.CREATED).body(room);
@@ -77,6 +85,21 @@ public class RoomApiController {
         User user = resolveUser(principal);
         List<MyRoomEntry> rooms = roomService.listUserRoomsWithUnread(user);
         return ResponseEntity.ok(rooms);
+    }
+
+    @GetMapping("/invitations/pending")
+    public ResponseEntity<List<PendingInvitationDto>> pendingInvitations(Principal principal) {
+        User user = resolveUser(principal);
+        List<RoomInvitation> invitations = roomInvitationRepository.findByInvitee(user);
+        List<PendingInvitationDto> dtos = invitations.stream()
+                .map(inv -> new PendingInvitationDto(
+                        inv.getId(),
+                        inv.getRoom().getId(),
+                        inv.getRoom().getName(),
+                        inv.getInviter().getUsername(),
+                        inv.getCreatedAt()))
+                .toList();
+        return ResponseEntity.ok(dtos);
     }
 
     @DeleteMapping("/{id}")

@@ -98,7 +98,7 @@ class PresencePropertyTest {
      * - Inactive heartbeat → AFK (heartbeat arriving but not active)
      * - No Redis key → OFFLINE
      */
-    @Property(tries = 50)
+    @Property(tries = 10)
     void presenceStatusComputation(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,

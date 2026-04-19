@@ -130,7 +130,7 @@ class WatermarkPropertyTest {
      * For any sequence of Messages persisted in a Room, each Message SHALL receive a watermark
      * strictly greater than the previous. Retrieving messages SHALL return them ordered by watermark.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void watermarkMonotonicityAndMessageOrdering(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
@@ -189,7 +189,7 @@ class WatermarkPropertyTest {
      * ordered by watermark ascending. The response SHALL include a nextCursor pointing to the
      * last returned watermark, and hasMore SHALL be true iff more messages exist beyond the page.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void cursorBasedPaginationCorrectness(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,

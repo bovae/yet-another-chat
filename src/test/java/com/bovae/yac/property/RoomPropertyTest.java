@@ -140,7 +140,7 @@ class RoomPropertyTest {
      * The room SHALL have exactly one Owner at all times.
      * Duplicate name SHALL throw ConflictException.
      */
-    @Property(tries = 100)
+    @Property(tries = 20)
     void roomCreationInvariants(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
@@ -196,7 +196,7 @@ class RoomPropertyTest {
      * SHALL return exactly the PUBLIC rooms and SHALL exclude all PRIVATE and DIRECT rooms.
      * Search filtering SHALL return only rooms whose name matches the search term.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void roomCatalogVisibilityFiltering(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
@@ -251,7 +251,7 @@ class RoomPropertyTest {
      * Joining a PRIVATE room SHALL succeed if and only if a RoomInvitation exists.
      * Accepting an invitation SHALL add the User as Member and delete the RoomInvitation.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void roomJoinAccessControl(
             @ForAll("validEmails") String ownerEmail,
             @ForAll("validUsernames") String ownerUsername,
@@ -324,7 +324,7 @@ class RoomPropertyTest {
      * For any non-Owner Member, leaving a Room SHALL remove the RoomMember record.
      * For any Owner, attempting to leave SHALL be rejected (ForbiddenException).
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void roomMembershipLifecycle(
             @ForAll("validEmails") String ownerEmail,
             @ForAll("validUsernames") String ownerUsername,

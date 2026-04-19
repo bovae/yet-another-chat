@@ -5,13 +5,17 @@ import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.dto.ChatMessageRequest;
 import com.bovae.yac.model.dto.ChatMessageResponse;
 import com.bovae.yac.model.dto.ErrorResponse;
+import com.bovae.yac.model.dto.NotificationEvent;
 import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
+import com.bovae.yac.model.entity.RoomMember;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.MessageRepository;
+import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.MessageService;
+import com.bovae.yac.service.NotificationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +38,8 @@ public class ChatMessageHandler {
     private final RoomRepository roomRepository;
     private final UserRepository userRepository;
     private final MessageRepository messageRepository;
+    private final RoomMemberRepository roomMemberRepository;
+    private final NotificationService notificationService;
 
     @MessageMapping("/chat.send")
     public void sendMessage(@Valid ChatMessageRequest request, Principal principal) {
@@ -58,6 +64,8 @@ public class ChatMessageHandler {
                 sender.getUsername(),
                 message.getContent(),
                 request.replyToId(),
+                null,
+                null,
                 message.isEdited(),
                 message.getWatermark(),
                 message.getCreatedAt(),
@@ -68,6 +76,16 @@ public class ChatMessageHandler {
 
         LOG.debug("Broadcast message to /topic/room.{}: messageId={}, sender={}",
                 room.getId(), message.getId(), sender.getUsername());
+
+        List<RoomMember> members = roomMemberRepository.findByRoom(room);
+        for (RoomMember member : members) {
+            if (!member.getUser().getId().equals(sender.getId())) {
+                int unread = notificationService.computeUnreadCount(member.getUser(), room);
+                NotificationEvent event = new NotificationEvent(
+                        "UNREAD_UPDATE", room.getId(), room.getName(), unread);
+                notificationService.broadcastNotification(member.getUser(), event);
+            }
+        }
     }
 
     @MessageExceptionHandler

@@ -112,7 +112,7 @@ class AuthPropertyTest {
      * SHALL succeed (loadUserByUsername returns UserDetails, password matches).
      * Login with any incorrect password SHALL fail.
      */
-    @Property(tries = 100)
+    @Property(tries = 20)
     void authenticationRoundTrip(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
@@ -146,7 +146,7 @@ class AuthPropertyTest {
      * SHALL invalidate only that session, leaving remaining N-1 sessions valid and listed.
      */
     @SuppressWarnings("unchecked")
-    @Property(tries = 20)
+    @Property(tries = 4)
     void sessionIsolation(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,

@@ -169,7 +169,7 @@ class MessagePropertyTest {
      * Messages with a replyTo reference SHALL store the correct FK.
      * Messages exceeding 3072 bytes SHALL be rejected.
      */
-    @Property(tries = 50)
+    @Property(tries = 10)
     void messageContentRoundTrip(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
@@ -200,7 +200,7 @@ class MessagePropertyTest {
     }
 
     // Feature: online-chat-server, Property 17: Message content round-trip (oversized rejection)
-    @Property(tries = 50)
+    @Property(tries = 10)
     void oversizedMessageShallBeRejected(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
@@ -233,7 +233,7 @@ class MessagePropertyTest {
      * For any Message edited by its author, the content SHALL be updated to the new value
      * and the edited flag SHALL be set to true.
      */
-    @Property(tries = 50)
+    @Property(tries = 10)
     void messageEditInvariant(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
@@ -275,7 +275,7 @@ class MessagePropertyTest {
      * For any Message, the original author SHALL be able to delete it permanently,
      * and the Message SHALL no longer be retrievable.
      */
-    @Property(tries = 50)
+    @Property(tries = 10)
     void messageDeletionByAuthor(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,

@@ -175,6 +175,27 @@
     });
   }
 
+  function fetchInitialPresence(userIds) {
+    if (!userIds || userIds.length === 0) {
+      return;
+    }
+    fetch('/api/presence?userIds=' + userIds.join(','))
+      .then(function (response) {
+        if (!response.ok) {
+          return [];
+        }
+        return response.json();
+      })
+      .then(function (entries) {
+        entries.forEach(function (entry) {
+          updatePresenceDot({ user_id: entry.user_id, status: entry.status });
+        });
+      })
+      .catch(function (err) {
+        // Silently ignore presence fetch errors
+      });
+  }
+
   function subscribeToAllVisibleUsers() {
     // Subscribe to presence for all users visible in the member list and contact list
     var dots = document.querySelectorAll('.presence-dot[data-user-id]');
@@ -232,6 +253,7 @@
     isAllTabsIdle60s: isAllTabsIdle60s,
     subscribeToFriendPresence: subscribeToFriendPresence,
     subscribeToAllVisibleUsers: subscribeToAllVisibleUsers,
-    updatePresenceDot: updatePresenceDot
+    updatePresenceDot: updatePresenceDot,
+    fetchInitialPresence: fetchInitialPresence
   };
 })();

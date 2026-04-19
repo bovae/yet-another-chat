@@ -37,7 +37,7 @@
       <span class="badge bg-info ms-1" th:if="${member.role.name() == 'ADMIN'}">Admin</span>
       <!-- Admin actions dropdown -->
       <div class="dropdown ms-1"
-           th:if="${currentUser.id != member.userId}">
+           th:if="${currentUserRole != null and (currentUserRole.name() == 'OWNER' or currentUserRole.name() == 'ADMIN') and member.userId != currentUser.id}">
         <button class="btn btn-sm btn-outline-secondary dropdown-toggle p-0 px-1" type="button"
                 data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
           ⋮
@@ -72,6 +72,11 @@
             </button>
           </li>
           <li th:if="${member.userId != currentUser.id}">
+            <button class="dropdown-item small text-danger" type="button"
+                    th:attr="data-user-id=${member.userId},data-username=${member.username}"
+                    onclick="blockUser(this)">Block user</button>
+          </li>
+          <li th:if="${member.userId != currentUser.id}">
             <hr class="dropdown-divider">
           </li>
           <li th:if="${member.userId != currentUser.id}">
@@ -90,9 +95,11 @@
     <button th:if="${room.owner.id == currentUser.id}"
             class="btn btn-outline-primary btn-sm w-100 mb-2"
             data-bs-toggle="modal" data-bs-target="#roomSettingsModal">Settings</button>
-    <button class="btn btn-outline-primary btn-sm w-100 mb-2"
+    <button th:if="${currentUserRole != null and (currentUserRole.name() == 'OWNER' or currentUserRole.name() == 'ADMIN')}"
+            class="btn btn-outline-primary btn-sm w-100 mb-2"
             data-bs-toggle="modal" data-bs-target="#inviteModal">Invite user</button>
-    <button class="btn btn-outline-secondary btn-sm w-100 mb-2"
+    <button th:if="${currentUserRole != null and (currentUserRole.name() == 'OWNER' or currentUserRole.name() == 'ADMIN')}"
+            class="btn btn-outline-secondary btn-sm w-100 mb-2"
             data-bs-toggle="modal" data-bs-target="#bannedUsersModal">View banned users</button>
     <button th:if="${room.owner.id != currentUser.id}"
             class="btn btn-outline-warning btn-sm w-100 mb-2"

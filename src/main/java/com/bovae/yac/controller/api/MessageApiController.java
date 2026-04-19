@@ -118,6 +118,8 @@ public class MessageApiController {
                 message.getSender().getUsername(),
                 message.getContent(),
                 message.getReplyTo() != null ? message.getReplyTo().getId() : null,
+                null,
+                null,
                 message.isEdited(),
                 message.getWatermark(),
                 message.getCreatedAt(),

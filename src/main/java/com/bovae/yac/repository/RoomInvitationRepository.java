@@ -14,4 +14,6 @@ public interface RoomInvitationRepository extends JpaRepository<RoomInvitation, 
     Optional<RoomInvitation> findByRoomAndInvitee(Room room, User invitee);
 
     List<RoomInvitation> findByRoom(Room room);
+
+    List<RoomInvitation> findByInvitee(User invitee);
 }

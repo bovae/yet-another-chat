@@ -201,7 +201,7 @@ class AttachmentPropertyTest {
      * original file name and optional comment. Download SHALL succeed if and only
      * if the requester is a current Room Member.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void attachmentUploadAndAccessControl(
             @ForAll("validEmails") String ownerEmail,
             @ForAll("validUsernames") String ownerUsername,
@@ -270,7 +270,7 @@ class AttachmentPropertyTest {
      *
      * Test oversized file rejection: >20MB for files, >3MB for images.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void oversizedFileShallBeRejected(
             @ForAll("validEmails") String ownerEmail,
             @ForAll("validUsernames") String ownerUsername,

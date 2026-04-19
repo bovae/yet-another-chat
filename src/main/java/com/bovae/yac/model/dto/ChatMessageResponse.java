@@ -11,6 +11,8 @@ public record ChatMessageResponse(
         String senderUsername,
         String content,
         UUID replyToId,
+        String replyToSenderUsername,
+        String replyToContentSnippet,
         boolean edited,
         Long watermark,
         Instant createdAt,

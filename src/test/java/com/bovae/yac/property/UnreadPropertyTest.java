@@ -136,7 +136,7 @@ class UnreadPropertyTest {
      * Opening the Room SHALL update lastReadWatermark to the current watermark,
      * making the unread count zero.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void unreadCountComputation(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,

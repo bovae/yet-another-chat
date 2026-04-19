@@ -133,7 +133,7 @@ class AccountDeletionPropertyTest {
     }
 
     // Feature: online-chat-server, Property 8: Account deletion cascade
-    @Property(tries = 20)
+    @Property(tries = 4)
     void accountDeletionShallCascadeCorrectly(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,

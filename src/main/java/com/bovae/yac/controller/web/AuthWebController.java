@@ -78,7 +78,9 @@ public class AuthWebController {
                                      Model model) {
         Optional<User> user = userRepository.findByEmail(email);
         if (user.isPresent()) {
-            passwordService.createResetToken(user.get());
+            String rawToken = passwordService.createResetToken(user.get());
+            String resetLink = "/reset-password?token=" + rawToken;
+            redirectAttributes.addFlashAttribute("resetLink", resetLink);
         }
         // Always show success to prevent email enumeration
         redirectAttributes.addFlashAttribute("success",

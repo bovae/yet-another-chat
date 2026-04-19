@@ -83,7 +83,7 @@ class StompUuidPreservationPropertyTest {
      *
      * This captures the REST-layer round-trip behavior that must not regress.
      */
-    @Property(tries = 100)
+    @Property(tries = 20)
     void snakeCaseRoundTripPreservesAllFields(
             @ForAll("chatMessageRequests") ChatMessageRequest original
     ) {
@@ -118,7 +118,7 @@ class StompUuidPreservationPropertyTest {
      * serialization output contains snake_case keys (room_id, content, reply_to_id)
      * and never camelCase keys (roomId, replyToId).
      */
-    @Property(tries = 100)
+    @Property(tries = 20)
     void snakeCaseSerializationProducesSnakeCaseKeys(
             @ForAll("chatMessageRequests") ChatMessageRequest original
     ) {

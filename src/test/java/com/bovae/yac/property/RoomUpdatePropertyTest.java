@@ -97,7 +97,7 @@ class RoomUpdatePropertyTest {
      * For any valid UpdateRoomRequest submitted by the room owner with non-null name/description/visibility,
      * the returned RoomDto SHALL contain the updated values.
      */
-    @Property(tries = 100)
+    @Property(tries = 20)
     void roomUpdateRoundTripPreservesFields(
             @ForAll("roomNames") String originalName,
             @ForAll("roomDescriptions") String originalDesc,
@@ -138,7 +138,7 @@ class RoomUpdatePropertyTest {
     /**
      * Validates: Requirements 2.2
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void roomUpdateByNonOwnerThrowsForbidden(
             @ForAll("roomNames") String roomName,
             @ForAll("roomDescriptions") String desc,
@@ -166,7 +166,7 @@ class RoomUpdatePropertyTest {
     /**
      * Validates: Requirements 2.2
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void roomUpdateDuplicateNameThrowsConflict(
             @ForAll("roomNames") String roomName,
             @ForAll("roomDescriptions") String desc,

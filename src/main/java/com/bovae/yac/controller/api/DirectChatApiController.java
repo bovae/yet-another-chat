@@ -42,6 +42,13 @@ public class DirectChatApiController {
         return ResponseEntity.ok(room);
     }
 
+    @PostMapping("/saved")
+    public ResponseEntity<RoomDto> getOrCreateSavedMessages(Principal principal) {
+        User user = resolveUser(principal);
+        RoomDto room = directChatService.getOrCreateSavedMessages(user);
+        return ResponseEntity.ok(room);
+    }
+
     @GetMapping
     public ResponseEntity<List<DirectChatDto>> listDirectChats(Principal principal) {
         User user = resolveUser(principal);

@@ -78,10 +78,12 @@ public class AttachmentApiController {
             contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
         }
 
+        String disposition = contentType.startsWith("image/") ? "inline" : "attachment";
+
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(contentType))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"%s\"".formatted(attachment.getOriginalFileName()))
+                        disposition + "; filename=\"%s\"".formatted(attachment.getOriginalFileName()))
                 .body(resource);
     }
 

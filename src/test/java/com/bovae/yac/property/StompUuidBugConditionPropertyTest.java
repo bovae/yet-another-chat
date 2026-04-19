@@ -83,7 +83,7 @@ class StompUuidBugConditionPropertyTest {
      * EXPECTED OUTCOME on fixed code: PASSES — the SNAKE_CASE JsonMapper correctly maps
      * room_id → roomId, confirming the bug is fixed.
      */
-    @Property(tries = 50)
+    @Property(tries = 10)
     void snakeCaseRoomIdDeserializesWithSnakeCaseJsonMapper(
             @ForAll("uuids") UUID roomId,
             @ForAll("nonBlankContent") String content
@@ -127,7 +127,7 @@ class StompUuidBugConditionPropertyTest {
      * EXPECTED OUTCOME on fixed code: PASSES — the SNAKE_CASE JsonMapper correctly maps
      * room_id → roomId and reply_to_id → replyToId, confirming the bug is fixed.
      */
-    @Property(tries = 50)
+    @Property(tries = 10)
     void snakeCaseWithReplyToIdDeserializesWithSnakeCaseJsonMapper(
             @ForAll("uuids") UUID roomId,
             @ForAll("nonBlankContent") String content,

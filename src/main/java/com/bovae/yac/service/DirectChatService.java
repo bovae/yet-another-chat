@@ -36,31 +36,36 @@ public class DirectChatService {
 
     @Transactional
     public RoomDto getOrCreateDirectChat(User userA, User userB) {
-        if (userA.getId().equals(userB.getId())) {
-            throw new ForbiddenException("Cannot create a direct chat with yourself");
+        boolean selfDm = userA.getId().equals(userB.getId());
+
+        if (!selfDm) {
+            if (!friendshipService.areFriends(userA, userB)) {
+                throw new ForbiddenException("Users must be friends to start a direct chat");
+            }
+
+            if (userBanService.isBanExistsBetween(userA, userB)) {
+                throw new ForbiddenException("Cannot create a direct chat — a user ban exists between these users");
+            }
         }
 
-        if (!friendshipService.areFriends(userA, userB)) {
-            throw new ForbiddenException("Users must be friends to start a direct chat");
-        }
-
-        if (userBanService.isBanExistsBetween(userA, userB)) {
-            throw new ForbiddenException("Cannot create a direct chat — a user ban exists between these users");
-        }
-
-        Optional<Room> existing = findExistingDirectChat(userA, userB);
+        Optional<Room> existing = selfDm
+                ? findExistingSavedMessages(userA)
+                : findExistingDirectChat(userA, userB);
         if (existing.isPresent()) {
             return roomMapper.toDto(existing.get());
         }
 
-        String roomName = "dm-%s-%s".formatted(
-                sortedId(userA.getId(), userB.getId(), true),
-                sortedId(userA.getId(), userB.getId(), false));
+        String roomName = selfDm
+                ? "saved-messages-%s".formatted(userA.getId())
+                : "dm-%s-%s".formatted(
+                        sortedId(userA.getId(), userB.getId(), true),
+                        sortedId(userA.getId(), userB.getId(), false));
 
         Room room = Room.builder()
                 .name(roomName)
                 .visibility(RoomVisibility.DIRECT)
                 .owner(userA)
+                .nextWatermark(1L)
                 .build();
         room = roomRepository.save(room);
 
@@ -69,19 +74,26 @@ public class DirectChatService {
                 .user(userA)
                 .role(RoomRole.MEMBER)
                 .build();
-
-        RoomMember memberB = RoomMember.builder()
-                .room(room)
-                .user(userB)
-                .role(RoomRole.MEMBER)
-                .build();
-
         roomMemberRepository.save(memberA);
-        roomMemberRepository.save(memberB);
 
-        LOG.info("Direct chat created: roomId={}, userA={}, userB={}", room.getId(), userA.getId(), userB.getId());
+        if (!selfDm) {
+            RoomMember memberB = RoomMember.builder()
+                    .room(room)
+                    .user(userB)
+                    .role(RoomRole.MEMBER)
+                    .build();
+            roomMemberRepository.save(memberB);
+        }
+
+        LOG.info("Direct chat created: roomId={}, userA={}, userB={}, selfDm={}",
+                room.getId(), userA.getId(), userB.getId(), selfDm);
 
         return roomMapper.toDto(room);
+    }
+
+    @Transactional
+    public RoomDto getOrCreateSavedMessages(User user) {
+        return getOrCreateDirectChat(user, user);
     }
 
     public List<DirectChatDto> listDirectChats(User user) {
@@ -110,6 +122,16 @@ public class DirectChatService {
                         other.getDisplayName(),
                         room.getCreatedAt()
                 ));
+            } else {
+                // Self-DM (Saved Messages) — single-member DIRECT room
+                result.add(new DirectChatDto(
+                        room.getId(),
+                        room.getName(),
+                        user.getId(),
+                        user.getUsername(),
+                        user.getDisplayName(),
+                        room.getCreatedAt()
+                ));
             }
         }
 
@@ -136,6 +158,22 @@ public class DirectChatService {
                 .filter(rm -> directRoomIdsA.contains(rm.getRoom().getId()))
                 .map(RoomMember::getRoom)
                 .findFirst();
+    }
+
+    private Optional<Room> findExistingSavedMessages(User user) {
+        List<RoomMember> memberships = roomMemberRepository.findByUser(user);
+        List<Room> directRooms = memberships.stream()
+                .filter(rm -> rm.getRoom().getVisibility() == RoomVisibility.DIRECT)
+                .map(RoomMember::getRoom)
+                .toList();
+
+        for (Room room : directRooms) {
+            List<RoomMember> roomMembers = roomMemberRepository.findByRoom(room);
+            if (roomMembers.size() == 1) {
+                return Optional.of(room);
+            }
+        }
+        return Optional.empty();
     }
 
     private String sortedId(UUID idA, UUID idB, boolean first) {

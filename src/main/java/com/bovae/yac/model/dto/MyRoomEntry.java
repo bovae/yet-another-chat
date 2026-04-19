@@ -8,6 +8,8 @@ public record MyRoomEntry(
         UUID id,
         String name,
         RoomVisibility visibility,
-        int unreadCount
+        int unreadCount,
+        String otherUsername,
+        String otherDisplayName
 ) {
 }

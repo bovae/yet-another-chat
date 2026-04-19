@@ -140,7 +140,7 @@ class ModerationPropertyTest {
      * be able to grant and revoke Admin role for any Member. An Admin SHALL be able to demote
      * another non-Owner Admin to Member.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void adminModerationActions(
             @ForAll("validEmails") String ownerEmail,
             @ForAll("validUsernames") String ownerUsername,

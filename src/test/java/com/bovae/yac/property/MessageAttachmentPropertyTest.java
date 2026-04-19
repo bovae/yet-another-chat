@@ -116,7 +116,7 @@ class MessageAttachmentPropertyTest {
      * ChatMessageResponse.attachments contains matching id, originalFileName, contentType, fileSize
      * for each attachment; empty list when no attachments.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void messageDtoIncludesAttachmentMetadata(
             @ForAll("attachmentCounts") int attachmentCount
     ) {

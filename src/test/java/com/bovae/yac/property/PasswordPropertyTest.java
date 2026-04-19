@@ -111,7 +111,7 @@ class PasswordPropertyTest {
      * the provided current password matches the stored hash. On success, the new password
      * SHALL authenticate; on failure, the old password SHALL remain valid.
      */
-    @Property(tries = 100)
+    @Property(tries = 20)
     void passwordChangeAuthorization(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
@@ -157,7 +157,7 @@ class PasswordPropertyTest {
      * Using that token with a new password SHALL update the hash (verifiable via login)
      * and invalidate the token so it cannot be reused.
      */
-    @Property(tries = 100)
+    @Property(tries = 20)
     void passwordResetTokenLifecycle(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,

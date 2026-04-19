@@ -106,7 +106,19 @@
     var a = document.createElement('a');
     a.href = '/chat/rooms/' + room.id;
     a.className = 'text-decoration-none text-dark flex-grow-1 text-truncate';
-    a.textContent = room.name;
+
+    // For DIRECT rooms, prefer display name > username > room name
+    // For self-DM (both null), show "Saved Messages 🔖"
+    if (room.visibility === 'DIRECT') {
+      if (room.other_display_name || room.other_username) {
+        a.textContent = room.other_display_name || room.other_username || room.name;
+      } else {
+        a.textContent = 'Saved Messages \uD83D\uDD16';
+      }
+    } else {
+      a.textContent = room.name;
+    }
+
     li.appendChild(a);
 
     if (room.unread_count > 0) {
@@ -142,6 +154,7 @@
         }
 
         var currentUserId = getCurrentUserId();
+        var userIds = [];
 
         friends.forEach(function (friendship) {
           var friendId;
@@ -153,6 +166,8 @@
             friendId = friendship.requester_id;
             friendUsername = friendship.requester_username;
           }
+
+          userIds.push(friendId);
 
           var li = document.createElement('li');
           li.className = 'px-2 py-1 d-flex align-items-center';
@@ -176,6 +191,11 @@
 
           contactList.appendChild(li);
         });
+
+        // Fetch initial presence status for contacts
+        if (window.YAC && window.YAC.presence && window.YAC.presence.fetchInitialPresence) {
+          window.YAC.presence.fetchInitialPresence(userIds);
+        }
 
         // Subscribe to presence updates for contacts
         if (window.YAC && window.YAC.presence && window.YAC.presence.subscribeToAllVisibleUsers) {
@@ -348,6 +368,147 @@
     });
   }
 
+  // --- Room Invitations panel ---
+
+  function populateRoomInvitations() {
+    return fetch('/api/rooms/invitations/pending', { headers: apiHeaders() })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .catch(function () { return []; })
+      .then(function (invitations) {
+        // Remove existing invitation section if present
+        var existing = document.getElementById('room-invitations-section');
+        if (existing) {
+          existing.remove();
+        }
+
+        if (invitations.length === 0) {
+          return;
+        }
+
+        var friendRequestsSection = document.getElementById('friend-requests-section');
+        var contactList = document.getElementById('contact-list');
+        var insertAfter = friendRequestsSection || contactList;
+        if (!insertAfter) {
+          return;
+        }
+
+        var section = document.createElement('div');
+        section.id = 'room-invitations-section';
+        section.className = 'mt-2';
+
+        var header = document.createElement('h6');
+        header.className = 'text-uppercase text-muted small d-flex align-items-center';
+        header.style.cursor = 'pointer';
+        header.setAttribute('data-bs-toggle', 'collapse');
+        header.setAttribute('data-bs-target', '#roomInvitationsCollapse');
+        header.innerHTML = '<span class="me-1">&#9654;</span> Room Invitations <span class="badge bg-primary ms-1">' + invitations.length + '</span>';
+        section.appendChild(header);
+
+        var collapseDiv = document.createElement('div');
+        collapseDiv.id = 'roomInvitationsCollapse';
+        collapseDiv.className = 'collapse';
+        section.appendChild(collapseDiv);
+
+        var list = document.createElement('ul');
+        list.className = 'list-unstyled mb-0';
+
+        invitations.forEach(function (inv) {
+          var li = document.createElement('li');
+          li.className = 'px-2 py-1 small';
+          li.setAttribute('data-invitation-id', inv.invitation_id);
+
+          var info = document.createElement('div');
+          info.className = 'd-flex align-items-center justify-content-between';
+
+          var details = document.createElement('div');
+          var roomName = document.createElement('strong');
+          roomName.textContent = inv.room_name;
+          details.appendChild(roomName);
+          var inviterText = document.createElement('div');
+          inviterText.className = 'text-muted';
+          inviterText.textContent = 'from ' + inv.inviter_username;
+          details.appendChild(inviterText);
+          info.appendChild(details);
+
+          var btnGroup = document.createElement('div');
+          btnGroup.className = 'd-flex gap-1';
+
+          var acceptBtn = document.createElement('button');
+          acceptBtn.className = 'btn btn-success btn-sm py-0 px-1';
+          acceptBtn.textContent = 'Accept';
+          acceptBtn.addEventListener('click', function () {
+            handleInvitationAction(inv.room_id, inv.invitation_id, 'accept', li);
+          });
+          btnGroup.appendChild(acceptBtn);
+
+          var declineBtn = document.createElement('button');
+          declineBtn.className = 'btn btn-outline-danger btn-sm py-0 px-1';
+          declineBtn.textContent = 'Decline';
+          declineBtn.addEventListener('click', function () {
+            handleInvitationAction(inv.room_id, inv.invitation_id, 'decline', li);
+          });
+          btnGroup.appendChild(declineBtn);
+
+          info.appendChild(btnGroup);
+          li.appendChild(info);
+          list.appendChild(li);
+        });
+
+        collapseDiv.appendChild(list);
+        insertAfter.parentNode.insertBefore(section, insertAfter.nextSibling);
+      });
+  }
+
+  function handleInvitationAction(roomId, invitationId, action, liElement) {
+    if (action === 'accept') {
+      fetch('/api/rooms/' + roomId + '/invitations/' + invitationId + '/accept', {
+        method: 'POST',
+        headers: apiHeaders()
+      })
+      .then(function (response) {
+        if (response.ok) {
+          window.location.href = '/chat/rooms/' + roomId;
+        } else {
+          return response.json().then(function (err) {
+            if (window.showErrorModal) {
+              window.showErrorModal(err.message || 'Failed to accept invitation');
+            }
+          });
+        }
+      })
+      .catch(function (err) {
+        console.error('[Sidebar] Invitation accept error:', err);
+      });
+    } else {
+      fetch('/api/rooms/' + roomId + '/invitations/' + invitationId, {
+        method: 'DELETE',
+        headers: apiHeaders()
+      })
+      .then(function (response) {
+        if (response.ok || response.status === 204) {
+          liElement.remove();
+          // Remove section if no more invitations
+          var section = document.getElementById('room-invitations-section');
+          if (section) {
+            var remaining = section.querySelectorAll('li[data-invitation-id]');
+            if (remaining.length === 0) {
+              section.remove();
+            }
+          }
+        } else {
+          return response.json().then(function (err) {
+            if (window.showErrorModal) {
+              window.showErrorModal(err.message || 'Failed to decline invitation');
+            }
+          });
+        }
+      })
+      .catch(function (err) {
+        console.error('[Sidebar] Invitation decline error:', err);
+      });
+    }
+  }
+
   function handleFriendAction(friendshipId, action, liElement) {
     fetch('/api/friends/' + friendshipId + '/' + action, {
       method: 'POST',
@@ -371,6 +532,38 @@
     })
     .catch(function (err) {
       console.error('[Sidebar] Friend action error:', err);
+    });
+  }
+
+  // --- Saved Messages button handler ---
+
+  function setupSavedMessagesButton() {
+    var btn = document.getElementById('saved-messages-btn');
+    if (!btn) {
+      return;
+    }
+    btn.addEventListener('click', function () {
+      fetch('/api/direct-chats/saved', {
+        method: 'POST',
+        headers: apiHeaders()
+      })
+      .then(function (response) {
+        if (!response.ok) {
+          return response.json().then(function (err) {
+            if (window.showErrorModal) {
+              window.showErrorModal(err.message || 'Failed to open Saved Messages');
+            }
+            throw new Error(err.message);
+          });
+        }
+        return response.json();
+      })
+      .then(function (room) {
+        window.location.href = '/chat/rooms/' + room.id;
+      })
+      .catch(function (err) {
+        console.error('[Sidebar] Saved Messages error:', err);
+      });
     });
   }
 
@@ -465,10 +658,13 @@
       populateContacts()
     ]).then(function () {
       return populateFriendRequests();
+    }).then(function () {
+      return populateRoomInvitations();
     });
   }
 
   function init() {
+    setupSavedMessagesButton();
     refreshSidebar().then(function () {
       setupSearch();
       handleSectionParam();

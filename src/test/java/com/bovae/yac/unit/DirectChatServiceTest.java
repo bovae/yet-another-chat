@@ -179,15 +179,30 @@ class DirectChatServiceTest {
     }
 
     /**
-     * Validates requirement 14.7: getOrCreateDirectChat with self throws ForbiddenException.
+     * Validates Requirement 6.1: getOrCreateDirectChat with self creates a self-DM (Saved Messages).
+     * The self-check was removed to allow self-DM rooms.
      */
     @Test
-    void getOrCreateDirectChat_withSelf_throwsForbiddenException() {
-        assertThatThrownBy(() -> directChatService.getOrCreateDirectChat(userA, userA))
-                .isInstanceOf(ForbiddenException.class)
-                .hasMessageContaining("yourself");
+    void getOrCreateDirectChat_withSelf_createsSelfDm() {
+        when(roomMemberRepository.findByUser(userA)).thenReturn(Collections.emptyList());
+        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> {
+            Room r = invocation.getArgument(0);
+            r.setId(UUID.randomUUID());
+            return r;
+        });
+        when(roomMemberRepository.save(any(RoomMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(roomMapper.toDto(any(Room.class))).thenAnswer(invocation -> {
+            Room r = invocation.getArgument(0);
+            return new RoomDto(r.getId(), r.getName(), r.getDescription(), r.getVisibility(),
+                    r.getOwner().getId(), r.getOwner().getUsername(), r.getNextWatermark(), r.getCreatedAt());
+        });
 
-        verify(roomRepository, never()).save(any());
+        RoomDto result = directChatService.getOrCreateDirectChat(userA, userA);
+
+        assertThat(result).isNotNull();
+        assertThat(result.visibility()).isEqualTo(RoomVisibility.DIRECT);
+        verify(roomRepository).save(any(Room.class));
+        verify(roomMemberRepository).save(any(RoomMember.class));
         verify(friendshipService, never()).areFriends(any(), any());
     }
 

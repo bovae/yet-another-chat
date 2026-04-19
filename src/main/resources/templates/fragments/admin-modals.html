@@ -70,6 +70,7 @@
               <label for="room-settings-visibility" class="form-label">Visibility</label>
               <select class="form-select" id="room-settings-visibility">
                 <option th:each="v : ${T(com.bovae.yac.model.enums.RoomVisibility).values()}"
+                        th:if="${v.name() != 'DIRECT'}"
                         th:value="${v.name()}"
                         th:text="${v.name()}"
                         th:selected="${v == room.visibility}">

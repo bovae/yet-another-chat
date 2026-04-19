@@ -38,27 +38,60 @@
           <button class="btn btn-outline-secondary btn-sm" id="load-more-btn">Load older messages</button>
         </div>
         <div th:each="msg : ${messages}" class="message-item d-flex mb-3"
+             th:classappend="${msg.senderId() == currentUser.id} ? 'message-own' : 'message-other'"
              th:attr="data-message-id=${msg.id()},data-watermark=${msg.watermark()}">
-          <div class="message-avatar me-2">
-            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center"
-                 style="width: 36px; height: 36px;">
-              <span th:text="${#strings.substring(msg.senderUsername(), 0, 1).toUpperCase()}">U</span>
-            </div>
+          <!-- Avatar -->
+          <div class="message-avatar d-flex align-items-center justify-content-center rounded-circle bg-secondary text-white fw-bold"
+               style="width: 36px; height: 36px; font-size: 0.85rem; flex-shrink: 0;">
+            <span th:text="${#strings.substring(msg.senderUsername(), 0, 1).toUpperCase()}">U</span>
           </div>
-          <div class="message-content flex-grow-1">
-            <div class="d-flex align-items-baseline">
-              <strong class="me-2" th:text="${msg.senderUsername()}">Username</strong>
-              <small class="text-muted" th:text="${#temporals.format(msg.createdAt(), 'HH:mm')}">12:00</small>
-              <small class="text-muted ms-1" th:if="${msg.edited()}">(edited)</small>
+          <!-- Bubble wrapper -->
+          <div class="message-bubble ms-2">
+            <!-- Header: username + timestamp -->
+            <div class="message-header small text-muted mb-1">
+              <strong th:text="${msg.senderUsername()}">User</strong>
+              <span th:text="${#temporals.format(msg.createdAt(), 'HH:mm')}">12:00</span>
+              <small class="ms-1" th:if="${msg.edited()}">(edited)</small>
             </div>
-            <div th:if="${msg.replyToId() != null}"
-                 class="reply-quote border-start border-3 border-primary ps-2 mb-1 small text-muted">
-              <span>Replying to a message</span>
+            <!-- Reply quote -->
+            <div th:if="${msg.replyToId() != null}" class="reply-quote small bg-light border-start border-3 border-primary p-2 mb-1 rounded">
+              <span th:if="${msg.replyToSenderUsername() != null}">
+                Replying to <strong th:text="${msg.replyToSenderUsername()}">User</strong>:
+                <span th:text="${msg.replyToContentSnippet()}">snippet</span>
+              </span>
+              <span th:unless="${msg.replyToSenderUsername() != null}">Original message deleted</span>
             </div>
-            <p class="mb-0" th:text="${msg.content()}">Message content</p>
-          </div>
-          <div class="message-actions ms-2" th:if="${msg.senderId() == currentUser.id}">
-            <button class="btn btn-sm btn-outline-secondary" title="Delete">🗑</button>
+            <!-- Message text -->
+            <div class="message-text" th:text="${msg.content()}">Message content</div>
+            <!-- Attachments -->
+            <div th:if="${msg.attachments() != null and !msg.attachments().isEmpty()}" class="message-attachments mt-1">
+              <div th:each="att : ${msg.attachments()}">
+                <img th:if="${att.contentType() != null and att.contentType().startsWith('image/')}"
+                     th:src="@{'/api/rooms/' + ${msg.roomId()} + '/messages/' + ${msg.id()} + '/attachments/' + ${att.id()} + '/download'}"
+                     class="img-fluid rounded" style="max-width: 400px;" alt="attachment">
+                <a th:unless="${att.contentType() != null and att.contentType().startsWith('image/')}"
+                   th:href="@{'/api/rooms/' + ${msg.roomId()} + '/messages/' + ${msg.id()} + '/attachments/' + ${att.id()} + '/download'}"
+                   th:text="${att.originalFileName()}" class="small">file</a>
+              </div>
+            </div>
+            <!-- Message actions (visible on hover) -->
+            <div class="message-actions mt-1">
+              <button class="btn btn-sm btn-outline-secondary reply-btn"
+                      th:attr="data-message-id=${msg.id()},data-sender-username=${msg.senderUsername()}"
+                      title="Reply">↩</button>
+              <button th:if="${msg.senderId() == currentUser.id}"
+                      class="btn btn-sm btn-outline-secondary edit-btn"
+                      th:attr="data-message-id=${msg.id()}"
+                      title="Edit">✏️</button>
+              <button th:if="${msg.senderId() == currentUser.id}"
+                      class="btn btn-sm btn-outline-danger delete-btn"
+                      th:attr="data-message-id=${msg.id()}"
+                      title="Delete">🗑</button>
+              <button th:if="${msg.senderId() != currentUser.id and currentUserRole != null and (currentUserRole.name() == 'OWNER' or currentUserRole.name() == 'ADMIN')}"
+                      class="btn btn-sm btn-outline-danger delete-btn"
+                      th:attr="data-message-id=${msg.id()}"
+                      title="Delete">🗑</button>
+            </div>
           </div>
         </div>
       </div>

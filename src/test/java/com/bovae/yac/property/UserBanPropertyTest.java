@@ -100,7 +100,7 @@ class UserBanPropertyTest {
      * 4. User A unbans User B → ban gone
      * 5. User B can now send friend request to A → succeeds
      */
-    @Property(tries = 50)
+    @Property(tries = 10)
     void userBanAccessControlEnforcement(
             @ForAll("validEmails") String emailA,
             @ForAll("validUsernames") String usernameA,

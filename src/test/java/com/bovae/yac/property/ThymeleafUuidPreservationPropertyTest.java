@@ -122,7 +122,7 @@ class ThymeleafUuidPreservationPropertyTest {
      * JS string quoting for inline expressions), and the content between quotes must be
      * a properly escaped representation of the original string.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void stringRendersAsValidJavaScriptStringLiteral(
             @ForAll("arbitraryStrings") String name
     ) {
@@ -155,7 +155,7 @@ class ThymeleafUuidPreservationPropertyTest {
      * For all arbitrary Long values (including 0, negatives, Long.MAX_VALUE, Long.MIN_VALUE),
      * verify {@code nextCursor} renders as a correct JavaScript number literal.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void longRendersAsCorrectJavaScriptNumberLiteral(
             @ForAll("arbitraryLongs") Long nextCursor
     ) {

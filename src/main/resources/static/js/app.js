@@ -86,69 +86,84 @@
   // --- Message DOM creation ---
 
   function createMessageElement(msg) {
+    var senderId = msg.sender_id || msg.senderId;
+    var isOwn = window.YAC_USER && senderId && String(senderId) === String(window.YAC_USER.id);
+    var senderUsername = msg.sender_username || msg.senderUsername || 'Unknown';
+
+    // Outer container with alignment class
     var item = document.createElement('div');
-    item.className = 'message-item d-flex mb-3';
+    item.className = 'message-item d-flex mb-3 ' + (isOwn ? 'message-own' : 'message-other');
     item.setAttribute('data-message-id', msg.id);
     item.setAttribute('data-watermark', msg.watermark);
 
-    // Avatar
-    var avatarWrap = document.createElement('div');
-    avatarWrap.className = 'message-avatar me-2';
+    // Avatar (outside bubble)
     var avatar = document.createElement('div');
-    avatar.className = 'rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center';
-    avatar.style.cssText = 'width: 36px; height: 36px;';
-    var initial = (msg.sender_username || msg.senderUsername || '?').charAt(0).toUpperCase();
-    avatar.textContent = initial;
-    avatarWrap.appendChild(avatar);
-    item.appendChild(avatarWrap);
+    avatar.className = 'message-avatar d-flex align-items-center justify-content-center rounded-circle bg-secondary text-white fw-bold';
+    avatar.style.cssText = 'width: 36px; height: 36px; font-size: 0.85rem; flex-shrink: 0;';
+    avatar.textContent = senderUsername.charAt(0).toUpperCase();
+    item.appendChild(avatar);
 
-    // Content wrapper
-    var contentWrap = document.createElement('div');
-    contentWrap.className = 'message-content flex-grow-1';
+    // Bubble wrapper
+    var bubble = document.createElement('div');
+    bubble.className = 'message-bubble ms-2';
 
-    // Header line: username + time + edited
+    // Header: username + timestamp + edited
     var headerDiv = document.createElement('div');
-    headerDiv.className = 'd-flex align-items-baseline';
+    headerDiv.className = 'message-header small text-muted mb-1';
     var nameEl = document.createElement('strong');
-    nameEl.className = 'me-2';
-    nameEl.textContent = msg.sender_username || msg.senderUsername || 'Unknown';
+    nameEl.textContent = senderUsername;
     headerDiv.appendChild(nameEl);
 
-    var timeEl = document.createElement('small');
-    timeEl.className = 'text-muted';
+    var timeEl = document.createElement('span');
     var ts = msg.created_at || msg.createdAt;
     if (ts) {
       var d = new Date(ts);
-      timeEl.textContent = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+      timeEl.textContent = ' ' + d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
     }
     headerDiv.appendChild(timeEl);
 
     if (msg.edited) {
       var editedEl = document.createElement('small');
-      editedEl.className = 'text-muted ms-1';
+      editedEl.className = 'ms-1';
       editedEl.textContent = '(edited)';
       headerDiv.appendChild(editedEl);
     }
-    contentWrap.appendChild(headerDiv);
+    bubble.appendChild(headerDiv);
 
-    // Reply quote
+    // Reply quote (enriched with sender username and content snippet)
     var replyId = msg.reply_to_id || msg.replyToId;
     if (replyId) {
       var replyDiv = document.createElement('div');
-      replyDiv.className = 'reply-quote border-start border-3 border-primary ps-2 mb-1 small text-muted';
-      replyDiv.textContent = 'Replying to a message';
-      contentWrap.appendChild(replyDiv);
+      replyDiv.className = 'reply-quote small bg-light border-start border-3 border-primary p-2 mb-1 rounded';
+      var replySender = msg.reply_to_sender_username || msg.replyToSenderUsername;
+      if (replySender) {
+        var replyLabel = document.createTextNode('Replying to ');
+        replyDiv.appendChild(replyLabel);
+        var replyStrong = document.createElement('strong');
+        replyStrong.textContent = replySender;
+        replyDiv.appendChild(replyStrong);
+        var replySnippet = msg.reply_to_content_snippet || msg.replyToContentSnippet || '';
+        if (replySnippet) {
+          var snippetText = document.createTextNode(': ' + replySnippet);
+          replyDiv.appendChild(snippetText);
+        }
+      } else {
+        replyDiv.textContent = 'Original message deleted';
+      }
+      bubble.appendChild(replyDiv);
     }
 
     // Message text
-    var textEl = document.createElement('p');
-    textEl.className = 'mb-0';
+    var textEl = document.createElement('div');
+    textEl.className = 'message-text';
     textEl.textContent = msg.content;
-    contentWrap.appendChild(textEl);
+    bubble.appendChild(textEl);
 
     // Attachment rendering
     var attachments = msg.attachments;
     if (attachments && attachments.length > 0) {
+      var attContainer = document.createElement('div');
+      attContainer.className = 'message-attachments mt-1';
       var roomId = getRoomId();
       for (var ai = 0; ai < attachments.length; ai++) {
         var att = attachments[ai];
@@ -158,49 +173,54 @@
         var downloadUrl = '/api/rooms/' + roomId + '/attachments/' + attId + '/download';
 
         if (attContentType.indexOf('image/') === 0) {
-          var imgLink = document.createElement('a');
-          imgLink.href = downloadUrl;
-          imgLink.target = '_blank';
           var imgEl = document.createElement('img');
           imgEl.src = downloadUrl;
           imgEl.alt = attFileName;
-          imgEl.style.cssText = 'max-width: 400px; cursor: pointer; display: block; margin-top: 4px; border-radius: 4px;';
-          imgLink.appendChild(imgEl);
-          contentWrap.appendChild(imgLink);
+          imgEl.className = 'img-fluid rounded';
+          imgEl.style.cssText = 'max-width: 400px;';
+          attContainer.appendChild(imgEl);
         } else {
           var fileLink = document.createElement('a');
           fileLink.href = downloadUrl;
-          fileLink.className = 'small d-block mt-1';
-          fileLink.textContent = '\uD83D\uDCCE ' + attFileName;
-          contentWrap.appendChild(fileLink);
+          fileLink.className = 'small';
+          fileLink.textContent = attFileName;
+          attContainer.appendChild(fileLink);
         }
       }
+      bubble.appendChild(attContainer);
     }
 
-    item.appendChild(contentWrap);
+    // Message actions (reply on all, edit + delete on own)
+    var actionsDiv = document.createElement('div');
+    actionsDiv.className = 'message-actions mt-1';
 
-    // Message actions (edit + delete) for own messages
-    var senderId = msg.sender_id || msg.senderId;
-    if (window.YAC_USER && senderId && String(senderId) === String(window.YAC_USER.id)) {
-      var actionsDiv = document.createElement('div');
-      actionsDiv.className = 'message-actions ms-2 d-flex gap-1';
+    // Reply button on all messages
+    var replyBtn = document.createElement('button');
+    replyBtn.className = 'btn btn-sm btn-outline-secondary reply-btn';
+    replyBtn.title = 'Reply';
+    replyBtn.setAttribute('data-message-id', msg.id);
+    replyBtn.setAttribute('data-sender-username', senderUsername);
+    replyBtn.textContent = '\u21A9';
+    actionsDiv.appendChild(replyBtn);
 
+    if (isOwn) {
       var editBtn = document.createElement('button');
-      editBtn.className = 'btn btn-sm btn-outline-secondary';
-      editBtn.title = 'Edit message';
+      editBtn.className = 'btn btn-sm btn-outline-secondary edit-btn';
+      editBtn.title = 'Edit';
       editBtn.setAttribute('data-message-id', msg.id);
       editBtn.textContent = '\u270F\uFE0F';
       actionsDiv.appendChild(editBtn);
 
       var deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn btn-sm btn-outline-secondary';
-      deleteBtn.title = 'Delete message';
+      deleteBtn.className = 'btn btn-sm btn-outline-danger delete-btn';
+      deleteBtn.title = 'Delete';
       deleteBtn.setAttribute('data-message-id', msg.id);
       deleteBtn.textContent = '\uD83D\uDDD1';
       actionsDiv.appendChild(deleteBtn);
-
-      item.appendChild(actionsDiv);
     }
+
+    bubble.appendChild(actionsDiv);
+    item.appendChild(bubble);
 
     return item;
   }
@@ -687,11 +707,11 @@
   // --- Message edit handler ---
 
   function handleEditMessage(messageItem, messageId, roomId) {
-    var contentWrap = messageItem.querySelector('.message-content');
+    var contentWrap = messageItem.querySelector('.message-bubble') || messageItem.querySelector('.message-content');
     if (!contentWrap) {
       return;
     }
-    var textEl = contentWrap.querySelector('p.mb-0');
+    var textEl = contentWrap.querySelector('.message-text') || contentWrap.querySelector('p.mb-0');
     if (!textEl) {
       return;
     }
@@ -771,8 +791,8 @@
         errorDiv.remove();
 
         // Add (edited) indicator if not already present
-        var headerDiv = contentWrap.querySelector('.d-flex.align-items-baseline');
-        if (headerDiv && !headerDiv.querySelector('.text-muted.ms-1')) {
+        var headerDiv = contentWrap.querySelector('.message-header') || contentWrap.querySelector('.d-flex.align-items-baseline');
+        if (headerDiv && !headerDiv.querySelector('small')) {
           var editedEl = document.createElement('small');
           editedEl.className = 'text-muted ms-1';
           editedEl.textContent = '(edited)';
@@ -1020,6 +1040,36 @@
     });
   };
 
+  // --- Block user ---
+
+  window.blockUser = function (btn) {
+    var userId = btn.getAttribute('data-user-id');
+    var username = btn.getAttribute('data-username') || 'this user';
+    if (!userId) {
+      return;
+    }
+
+    showConfirmModal('Block user ' + username + '?', function () {
+      fetch('/api/user-bans', {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({ user_id: userId })
+      })
+      .then(function (response) {
+        if (response.ok || response.status === 201) {
+          showErrorModal('User ' + username + ' has been blocked.');
+        } else {
+          return response.json().then(function (err) {
+            showErrorModal(err.message || 'Failed to block user');
+          });
+        }
+      })
+      .catch(function (err) {
+        showErrorModal('Error blocking user');
+      });
+    });
+  };
+
   // --- Initialization ---
 
   function init() {
@@ -1103,7 +1153,7 @@
       });
     }
 
-    // --- Event delegation for message edit and delete ---
+    // --- Event delegation for message reply, edit and delete ---
     if (messageList) {
       messageList.addEventListener('click', function (event) {
         var btn = event.target.closest('.message-actions button');
@@ -1118,17 +1168,41 @@
         if (!messageId) {
           return;
         }
+
+        var title = btn.getAttribute('title') || '';
+        var text = btn.textContent.trim();
+
+        // --- Reply ---
+        if (title === 'Reply' || btn.classList.contains('reply-btn') || text === '\u21A9') {
+          var senderName = btn.getAttribute('data-sender-username') || 'Unknown';
+          var replyToInput = document.getElementById('reply-to-id');
+          var replyIndicator = document.getElementById('reply-indicator');
+          var replyToName = document.getElementById('reply-to-name');
+          if (replyToInput) {
+            replyToInput.value = messageId;
+          }
+          if (replyToName) {
+            replyToName.textContent = senderName;
+          }
+          if (replyIndicator) {
+            replyIndicator.classList.remove('d-none');
+          }
+          var textarea = document.getElementById('message-textarea');
+          if (textarea) {
+            textarea.focus();
+          }
+          return;
+        }
+
         var roomId = getRoomId();
         if (!roomId) {
           return;
         }
 
-        var title = btn.getAttribute('title') || '';
-
-        if (title === 'Edit message' || btn.textContent.trim() === '\u270F\uFE0F') {
+        if (title === 'Edit message' || title === 'Edit' || btn.classList.contains('edit-btn') || text === '\u270F\uFE0F') {
           // --- Edit message ---
           handleEditMessage(messageItem, messageId, roomId);
-        } else if (title === 'Delete message' || title === 'Delete' || title === 'Admin delete' || btn.textContent.trim() === '\uD83D\uDDD1') {
+        } else if (title === 'Delete message' || title === 'Delete' || title === 'Admin delete' || btn.classList.contains('delete-btn') || text === '\uD83D\uDDD1') {
           // --- Delete message ---
           handleDeleteMessage(messageItem, messageId, roomId);
         }

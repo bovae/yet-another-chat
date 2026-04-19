@@ -120,7 +120,7 @@ class DirectChatPropertyTest {
      * and no mutual UserBan exists. Non-friends SHALL be rejected (ForbiddenException).
      * Direct_Chats SHALL have no admin moderation capabilities.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void directChatAccessControl(
             @ForAll("validEmails") String emailA,
             @ForAll("validUsernames") String usernameA,

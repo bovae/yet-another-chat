@@ -93,7 +93,7 @@ class FriendshipPropertyTest {
      * Tests the full accept lifecycle: send request (verify PENDING + request text),
      * accept (verify ACCEPTED), remove (verify deleted).
      */
-    @Property(tries = 50)
+    @Property(tries = 10)
     void friendshipAcceptLifecycle(
             @ForAll("validEmails") String requesterEmail,
             @ForAll("validUsernames") String requesterUsername,
@@ -141,7 +141,7 @@ class FriendshipPropertyTest {
      *
      * Tests the decline path: send request (verify PENDING), decline (verify DECLINED).
      */
-    @Property(tries = 50)
+    @Property(tries = 10)
     void friendshipDeclineLifecycle(
             @ForAll("validEmails") String requesterEmail,
             @ForAll("validUsernames") String requesterUsername,

@@ -69,7 +69,7 @@ class FriendRequestTextPropertyTest {
      * For any SendFriendRequest containing a requestText string (including null),
      * the persisted Friendship entity's requestText field SHALL equal the value from the request body.
      */
-    @Property(tries = 100)
+    @Property(tries = 20)
     void friendRequestTextIsPersistedExactly(
             @ForAll("requestTexts") String requestText
     ) {

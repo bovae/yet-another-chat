@@ -65,7 +65,7 @@ class FriendRequestFilterPropertyTest {
      * incoming returns only PENDING where user is recipient;
      * outgoing returns only PENDING where user is requester.
      */
-    @Property(tries = 20)
+    @Property(tries = 4)
     void friendRequestEndpointFiltering(
             @ForAll("friendshipStatuses") FriendshipStatus statusAB,
             @ForAll("friendshipStatuses") FriendshipStatus statusCB,

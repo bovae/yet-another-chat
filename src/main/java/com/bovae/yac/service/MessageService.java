@@ -169,28 +169,29 @@ public class MessageService {
                 .map(this::toAttachmentInfo)
                 .toList();
 
-        return new ChatMessageResponse(
-                message.getId(),
-                message.getRoom().getId(),
-                message.getSender().getId(),
-                message.getSender().getUsername(),
-                message.getContent(),
-                message.getReplyTo() != null ? message.getReplyTo().getId() : null,
-                message.isEdited(),
-                message.getWatermark(),
-                message.getCreatedAt(),
-                attachmentInfos
-        );
+        return toResponse(message, attachmentInfos);
     }
 
     private ChatMessageResponse toResponse(Message message, List<AttachmentInfo> attachments) {
+        Message replyTo = message.getReplyTo();
+        String replyToSenderUsername = null;
+        String replyToContentSnippet = null;
+
+        if (replyTo != null) {
+            replyToSenderUsername = replyTo.getSender().getUsername();
+            String content = replyTo.getContent();
+            replyToContentSnippet = content.length() > 100 ? content.substring(0, 100) : content;
+        }
+
         return new ChatMessageResponse(
                 message.getId(),
                 message.getRoom().getId(),
                 message.getSender().getId(),
                 message.getSender().getUsername(),
                 message.getContent(),
-                message.getReplyTo() != null ? message.getReplyTo().getId() : null,
+                replyTo != null ? replyTo.getId() : null,
+                replyToSenderUsername,
+                replyToContentSnippet,
                 message.isEdited(),
                 message.getWatermark(),
                 message.getCreatedAt(),
@@ -222,6 +223,16 @@ public class MessageService {
 
     private void checkDirectChatBan(Room room, User sender) {
         List<RoomMemberDto> members = roomMemberService.listMembers(room);
+
+        // Skip ban check for self-DM (Saved Messages) rooms
+        long distinctUserCount = members.stream()
+                .map(RoomMemberDto::userId)
+                .distinct()
+                .count();
+        if (distinctUserCount <= 1) {
+            return;
+        }
+
         for (RoomMemberDto member : members) {
             if (!member.userId().equals(sender.getId())) {
                 User otherUser = userRepository.findById(member.userId())

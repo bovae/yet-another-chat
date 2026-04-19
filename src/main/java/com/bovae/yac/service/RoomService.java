@@ -121,6 +121,13 @@ public class RoomService {
             throw new ForbiddenException("Only the room owner can update the room");
         }
 
+        if (room.getVisibility() == RoomVisibility.DIRECT) {
+            throw new ForbiddenException("DIRECT rooms cannot be modified through room settings");
+        }
+        if (visibility == RoomVisibility.DIRECT) {
+            throw new ForbiddenException("Rooms cannot be converted to DIRECT visibility");
+        }
+
         if (name != null && !name.equals(room.getName()) && roomRepository.existsByName(name)) {
             throw new ConflictException("Room name is already taken: %s".formatted(name));
         }
@@ -149,7 +156,26 @@ public class RoomService {
                 .map(membership -> {
                     Room room = membership.getRoom();
                     int unreadCount = notificationService.computeUnreadCount(user, room);
-                    return new MyRoomEntry(room.getId(), room.getName(), room.getVisibility(), unreadCount);
+
+                    String otherUsername = null;
+                    String otherDisplayName = null;
+
+                    if (room.getVisibility() == RoomVisibility.DIRECT) {
+                        List<RoomMember> members = roomMemberRepository.findByRoomWithUsers(room);
+                        RoomMember otherMember = members.stream()
+                                .filter(m -> !m.getUser().getId().equals(user.getId()))
+                                .findFirst()
+                                .orElse(null);
+
+                        if (otherMember != null) {
+                            otherUsername = otherMember.getUser().getUsername();
+                            otherDisplayName = otherMember.getUser().getDisplayName();
+                        }
+                        // For self-DM (single member), both remain null
+                    }
+
+                    return new MyRoomEntry(room.getId(), room.getName(), room.getVisibility(),
+                            unreadCount, otherUsername, otherDisplayName);
                 })
                 .toList();
     }
