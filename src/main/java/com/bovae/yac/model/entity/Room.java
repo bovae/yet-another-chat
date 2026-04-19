@@ -50,4 +50,8 @@ public class Room extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id")
     private User owner;
+
+    @Builder.Default
+    @Column(name = "next_watermark", nullable = false)
+    private Long nextWatermark = 1L;
 }

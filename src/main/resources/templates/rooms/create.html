@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Room - YAC</title>
+  <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+  <link rel="stylesheet" th:href="@{/css/chat.css}">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
+</head>
+<body class="d-flex flex-column vh-100">
+
+  <div th:replace="~{fragments/navbar :: navbar}"></div>
+
+  <div class="container mt-4">
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-5">
+        <h4 class="mb-4">Create a Room</h4>
+
+        <div th:if="${error}" class="alert alert-danger" role="alert" th:text="${error}">Error</div>
+
+        <div class="card shadow-sm">
+          <div class="card-body p-4">
+            <form id="create-room-form">
+              <div class="mb-3">
+                <label for="name" class="form-label">Room Name</label>
+                <input type="text" class="form-control" id="name" name="name" required maxlength="100">
+              </div>
+              <div class="mb-3">
+                <label for="description" class="form-label">Description</label>
+                <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+              </div>
+              <div class="mb-3">
+                <label for="visibility" class="form-label">Visibility</label>
+                <select class="form-select" id="visibility" name="visibility">
+                  <option value="PUBLIC">Public</option>
+                  <option value="PRIVATE">Private</option>
+                </select>
+              </div>
+              <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Create Room</button>
+                <a th:href="@{/rooms/catalog}" class="btn btn-outline-secondary">Cancel</a>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Modal -->
+  <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title text-danger" id="errorModalLabel">Error</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p id="errorModalMessage"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script th:src="@{/webjars/bootstrap/js/bootstrap.bundle.min.js}"></script>
+  <script>
+    document.getElementById('create-room-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+      const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+      const headers = { 'Content-Type': 'application/json' };
+      if (csrfToken && csrfHeader) {
+        headers[csrfHeader] = csrfToken;
+      }
+      fetch('/api/rooms', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+          name: document.getElementById('name').value,
+          description: document.getElementById('description').value,
+          visibility: document.getElementById('visibility').value
+        })
+      }).then(function(resp) {
+        if (resp.ok) {
+          return resp.json().then(function(data) {
+            window.location.href = '/chat/rooms/' + data.id;
+          });
+        }
+        return resp.json().then(function(data) {
+          document.getElementById('errorModalMessage').textContent = data.message || 'Failed to create room';
+          new bootstrap.Modal(document.getElementById('errorModal')).show();
+        });
+      }).catch(function() {
+        document.getElementById('errorModalMessage').textContent = 'Failed to create room';
+        new bootstrap.Modal(document.getElementById('errorModal')).show();
+      });
+    });
+  </script>
+</body>
+</html>

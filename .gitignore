@@ -30,3 +30,9 @@ file-storage/
 
 # Playwright MCP
 .playwright-mcp/
+
+# Jqwik PBT
+.jqwik-database
+
+# Kiro
+.kiro/

@@ -52,4 +52,7 @@ public class Message extends BaseEntity {
 
     @Column(nullable = false)
     private boolean edited;
+
+    @Column(nullable = false)
+    private Long watermark;
 }

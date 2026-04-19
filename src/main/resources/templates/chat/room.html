@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title th:text="${room.name} + ' - YAC'">Room - YAC</title>
+  <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+  <link rel="stylesheet" th:href="@{/css/chat.css}">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
+</head>
+<body class="d-flex flex-column vh-100">
+
+  <div th:replace="~{fragments/navbar :: navbar}"></div>
+
+  <div class="flex-grow-1 d-flex overflow-hidden">
+    <!-- Left sidebar -->
+    <div class="chat-sidebar" style="width: 260px; min-width: 260px;">
+      <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+    </div>
+
+    <!-- Center: messages -->
+    <div class="flex-grow-1 d-flex flex-column">
+      <div class="chat-header border-bottom p-2 bg-white d-flex align-items-center justify-content-between">
+        <div>
+          <h6 class="mb-0" th:text="${room.name}">Room Name</h6>
+          <small class="text-muted" th:text="${room.description}">Room description</small>
+        </div>
+        <div>
+          <span class="badge bg-secondary" th:text="${#lists.size(members)} + ' members'">0 members</span>
+        </div>
+      </div>
+
+      <!-- Message area -->
+      <div id="message-list" class="message-list flex-grow-1 overflow-auto p-3"
+           th:attr="data-room-id=${room.id},data-next-cursor=${nextCursor},data-has-more=${hasMore}">
+        <div th:if="${hasMore}" class="text-center mb-3">
+          <button class="btn btn-outline-secondary btn-sm" id="load-more-btn">Load older messages</button>
+        </div>
+        <div th:each="msg : ${messages}" class="message-item d-flex mb-3"
+             th:attr="data-message-id=${msg.id()},data-watermark=${msg.watermark()}">
+          <div class="message-avatar me-2">
+            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center"
+                 style="width: 36px; height: 36px;">
+              <span th:text="${#strings.substring(msg.senderUsername(), 0, 1).toUpperCase()}">U</span>
+            </div>
+          </div>
+          <div class="message-content flex-grow-1">
+            <div class="d-flex align-items-baseline">
+              <strong class="me-2" th:text="${msg.senderUsername()}">Username</strong>
+              <small class="text-muted" th:text="${#temporals.format(msg.createdAt(), 'HH:mm')}">12:00</small>
+              <small class="text-muted ms-1" th:if="${msg.edited()}">(edited)</small>
+            </div>
+            <div th:if="${msg.replyToId() != null}"
+                 class="reply-quote border-start border-3 border-primary ps-2 mb-1 small text-muted">
+              <span>Replying to a message</span>
+            </div>
+            <p class="mb-0" th:text="${msg.content()}">Message content</p>
+          </div>
+          <div class="message-actions ms-2" th:if="${msg.senderId() == currentUser.id}">
+            <button class="btn btn-sm btn-outline-secondary" title="Delete">🗑</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Join banner for non-members viewing a public room -->
+      <div th:if="${!isMember and room.visibility.name() == 'PUBLIC'}" class="alert alert-info d-flex align-items-center justify-content-between m-2 mb-0" role="alert">
+        <span>You're not a member of this room</span>
+        <form th:action="@{/rooms/{id}/join(id=${room.id})}" method="post" class="d-inline">
+          <button type="submit" class="btn btn-primary btn-sm">Join Room</button>
+        </form>
+      </div>
+
+      <!-- Message input for members -->
+      <div th:if="${isMember}" th:replace="~{fragments/message-input :: message-input}"></div>
+
+      <!-- Disabled placeholder for non-members -->
+      <div th:unless="${isMember}" class="message-input border-top bg-white p-2">
+        <div class="d-flex align-items-end gap-2">
+          <input type="text" class="form-control form-control-sm" placeholder="Join this room to send messages" disabled>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right panel: members -->
+    <div class="chat-members" style="width: 220px; min-width: 220px;">
+      <div th:replace="~{fragments/member-list :: member-list-room(members=${members}, room=${room}, currentUser=${currentUser})}"></div>
+    </div>
+  </div>
+
+  <!-- Admin action modals -->
+  <div th:replace="~{fragments/admin-modals :: admin-modals(room=${room})}"></div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="confirmModalLabel">Confirm</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p id="confirmModalMessage"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger btn-sm" id="confirmModalConfirmBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Modal -->
+  <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title text-danger" id="errorModalLabel">Error</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p id="errorModalMessage"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script th:src="@{/webjars/bootstrap/js/bootstrap.bundle.min.js}"></script>
+  <script th:src="@{/webjars/htmx.org/dist/htmx.min.js}"></script>
+  <script th:src="@{/webjars/github-com-stomp-js-stompjs/stomp.umd.min.js}"></script>
+  <script th:src="@{/js/app.js}"></script>
+  <script th:src="@{/js/stomp-client.js}"></script>
+  <script th:src="@{/js/presence.js}"></script>
+  <script th:inline="javascript">
+    window.YAC_ROOM = {
+      id: [[${room.id.toString()}]],
+      name: [[${room.name}]],
+      nextCursor: [[${nextCursor}]],
+      hasMore: [[${hasMore}]]
+    };
+  </script>
+</body>
+</html>

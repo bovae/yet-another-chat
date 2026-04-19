@@ -32,7 +32,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/", "/login", "/register", "/forgot-password",
                                 "/css/**", "/js/**", "/webjars/**",
-                                "/api/health", "/actuator/health"
+                                "/api/health", "/actuator/health",
+                                "/ws/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

@@ -1,11 +1,17 @@
 package com.bovae.yac.model.dto;
 
 import java.time.Instant;
+import java.util.UUID;
 
 public record ChatMessageResponse(
-        String sender,
+        UUID id,
+        UUID roomId,
+        UUID senderId,
+        String senderUsername,
         String content,
-        String roomId,
-        Instant timestamp
+        UUID replyToId,
+        boolean edited,
+        Long watermark,
+        Instant createdAt
 ) {
 }

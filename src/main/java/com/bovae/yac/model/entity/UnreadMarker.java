@@ -22,7 +22,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = {"user", "room", "lastReadMessage"})
+@ToString(exclude = {"user", "room"})
 @Entity
 @Table(name = "unread_markers")
 @IdClass(UnreadMarkerId.class)
@@ -40,10 +40,6 @@ public class UnreadMarker {
     @JoinColumn(name = "room_id", nullable = false)
     private Room room;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "last_read_message_id")
-    private Message lastReadMessage;
-
-    @Column(name = "unread_count", nullable = false)
-    private int unreadCount;
+    @Column(name = "last_read_watermark")
+    private Long lastReadWatermark;
 }
