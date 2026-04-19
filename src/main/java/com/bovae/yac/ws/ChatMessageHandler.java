@@ -22,6 +22,7 @@ import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
 import java.time.Instant;
+import java.util.List;
 
 @Slf4j
 @Controller
@@ -59,7 +60,8 @@ public class ChatMessageHandler {
                 request.replyToId(),
                 message.isEdited(),
                 message.getWatermark(),
-                message.getCreatedAt()
+                message.getCreatedAt(),
+                List.of()
         );
 
         messagingTemplate.convertAndSend("/topic/room." + room.getId(), response);

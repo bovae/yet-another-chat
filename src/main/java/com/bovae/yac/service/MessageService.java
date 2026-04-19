@@ -2,9 +2,11 @@ package com.bovae.yac.service;
 
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.exception.ResourceNotFoundException;
+import com.bovae.yac.model.dto.AttachmentInfo;
 import com.bovae.yac.model.dto.ChatMessageResponse;
 import com.bovae.yac.model.dto.MessagePage;
 import com.bovae.yac.model.dto.RoomMemberDto;
+import com.bovae.yac.model.entity.Attachment;
 import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.RoomMember;
@@ -12,6 +14,7 @@ import com.bovae.yac.model.entity.RoomMemberId;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.model.enums.RoomVisibility;
+import com.bovae.yac.repository.AttachmentRepository;
 import com.bovae.yac.repository.MessageRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
@@ -23,8 +26,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +45,7 @@ public class MessageService {
     private final UserBanService userBanService;
     private final RoomMemberRepository roomMemberRepository;
     private final UserRepository userRepository;
+    private final AttachmentRepository attachmentRepository;
 
     @Transactional
     public Message sendMessage(Room room, User sender, String content, Message replyTo) {
@@ -130,8 +137,25 @@ public class MessageService {
             messages = messages.subList(0, size);
         }
 
+        // Batch-load attachments for all messages to avoid N+1 queries
+        List<UUID> messageIds = messages.stream()
+                .map(Message::getId)
+                .toList();
+
+        Map<UUID, List<AttachmentInfo>> attachmentsByMessageId;
+        if (messageIds.isEmpty()) {
+            attachmentsByMessageId = Collections.emptyMap();
+        } else {
+            attachmentsByMessageId = attachmentRepository.findByMessageIdIn(messageIds)
+                    .stream()
+                    .collect(Collectors.groupingBy(
+                            a -> a.getMessage().getId(),
+                            Collectors.mapping(this::toAttachmentInfo, Collectors.toList())
+                    ));
+        }
+
         List<ChatMessageResponse> responseMessages = messages.stream()
-                .map(this::toResponse)
+                .map(msg -> toResponse(msg, attachmentsByMessageId.getOrDefault(msg.getId(), List.of())))
                 .toList();
 
         Long nextCursor = messages.isEmpty() ? null : messages.getLast().getWatermark();
@@ -140,6 +164,11 @@ public class MessageService {
     }
 
     private ChatMessageResponse toResponse(Message message) {
+        List<AttachmentInfo> attachmentInfos = attachmentRepository.findByMessageId(message.getId())
+                .stream()
+                .map(this::toAttachmentInfo)
+                .toList();
+
         return new ChatMessageResponse(
                 message.getId(),
                 message.getRoom().getId(),
@@ -149,7 +178,32 @@ public class MessageService {
                 message.getReplyTo() != null ? message.getReplyTo().getId() : null,
                 message.isEdited(),
                 message.getWatermark(),
-                message.getCreatedAt()
+                message.getCreatedAt(),
+                attachmentInfos
+        );
+    }
+
+    private ChatMessageResponse toResponse(Message message, List<AttachmentInfo> attachments) {
+        return new ChatMessageResponse(
+                message.getId(),
+                message.getRoom().getId(),
+                message.getSender().getId(),
+                message.getSender().getUsername(),
+                message.getContent(),
+                message.getReplyTo() != null ? message.getReplyTo().getId() : null,
+                message.isEdited(),
+                message.getWatermark(),
+                message.getCreatedAt(),
+                attachments
+        );
+    }
+
+    private AttachmentInfo toAttachmentInfo(Attachment attachment) {
+        return new AttachmentInfo(
+                attachment.getId(),
+                attachment.getOriginalFileName(),
+                attachment.getContentType(),
+                attachment.getFileSize()
         );
     }
 

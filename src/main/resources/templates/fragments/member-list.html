@@ -71,16 +71,32 @@
               Demote to Member
             </button>
           </li>
+          <li th:if="${member.userId != currentUser.id}">
+            <hr class="dropdown-divider">
+          </li>
+          <li th:if="${member.userId != currentUser.id}">
+            <button class="dropdown-item small" type="button"
+                    th:attr="data-username=${member.username}"
+                    onclick="addFriend(this)">
+              Add friend
+            </button>
+          </li>
         </ul>
       </div>
     </li>
   </ul>
 
   <div class="mt-3">
+    <button th:if="${room.owner.id == currentUser.id}"
+            class="btn btn-outline-primary btn-sm w-100 mb-2"
+            data-bs-toggle="modal" data-bs-target="#roomSettingsModal">Settings</button>
     <button class="btn btn-outline-primary btn-sm w-100 mb-2"
             data-bs-toggle="modal" data-bs-target="#inviteModal">Invite user</button>
     <button class="btn btn-outline-secondary btn-sm w-100 mb-2"
             data-bs-toggle="modal" data-bs-target="#bannedUsersModal">View banned users</button>
+    <button th:if="${room.owner.id != currentUser.id}"
+            class="btn btn-outline-warning btn-sm w-100 mb-2"
+            onclick="leaveRoom()">Leave room</button>
     <button th:if="${room.owner.id == currentUser.id}"
             class="btn btn-outline-danger btn-sm w-100"
             data-bs-toggle="modal" data-bs-target="#deleteRoomModal">Delete room</button>

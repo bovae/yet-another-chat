@@ -3,6 +3,7 @@ package com.bovae.yac.service;
 import com.bovae.yac.exception.ConflictException;
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.exception.ResourceNotFoundException;
+import com.bovae.yac.model.dto.MyRoomEntry;
 import com.bovae.yac.model.dto.RoomCatalogEntry;
 import com.bovae.yac.model.dto.RoomDto;
 import com.bovae.yac.model.dto.RoomMapper;
@@ -25,6 +26,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -39,6 +41,7 @@ public class RoomService {
     private final RoomBanRepository roomBanRepository;
     private final RoomInvitationRepository roomInvitationRepository;
     private final UnreadMarkerRepository unreadMarkerRepository;
+    private final NotificationService notificationService;
     private final RoomMapper roomMapper;
 
     @Transactional
@@ -107,6 +110,48 @@ public class RoomService {
         return roomRepository.findByIdWithOwner(roomId)
                 .map(roomMapper::toDto)
                 .orElseThrow(() -> new ResourceNotFoundException("Room not found: %s".formatted(roomId)));
+    }
+
+    @Transactional
+    public RoomDto updateRoom(UUID roomId, User owner, String name, String description, RoomVisibility visibility) {
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Room not found: %s".formatted(roomId)));
+
+        if (!room.getOwner().getId().equals(owner.getId())) {
+            throw new ForbiddenException("Only the room owner can update the room");
+        }
+
+        if (name != null && !name.equals(room.getName()) && roomRepository.existsByName(name)) {
+            throw new ConflictException("Room name is already taken: %s".formatted(name));
+        }
+
+        if (name != null) {
+            room.setName(name);
+        }
+        if (description != null) {
+            room.setDescription(description);
+        }
+        if (visibility != null) {
+            room.setVisibility(visibility);
+        }
+
+        room = roomRepository.save(room);
+
+        LOG.info("Room updated: roomId={}, updatedBy={}", roomId, owner.getUsername());
+
+        return roomMapper.toDto(room);
+    }
+
+    public List<MyRoomEntry> listUserRoomsWithUnread(User user) {
+        List<RoomMember> memberships = roomMemberRepository.findByUserWithRoomAndOwner(user);
+
+        return memberships.stream()
+                .map(membership -> {
+                    Room room = membership.getRoom();
+                    int unreadCount = notificationService.computeUnreadCount(user, room);
+                    return new MyRoomEntry(room.getId(), room.getName(), room.getVisibility(), unreadCount);
+                })
+                .toList();
     }
 
     public void deleteRoomCascade(Room room) {

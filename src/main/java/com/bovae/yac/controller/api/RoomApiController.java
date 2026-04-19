@@ -2,8 +2,10 @@ package com.bovae.yac.controller.api;
 
 import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.dto.CreateRoomRequest;
+import com.bovae.yac.model.dto.MyRoomEntry;
 import com.bovae.yac.model.dto.RoomCatalogEntry;
 import com.bovae.yac.model.dto.RoomDto;
+import com.bovae.yac.model.dto.UpdateRoomRequest;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.UserRepository;
@@ -20,12 +22,14 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
+import java.util.List;
 import java.util.UUID;
 
 @Validated
@@ -56,6 +60,23 @@ public class RoomApiController {
         User user = resolveUser(principal);
         RoomDto room = roomService.createRoom(request.name(), request.description(), request.visibility(), user);
         return ResponseEntity.status(HttpStatus.CREATED).body(room);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<RoomDto> updateRoom(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateRoomRequest request,
+            Principal principal) {
+        User user = resolveUser(principal);
+        RoomDto updated = roomService.updateRoom(id, user, request.name(), request.description(), request.visibility());
+        return ResponseEntity.ok(updated);
+    }
+
+    @GetMapping("/my")
+    public ResponseEntity<List<MyRoomEntry>> myRooms(Principal principal) {
+        User user = resolveUser(principal);
+        List<MyRoomEntry> rooms = roomService.listUserRoomsWithUnread(user);
+        return ResponseEntity.ok(rooms);
     }
 
     @DeleteMapping("/{id}")

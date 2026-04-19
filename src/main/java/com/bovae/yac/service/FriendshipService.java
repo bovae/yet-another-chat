@@ -138,4 +138,14 @@ public class FriendshipService {
 
         return friendshipMapper.toDtoList(friends);
     }
+
+    public List<FriendshipDto> listPendingIncoming(User user) {
+        return friendshipMapper.toDtoList(
+                friendshipRepository.findByRecipientAndStatusWithUsers(user, FriendshipStatus.PENDING));
+    }
+
+    public List<FriendshipDto> listPendingOutgoing(User user) {
+        return friendshipMapper.toDtoList(
+                friendshipRepository.findByRequesterAndStatusWithUsers(user, FriendshipStatus.PENDING));
+    }
 }

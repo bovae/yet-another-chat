@@ -48,7 +48,7 @@ public class FriendshipApiController {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found: %s".formatted(request.username())));
 
-        friendshipService.sendFriendRequest(requester, recipient, null);
+        friendshipService.sendFriendRequest(requester, recipient, request.requestText());
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
@@ -78,6 +78,20 @@ public class FriendshipApiController {
         User user = resolveUser(principal);
         friendshipService.removeFriend(id, user);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/requests/incoming")
+    public ResponseEntity<List<FriendshipDto>> incomingRequests(Principal principal) {
+        User user = resolveUser(principal);
+        List<FriendshipDto> incoming = friendshipService.listPendingIncoming(user);
+        return ResponseEntity.ok(incoming);
+    }
+
+    @GetMapping("/requests/outgoing")
+    public ResponseEntity<List<FriendshipDto>> outgoingRequests(Principal principal) {
+        User user = resolveUser(principal);
+        List<FriendshipDto> outgoing = friendshipService.listPendingOutgoing(user);
+        return ResponseEntity.ok(outgoing);
     }
 
     private User resolveUser(Principal principal) {

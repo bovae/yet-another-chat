@@ -1,16 +1,20 @@
 package com.bovae.yac.controller.api;
 
 import com.bovae.yac.exception.ResourceNotFoundException;
+import com.bovae.yac.model.dto.UpdateProfileRequest;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.UserService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -49,6 +53,15 @@ public class UserApiController {
         User user = resolveUser(principal);
         userService.deleteAccount(user.getId());
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<UserDto> updateProfile(
+            @Valid @RequestBody UpdateProfileRequest request,
+            Principal principal) {
+        User user = resolveUser(principal);
+        UserDto updated = userService.updateProfile(user.getId(), request.displayName(), user.getUsername());
+        return ResponseEntity.ok(updated);
     }
 
     private User resolveUser(Principal principal) {

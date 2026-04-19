@@ -146,7 +146,62 @@
     textEl.textContent = msg.content;
     contentWrap.appendChild(textEl);
 
+    // Attachment rendering
+    var attachments = msg.attachments;
+    if (attachments && attachments.length > 0) {
+      var roomId = getRoomId();
+      for (var ai = 0; ai < attachments.length; ai++) {
+        var att = attachments[ai];
+        var attId = att.id;
+        var attContentType = att.content_type || att.contentType || '';
+        var attFileName = att.original_file_name || att.originalFileName || 'file';
+        var downloadUrl = '/api/rooms/' + roomId + '/attachments/' + attId + '/download';
+
+        if (attContentType.indexOf('image/') === 0) {
+          var imgLink = document.createElement('a');
+          imgLink.href = downloadUrl;
+          imgLink.target = '_blank';
+          var imgEl = document.createElement('img');
+          imgEl.src = downloadUrl;
+          imgEl.alt = attFileName;
+          imgEl.style.cssText = 'max-width: 400px; cursor: pointer; display: block; margin-top: 4px; border-radius: 4px;';
+          imgLink.appendChild(imgEl);
+          contentWrap.appendChild(imgLink);
+        } else {
+          var fileLink = document.createElement('a');
+          fileLink.href = downloadUrl;
+          fileLink.className = 'small d-block mt-1';
+          fileLink.textContent = '\uD83D\uDCCE ' + attFileName;
+          contentWrap.appendChild(fileLink);
+        }
+      }
+    }
+
     item.appendChild(contentWrap);
+
+    // Message actions (edit + delete) for own messages
+    var senderId = msg.sender_id || msg.senderId;
+    if (window.YAC_USER && senderId && String(senderId) === String(window.YAC_USER.id)) {
+      var actionsDiv = document.createElement('div');
+      actionsDiv.className = 'message-actions ms-2 d-flex gap-1';
+
+      var editBtn = document.createElement('button');
+      editBtn.className = 'btn btn-sm btn-outline-secondary';
+      editBtn.title = 'Edit message';
+      editBtn.setAttribute('data-message-id', msg.id);
+      editBtn.textContent = '\u270F\uFE0F';
+      actionsDiv.appendChild(editBtn);
+
+      var deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn btn-sm btn-outline-secondary';
+      deleteBtn.title = 'Delete message';
+      deleteBtn.setAttribute('data-message-id', msg.id);
+      deleteBtn.textContent = '\uD83D\uDDD1';
+      actionsDiv.appendChild(deleteBtn);
+
+      item.appendChild(actionsDiv);
+    }
+
     return item;
   }
 
@@ -629,6 +684,342 @@
     });
   };
 
+  // --- Message edit handler ---
+
+  function handleEditMessage(messageItem, messageId, roomId) {
+    var contentWrap = messageItem.querySelector('.message-content');
+    if (!contentWrap) {
+      return;
+    }
+    var textEl = contentWrap.querySelector('p.mb-0');
+    if (!textEl) {
+      return;
+    }
+
+    // Prevent double-editing
+    if (contentWrap.querySelector('.edit-textarea')) {
+      return;
+    }
+
+    var originalText = textEl.textContent;
+    textEl.style.display = 'none';
+
+    var editArea = document.createElement('textarea');
+    editArea.className = 'form-control form-control-sm edit-textarea mb-1';
+    editArea.value = originalText;
+    editArea.rows = 2;
+
+    var btnWrap = document.createElement('div');
+    btnWrap.className = 'd-flex gap-1 mb-1';
+
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-sm btn-primary';
+    saveBtn.textContent = 'Save';
+    saveBtn.type = 'button';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-sm btn-secondary';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.type = 'button';
+
+    btnWrap.appendChild(saveBtn);
+    btnWrap.appendChild(cancelBtn);
+
+    var errorDiv = document.createElement('div');
+    errorDiv.className = 'text-danger small';
+
+    // Insert after the hidden <p>
+    textEl.parentNode.insertBefore(editArea, textEl.nextSibling);
+    editArea.parentNode.insertBefore(btnWrap, editArea.nextSibling);
+    btnWrap.parentNode.insertBefore(errorDiv, btnWrap.nextSibling);
+
+    editArea.focus();
+
+    cancelBtn.addEventListener('click', function () {
+      textEl.style.display = '';
+      editArea.remove();
+      btnWrap.remove();
+      errorDiv.remove();
+    });
+
+    saveBtn.addEventListener('click', function () {
+      var newContent = editArea.value.trim();
+      if (!newContent) {
+        errorDiv.textContent = 'Message cannot be empty';
+        return;
+      }
+
+      saveBtn.disabled = true;
+      fetch('/api/rooms/' + roomId + '/messages/' + messageId, {
+        method: 'PUT',
+        headers: apiHeaders(),
+        body: JSON.stringify({ content: newContent })
+      })
+      .then(function (response) {
+        if (response.ok) {
+          return response.json();
+        }
+        return response.json().then(function (err) {
+          throw new Error(err.message || 'Failed to edit message');
+        });
+      })
+      .then(function (updated) {
+        textEl.textContent = updated.content;
+        textEl.style.display = '';
+        editArea.remove();
+        btnWrap.remove();
+        errorDiv.remove();
+
+        // Add (edited) indicator if not already present
+        var headerDiv = contentWrap.querySelector('.d-flex.align-items-baseline');
+        if (headerDiv && !headerDiv.querySelector('.text-muted.ms-1')) {
+          var editedEl = document.createElement('small');
+          editedEl.className = 'text-muted ms-1';
+          editedEl.textContent = '(edited)';
+          headerDiv.appendChild(editedEl);
+        }
+      })
+      .catch(function (err) {
+        errorDiv.textContent = err.message || 'Error editing message';
+        saveBtn.disabled = false;
+      });
+    });
+  }
+
+  // --- Message delete handler ---
+
+  function handleDeleteMessage(messageItem, messageId, roomId) {
+    showConfirmModal('Delete this message?', function () {
+      fetch('/api/rooms/' + roomId + '/messages/' + messageId, {
+        method: 'DELETE',
+        headers: apiHeaders()
+      })
+      .then(function (response) {
+        if (response.ok || response.status === 204) {
+          messageItem.remove();
+        } else {
+          return response.json().then(function (err) {
+            showErrorModal(err.message || 'Failed to delete message');
+          });
+        }
+      })
+      .catch(function (err) {
+        showErrorModal('Error deleting message');
+      });
+    });
+  }
+
+  // --- Banned users modal population ---
+
+  function populateBannedUsersModal() {
+    var roomId = getRoomId();
+    var listEl = document.getElementById('banned-users-list');
+    if (!roomId || !listEl) {
+      return;
+    }
+
+    listEl.innerHTML = '<p class="text-muted small">Loading...</p>';
+
+    fetch('/api/rooms/' + roomId + '/bans', {
+      headers: apiHeaders()
+    })
+    .then(function (response) {
+      if (!response.ok) {
+        throw new Error('Failed to load banned users');
+      }
+      return response.json();
+    })
+    .then(function (bans) {
+      listEl.innerHTML = '';
+
+      if (!bans || bans.length === 0) {
+        listEl.innerHTML = '<p class="text-muted small">No banned users</p>';
+        return;
+      }
+
+      bans.forEach(function (ban) {
+        var entry = document.createElement('div');
+        entry.className = 'd-flex align-items-center justify-content-between py-2 border-bottom';
+        entry.setAttribute('data-ban-user-id', ban.user_id || ban.userId);
+
+        var infoDiv = document.createElement('div');
+        var nameEl = document.createElement('strong');
+        nameEl.className = 'small';
+        nameEl.textContent = ban.username;
+        infoDiv.appendChild(nameEl);
+
+        var detailEl = document.createElement('div');
+        detailEl.className = 'text-muted small';
+        var bannedByName = ban.banned_by_username || ban.bannedByUsername || 'Unknown';
+        var banDate = ban.created_at || ban.createdAt;
+        var dateStr = banDate ? new Date(banDate).toLocaleDateString() : '';
+        detailEl.textContent = 'Banned by ' + bannedByName + (dateStr ? ' on ' + dateStr : '');
+        infoDiv.appendChild(detailEl);
+
+        var unbanBtn = document.createElement('button');
+        unbanBtn.className = 'btn btn-sm btn-outline-warning';
+        unbanBtn.textContent = 'Unban';
+        unbanBtn.type = 'button';
+
+        unbanBtn.addEventListener('click', function () {
+          var userId = ban.user_id || ban.userId;
+          unbanBtn.disabled = true;
+          fetch('/api/rooms/' + roomId + '/bans/' + userId, {
+            method: 'DELETE',
+            headers: apiHeaders()
+          })
+          .then(function (response) {
+            if (response.ok || response.status === 204) {
+              entry.remove();
+              // Check if list is now empty
+              if (!listEl.querySelector('[data-ban-user-id]')) {
+                listEl.innerHTML = '<p class="text-muted small">No banned users</p>';
+              }
+            } else {
+              return response.json().then(function (err) {
+                showErrorModal(err.message || 'Failed to unban user');
+                unbanBtn.disabled = false;
+              });
+            }
+          })
+          .catch(function (err) {
+            showErrorModal('Error unbanning user');
+            unbanBtn.disabled = false;
+          });
+        });
+
+        entry.appendChild(infoDiv);
+        entry.appendChild(unbanBtn);
+        listEl.appendChild(entry);
+      });
+    })
+    .catch(function (err) {
+      listEl.innerHTML = '<p class="text-danger small">Error loading banned users</p>';
+    });
+  }
+
+  // --- Room settings submission ---
+
+  window.submitRoomSettings = function () {
+    var roomId = getRoomId();
+    if (!roomId) {
+      return;
+    }
+
+    var nameInput = document.getElementById('room-settings-name');
+    var descInput = document.getElementById('room-settings-description');
+    var visSelect = document.getElementById('room-settings-visibility');
+    var errorEl = document.getElementById('roomSettingsError');
+
+    var body = {
+      name: nameInput ? nameInput.value.trim() : null,
+      description: descInput ? descInput.value.trim() : null,
+      visibility: visSelect ? visSelect.value : null
+    };
+
+    if (errorEl) {
+      errorEl.textContent = '';
+    }
+
+    fetch('/api/rooms/' + roomId, {
+      method: 'PUT',
+      headers: apiHeaders(),
+      body: JSON.stringify(body)
+    })
+    .then(function (response) {
+      if (response.ok) {
+        return response.json();
+      }
+      return response.json().then(function (err) {
+        throw new Error(err.message || 'Failed to update room settings');
+      });
+    })
+    .then(function (updated) {
+      // Update room header
+      var headerDiv = document.querySelector('.chat-header');
+      if (headerDiv) {
+        var h6 = headerDiv.querySelector('h6');
+        var small = headerDiv.querySelector('small');
+        if (h6 && updated.name) {
+          h6.textContent = updated.name;
+        }
+        if (small) {
+          small.textContent = updated.description || '';
+        }
+      }
+
+      // Close modal
+      var modalEl = document.getElementById('roomSettingsModal');
+      if (modalEl) {
+        var modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) {
+          modal.hide();
+        }
+      }
+    })
+    .catch(function (err) {
+      if (errorEl) {
+        errorEl.textContent = err.message || 'Error updating room settings';
+      }
+    });
+  };
+
+  // --- Leave room ---
+
+  window.leaveRoom = function () {
+    var roomId = getRoomId();
+    if (!roomId) {
+      return;
+    }
+
+    showConfirmModal('Leave this room?', function () {
+      fetch('/api/rooms/' + roomId + '/leave', {
+        method: 'POST',
+        headers: apiHeaders()
+      })
+      .then(function (response) {
+        if (response.ok || response.status === 204) {
+          window.location.href = '/chat';
+        } else {
+          return response.json().then(function (err) {
+            showErrorModal(err.message || 'Failed to leave room');
+          });
+        }
+      })
+      .catch(function (err) {
+        showErrorModal('Error leaving room');
+      });
+    });
+  };
+
+  // --- Add friend ---
+
+  window.addFriend = function (btn) {
+    var username = btn.getAttribute('data-username');
+    if (!username) {
+      return;
+    }
+
+    fetch('/api/friends/request', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ username: username })
+    })
+    .then(function (response) {
+      if (response.ok || response.status === 201) {
+        btn.textContent = 'Request sent';
+        btn.disabled = true;
+      } else {
+        return response.json().then(function (err) {
+          showErrorModal(err.message || 'Failed to send friend request');
+        });
+      }
+    })
+    .catch(function (err) {
+      showErrorModal('Error sending friend request');
+    });
+  };
+
   // --- Initialization ---
 
   function init() {
@@ -709,6 +1100,46 @@
           uploadImage(this.files[0]);
           this.value = '';
         }
+      });
+    }
+
+    // --- Event delegation for message edit and delete ---
+    if (messageList) {
+      messageList.addEventListener('click', function (event) {
+        var btn = event.target.closest('.message-actions button');
+        if (!btn) {
+          return;
+        }
+        var messageItem = btn.closest('.message-item');
+        if (!messageItem) {
+          return;
+        }
+        var messageId = btn.getAttribute('data-message-id') || messageItem.getAttribute('data-message-id');
+        if (!messageId) {
+          return;
+        }
+        var roomId = getRoomId();
+        if (!roomId) {
+          return;
+        }
+
+        var title = btn.getAttribute('title') || '';
+
+        if (title === 'Edit message' || btn.textContent.trim() === '\u270F\uFE0F') {
+          // --- Edit message ---
+          handleEditMessage(messageItem, messageId, roomId);
+        } else if (title === 'Delete message' || title === 'Delete' || title === 'Admin delete' || btn.textContent.trim() === '\uD83D\uDDD1') {
+          // --- Delete message ---
+          handleDeleteMessage(messageItem, messageId, roomId);
+        }
+      });
+    }
+
+    // --- Banned users modal population ---
+    var bannedUsersModalEl = document.getElementById('bannedUsersModal');
+    if (bannedUsersModalEl) {
+      bannedUsersModalEl.addEventListener('show.bs.modal', function () {
+        populateBannedUsersModal();
       });
     }
 

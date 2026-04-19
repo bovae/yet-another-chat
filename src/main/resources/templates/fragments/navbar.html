@@ -10,16 +10,16 @@
   <div class="collapse navbar-collapse" id="navbarNav">
     <ul class="navbar-nav me-auto">
       <li class="nav-item">
-        <a class="nav-link" th:href="@{/chat}">Public Rooms</a>
+        <a class="nav-link" th:href="@{/rooms/catalog}">Public Rooms</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" th:href="@{/chat}">Private Rooms</a>
+        <a class="nav-link" th:href="@{/chat(section='private')}">Private Rooms</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" th:href="@{/chat}">Contacts</a>
+        <a class="nav-link" th:href="@{/chat(section='contacts')}">Contacts</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" th:href="@{/sessions}">Sessions</a>
+        <a class="nav-link" th:href="@{/profile/sessions}">Sessions</a>
       </li>
       <li class="nav-item">
         <a class="nav-link" th:href="@{/profile}">Profile</a>

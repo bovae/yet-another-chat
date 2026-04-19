@@ -30,7 +30,7 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/", "/login", "/register", "/forgot-password",
+                                "/", "/login", "/register", "/forgot-password", "/reset-password",
                                 "/css/**", "/js/**", "/webjars/**",
                                 "/api/health", "/actuator/health",
                                 "/ws/**"

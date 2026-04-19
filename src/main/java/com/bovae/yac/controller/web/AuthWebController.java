@@ -40,6 +40,12 @@ public class AuthWebController {
         return "auth/forgot-password";
     }
 
+    @GetMapping("/reset-password")
+    public String resetPassword(@RequestParam(required = false) String token, Model model) {
+        model.addAttribute("token", token);
+        return "auth/reset-password";
+    }
+
     @PostMapping("/register")
     public String registerPost(@RequestParam String email,
                                @RequestParam String username,

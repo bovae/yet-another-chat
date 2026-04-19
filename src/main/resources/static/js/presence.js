@@ -1,20 +1,98 @@
-// YAC - Presence heartbeat and idle detection
+// YAC - Presence heartbeat and idle detection with multi-tab AFK coordination
 
 (function () {
   'use strict';
 
   var HEARTBEAT_INTERVAL = 10000; // 10 seconds per spec
   var ACTIVE_THRESHOLD = 2000;    // cursor moved within last 2 seconds = active
-  var lastCursorMove = 0;
+  var IDLE_THRESHOLD = 60000;     // all tabs idle for 60s = AFK
+  var CHANNEL_NAME = 'yac-presence';
+
   var heartbeatTimer = null;
   var presenceSubscriptions = {};
 
-  function isActive() {
-    return (Date.now() - lastCursorMove) <= ACTIVE_THRESHOLD;
+  // Cross-tab coordination state
+  var myTabId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+  var lastActivityTimestamps = {}; // tabId → timestamp
+  var channel = null;
+  var useLocalStorageFallback = false;
+
+  // Initialize own tab's timestamp
+  lastActivityTimestamps[myTabId] = 0;
+
+  // --- BroadcastChannel setup with localStorage fallback ---
+  if (typeof BroadcastChannel !== 'undefined') {
+    channel = new BroadcastChannel(CHANNEL_NAME);
+    channel.onmessage = function (event) {
+      handleCrossTabMessage(event.data);
+    };
+  } else {
+    useLocalStorageFallback = true;
+    window.addEventListener('storage', function (event) {
+      if (event.key === CHANNEL_NAME && event.newValue) {
+        try {
+          handleCrossTabMessage(JSON.parse(event.newValue));
+        } catch (e) {
+          // ignore malformed messages
+        }
+      }
+    });
+  }
+
+  function broadcastMessage(msg) {
+    if (channel) {
+      channel.postMessage(msg);
+    } else if (useLocalStorageFallback) {
+      try {
+        localStorage.setItem(CHANNEL_NAME, JSON.stringify(msg));
+        // Remove immediately so subsequent writes trigger storage events
+        localStorage.removeItem(CHANNEL_NAME);
+      } catch (e) {
+        // localStorage may be unavailable in some contexts
+      }
+    }
+  }
+
+  function handleCrossTabMessage(data) {
+    if (!data || !data.tabId || data.tabId === myTabId) {
+      return;
+    }
+    if (data.type === 'active') {
+      lastActivityTimestamps[data.tabId] = data.timestamp || Date.now();
+    } else if (data.type === 'closing') {
+      delete lastActivityTimestamps[data.tabId];
+    }
   }
 
   function recordCursorActivity() {
-    lastCursorMove = Date.now();
+    var now = Date.now();
+    lastActivityTimestamps[myTabId] = now;
+    broadcastMessage({ type: 'active', tabId: myTabId, timestamp: now });
+  }
+
+  function isActive() {
+    var now = Date.now();
+    var tabIds = Object.keys(lastActivityTimestamps);
+    for (var i = 0; i < tabIds.length; i++) {
+      if ((now - lastActivityTimestamps[tabIds[i]]) <= ACTIVE_THRESHOLD) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function isAllTabsIdle60s() {
+    var now = Date.now();
+    var tabIds = Object.keys(lastActivityTimestamps);
+    if (tabIds.length === 0) {
+      return true;
+    }
+    for (var i = 0; i < tabIds.length; i++) {
+      if ((now - lastActivityTimestamps[tabIds[i]]) < IDLE_THRESHOLD) {
+        return false;
+      }
+    }
+    return true;
   }
 
   function sendHeartbeat() {
@@ -23,7 +101,23 @@
       client.publish({
         destination: '/app/presence.heartbeat',
         body: JSON.stringify({
-          active: isActive(),
+          active: !isAllTabsIdle60s(),
+          timestamp: new Date().toISOString()
+        })
+      });
+    }
+  }
+
+  function sendImmediateActiveHeartbeat() {
+    // Record activity for this tab and send heartbeat immediately
+    lastActivityTimestamps[myTabId] = Date.now();
+    broadcastMessage({ type: 'active', tabId: myTabId, timestamp: Date.now() });
+    var client = window.YAC && window.YAC.stomp && window.YAC.stomp.getClient();
+    if (client && client.connected) {
+      client.publish({
+        destination: '/app/presence.heartbeat',
+        body: JSON.stringify({
+          active: true,
           timestamp: new Date().toISOString()
         })
       });
@@ -96,6 +190,16 @@
   document.addEventListener('mousemove', recordCursorActivity);
   document.addEventListener('keydown', recordCursorActivity);
 
+  // Visibility/focus immediate heartbeat (Req 17.5)
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) {
+      sendImmediateActiveHeartbeat();
+    }
+  });
+  window.addEventListener('focus', function () {
+    sendImmediateActiveHeartbeat();
+  });
+
   // Start heartbeat when page loads (after STOMP connects)
   document.addEventListener('DOMContentLoaded', function () {
     // Delay to let STOMP connect first
@@ -105,7 +209,19 @@
     }, 2000);
   });
 
-  window.addEventListener('beforeunload', stopHeartbeat);
+  // Tab cleanup on close (Req 17.6)
+  window.addEventListener('beforeunload', function () {
+    stopHeartbeat();
+    // Notify other tabs this tab is closing
+    broadcastMessage({ type: 'closing', tabId: myTabId });
+    // Remove own entry
+    delete lastActivityTimestamps[myTabId];
+    // Close BroadcastChannel if open
+    if (channel) {
+      channel.close();
+      channel = null;
+    }
+  });
 
   // Expose for global use
   window.YAC = window.YAC || {};
@@ -113,6 +229,7 @@
     startHeartbeat: startHeartbeat,
     stopHeartbeat: stopHeartbeat,
     isActive: isActive,
+    isAllTabsIdle60s: isAllTabsIdle60s,
     subscribeToFriendPresence: subscribeToFriendPresence,
     subscribeToAllVisibleUsers: subscribeToAllVisibleUsers,
     updatePresenceDot: updatePresenceDot

@@ -6,6 +6,7 @@ import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
+import com.bovae.yac.repository.AttachmentRepository;
 import com.bovae.yac.repository.MessageRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
@@ -57,6 +58,9 @@ class MessageServiceTest {
 
     @Mock
     private RoomMemberRepository roomMemberRepository;
+
+    @Mock
+    private AttachmentRepository attachmentRepository;
 
     @InjectMocks
     private MessageService messageService;

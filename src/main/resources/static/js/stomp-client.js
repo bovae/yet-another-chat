@@ -6,6 +6,7 @@
   var stompClient = null;
   var lastWatermark = null;
   var roomSubscription = null;
+  var roomEventsSubscription = null;
   var errorSubscription = null;
   var notificationSubscription = null;
 
@@ -63,6 +64,14 @@
       roomSubscription = stompClient.subscribe('/topic/room.' + roomId, function (message) {
         var msg = JSON.parse(message.body);
         handleIncomingMessage(msg);
+      });
+
+      // Subscribe to room events (typing indicators, etc.)
+      roomEventsSubscription = stompClient.subscribe('/topic/room.' + roomId + '.events', function (message) {
+        var event = JSON.parse(message.body);
+        if (window.YAC && window.YAC.typing && window.YAC.typing.onEvent) {
+          window.YAC.typing.onEvent(event);
+        }
       });
     }
 

@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
+import java.util.List;
 import java.util.UUID;
 
 @Validated
@@ -119,7 +120,8 @@ public class MessageApiController {
                 message.getReplyTo() != null ? message.getReplyTo().getId() : null,
                 message.isEdited(),
                 message.getWatermark(),
-                message.getCreatedAt()
+                message.getCreatedAt(),
+                List.of()
         );
     }
 }
