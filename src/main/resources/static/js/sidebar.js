@@ -61,6 +61,9 @@
         var directCount = 0;
 
         rooms.forEach(function (room) {
+          if (room.visibility === 'DIRECT' && !room.other_username && !room.other_display_name) {
+            return;
+          }
           var li = createRoomItem(room);
           switch (room.visibility) {
             case 'PUBLIC':
@@ -154,18 +157,23 @@
         }
 
         var currentUserId = getCurrentUserId();
+        if (!currentUserId) {
+          console.warn('[Sidebar] currentUserId is falsy — self-filter will be skipped');
+        }
         var userIds = [];
 
         friends.forEach(function (friendship) {
           var friendId;
           var friendUsername;
-          if (currentUserId && friendship.requester_id === currentUserId) {
+          if (currentUserId && String(friendship.requester_id) === String(currentUserId)) {
             friendId = friendship.recipient_id;
             friendUsername = friendship.recipient_username;
           } else {
             friendId = friendship.requester_id;
             friendUsername = friendship.requester_username;
           }
+
+          if (currentUserId && String(friendId) === String(currentUserId)) { return; }
 
           userIds.push(friendId);
 
@@ -212,7 +220,7 @@
   // --- 11.3: Sidebar search filtering ---
 
   function setupSearch() {
-    var sidebar = document.querySelector('.sidebar');
+    var sidebar = document.querySelector('.chat-sidebar');
     if (!sidebar) {
       return;
     }

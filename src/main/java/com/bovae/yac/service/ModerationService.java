@@ -65,6 +65,9 @@ public class ModerationService {
                 .build();
         roomBanRepository.save(ban);
 
+        roomMemberRepository.findById(new RoomMemberId(room.getId(), targetUser.getId()))
+                .ifPresent(roomMemberRepository::delete);
+
         LOG.info("User banned from room: actorId={}, targetId={}, roomId={}",
                 actingUser.getId(), targetUser.getId(), room.getId());
     }

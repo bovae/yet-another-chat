@@ -41,5 +41,10 @@
   <script th:src="@{/js/stomp-client.js}"></script>
   <script th:src="@{/js/presence.js}"></script>
   <script th:src="@{/js/sidebar.js}"></script>
+  <script th:inline="javascript">
+    window.YAC_USER = {
+      id: [[${currentUser.id.toString()}]]
+    };
+  </script>
 </body>
 </html>

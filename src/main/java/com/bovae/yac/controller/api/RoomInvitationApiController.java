@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import java.security.Principal;
 import java.util.UUID;
 
@@ -36,6 +38,7 @@ public class RoomInvitationApiController {
     private final UserRepository userRepository;
 
     @PostMapping
+    @Transactional
     public ResponseEntity<Void> inviteUser(
             @PathVariable UUID roomId,
             @Valid @RequestBody InviteRequest request,
@@ -43,6 +46,10 @@ public class RoomInvitationApiController {
         User inviter = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
         User invitee = resolveUserById(request.userId());
+
+        roomInvitationRepository.findByRoomAndInvitee(room, invitee)
+                .ifPresent(roomInvitationRepository::delete);
+        roomInvitationRepository.flush();
 
         RoomInvitation invitation = RoomInvitation.builder()
                 .room(room)

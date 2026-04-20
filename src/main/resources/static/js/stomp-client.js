@@ -87,6 +87,11 @@
       var notification = JSON.parse(message.body);
       handleNotification(notification);
     });
+
+    // Trigger presence subscriptions now that STOMP is connected
+    if (window.YAC && window.YAC.presence && window.YAC.presence.subscribeToAllVisibleUsers) {
+      window.YAC.presence.subscribeToAllVisibleUsers();
+    }
   }
 
   function handleIncomingMessage(msg) {

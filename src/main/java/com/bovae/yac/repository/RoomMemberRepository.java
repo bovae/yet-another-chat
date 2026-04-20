@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 public interface RoomMemberRepository extends JpaRepository<RoomMember, RoomMemberId> {
 
@@ -23,4 +25,7 @@ public interface RoomMemberRepository extends JpaRepository<RoomMember, RoomMemb
     List<RoomMember> findByUserWithRoomAndOwner(@Param("user") User user);
 
     boolean existsByRoomAndUser(Room room, User user);
+
+    @Query("SELECT rm.room.id FROM RoomMember rm WHERE rm.user = :user")
+    Set<UUID> findRoomIdsByUser(@Param("user") User user);
 }

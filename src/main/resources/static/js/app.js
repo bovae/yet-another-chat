@@ -88,7 +88,9 @@
   function createMessageElement(msg) {
     var senderId = msg.sender_id || msg.senderId;
     var isOwn = window.YAC_USER && senderId && String(senderId) === String(window.YAC_USER.id);
+    var senderDisplayName = msg.sender_display_name || msg.senderDisplayName;
     var senderUsername = msg.sender_username || msg.senderUsername || 'Unknown';
+    var displayName = senderDisplayName || senderUsername;
 
     // Outer container with alignment class
     var item = document.createElement('div');
@@ -100,7 +102,7 @@
     var avatar = document.createElement('div');
     avatar.className = 'message-avatar d-flex align-items-center justify-content-center rounded-circle bg-secondary text-white fw-bold';
     avatar.style.cssText = 'width: 36px; height: 36px; font-size: 0.85rem; flex-shrink: 0;';
-    avatar.textContent = senderUsername.charAt(0).toUpperCase();
+    avatar.textContent = displayName.charAt(0).toUpperCase();
     item.appendChild(avatar);
 
     // Bubble wrapper
@@ -111,7 +113,7 @@
     var headerDiv = document.createElement('div');
     headerDiv.className = 'message-header small text-muted mb-1';
     var nameEl = document.createElement('strong');
-    nameEl.textContent = senderUsername;
+    nameEl.textContent = displayName;
     headerDiv.appendChild(nameEl);
 
     var timeEl = document.createElement('span');
@@ -133,6 +135,7 @@
     // Reply quote (enriched with sender username and content snippet)
     var replyId = msg.reply_to_id || msg.replyToId;
     if (replyId) {
+      item.setAttribute('data-reply-to-id', replyId);
       var replyDiv = document.createElement('div');
       replyDiv.className = 'reply-quote small bg-light border-start border-3 border-primary p-2 mb-1 rounded';
       var replySender = msg.reply_to_sender_username || msg.replyToSenderUsername;
@@ -817,6 +820,16 @@
       .then(function (response) {
         if (response.ok || response.status === 204) {
           messageItem.remove();
+
+          // Update reply quotes that reference the deleted message
+          var replyingItems = document.querySelectorAll('.message-item[data-reply-to-id="' + messageId + '"]');
+          replyingItems.forEach(function (item) {
+            var replyQuote = item.querySelector('.reply-quote');
+            if (replyQuote) {
+              replyQuote.innerHTML = '';
+              replyQuote.textContent = 'Original message deleted';
+            }
+          });
         } else {
           return response.json().then(function (err) {
             showErrorModal(err.message || 'Failed to delete message');

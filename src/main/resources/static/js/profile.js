@@ -64,7 +64,7 @@
       fetch('/api/users/me', {
         method: 'PUT',
         headers: apiHeaders(),
-        body: JSON.stringify({ displayName: displayName })
+        body: JSON.stringify({ display_name: displayName })
       })
       .then(function (response) {
         if (response.ok) {
@@ -111,7 +111,7 @@
       fetch('/api/password/change', {
         method: 'POST',
         headers: apiHeaders(),
-        body: JSON.stringify({ currentPassword: currentPassword, newPassword: newPassword })
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
       })
       .then(function (response) {
         if (response.ok) {

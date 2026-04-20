@@ -182,17 +182,21 @@
     fetch('/api/presence?userIds=' + userIds.join(','))
       .then(function (response) {
         if (!response.ok) {
+          console.warn('[Presence] Failed to fetch initial presence: HTTP ' + response.status);
           return [];
         }
         return response.json();
       })
       .then(function (entries) {
+        if (!entries || !Array.isArray(entries)) {
+          return;
+        }
         entries.forEach(function (entry) {
           updatePresenceDot({ user_id: entry.user_id, status: entry.status });
         });
       })
       .catch(function (err) {
-        // Silently ignore presence fetch errors
+        console.warn('[Presence] Error fetching initial presence:', err);
       });
   }
 
@@ -215,9 +219,12 @@
   document.addEventListener('mousemove', recordCursorActivity);
   document.addEventListener('keydown', recordCursorActivity);
 
-  // Visibility/focus immediate heartbeat (Req 17.5)
+  // Visibility/focus — stop heartbeats when tab is hidden, restart when visible (Req 17.5)
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) {
+    if (document.hidden) {
+      stopHeartbeat();
+    } else {
+      startHeartbeat();
       sendImmediateActiveHeartbeat();
     }
   });

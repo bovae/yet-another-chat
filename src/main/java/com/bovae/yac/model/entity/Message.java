@@ -50,6 +50,9 @@ public class Message extends BaseEntity {
     @JoinColumn(name = "reply_to_id")
     private Message replyTo;
 
+    @Column(name = "original_reply_to_id")
+    private UUID originalReplyToId;
+
     @Column(nullable = false)
     private boolean edited;
 

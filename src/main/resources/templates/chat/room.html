@@ -39,17 +39,17 @@
         </div>
         <div th:each="msg : ${messages}" class="message-item d-flex mb-3"
              th:classappend="${msg.senderId() == currentUser.id} ? 'message-own' : 'message-other'"
-             th:attr="data-message-id=${msg.id()},data-watermark=${msg.watermark()}">
+             th:attr="data-message-id=${msg.id()},data-watermark=${msg.watermark()},data-reply-to-id=${msg.replyToId()}">
           <!-- Avatar -->
           <div class="message-avatar d-flex align-items-center justify-content-center rounded-circle bg-secondary text-white fw-bold"
                style="width: 36px; height: 36px; font-size: 0.85rem; flex-shrink: 0;">
-            <span th:text="${#strings.substring(msg.senderUsername(), 0, 1).toUpperCase()}">U</span>
+            <span th:text="${(msg.senderDisplayName() != null ? msg.senderDisplayName() : msg.senderUsername()).substring(0, 1).toUpperCase()}">U</span>
           </div>
           <!-- Bubble wrapper -->
           <div class="message-bubble ms-2">
             <!-- Header: username + timestamp -->
             <div class="message-header small text-muted mb-1">
-              <strong th:text="${msg.senderUsername()}">User</strong>
+              <strong th:text="${msg.senderDisplayName() != null ? msg.senderDisplayName() : msg.senderUsername()}">User</strong>
               <span th:text="${#temporals.format(msg.createdAt(), 'HH:mm')}">12:00</span>
               <small class="ms-1" th:if="${msg.edited()}">(edited)</small>
             </div>

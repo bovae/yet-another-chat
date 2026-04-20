@@ -15,6 +15,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.web.authentication.WebAuthenticationDetails;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -47,12 +51,35 @@ public class AuthService implements UserDetailsService {
         Map<String, ? extends Session> sessions = sessionRepository.findByPrincipalName(email);
 
         return sessions.entrySet().stream()
-                .map(entry -> new SessionInfo(
-                        entry.getKey(),
-                        entry.getValue().getCreationTime(),
-                        entry.getValue().getLastAccessedTime()
-                ))
+                .map(entry -> {
+                    Session session = entry.getValue();
+                    String ipAddress = extractIpAddress(session);
+                    String userAgent = session.getAttribute("USER_AGENT");
+                    return new SessionInfo(
+                            entry.getKey(),
+                            session.getCreationTime(),
+                            session.getLastAccessedTime(),
+                            userAgent,
+                            ipAddress
+                    );
+                })
                 .toList();
+    }
+
+    private String extractIpAddress(Session session) {
+        SecurityContext securityContext = session.getAttribute("SPRING_SECURITY_CONTEXT");
+        if (securityContext == null) {
+            return null;
+        }
+        Authentication authentication = securityContext.getAuthentication();
+        if (authentication == null) {
+            return null;
+        }
+        Object details = authentication.getDetails();
+        if (details instanceof WebAuthenticationDetails webDetails) {
+            return webDetails.getRemoteAddress();
+        }
+        return null;
     }
 
     /**
@@ -66,6 +93,8 @@ public class AuthService implements UserDetailsService {
     public record SessionInfo(
             String sessionId,
             Instant creationTime,
-            Instant lastAccessedTime
+            Instant lastAccessedTime,
+            String userAgent,
+            String ipAddress
     ) {}
 }

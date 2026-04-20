@@ -25,7 +25,7 @@ public class PresenceService {
     private static final String PRESENCE_KEY_PREFIX = "presence:";
     private static final String FIELD_LAST_HEARTBEAT = "lastHeartbeat";
     private static final String FIELD_ACTIVE = "active";
-    private static final Duration PRESENCE_TTL = Duration.ofSeconds(90);
+    private static final Duration PRESENCE_TTL = Duration.ofSeconds(45);
     private static final long HEARTBEAT_INTERVAL_MS = Duration.ofSeconds(30).toMillis();
     private static final long AFK_THRESHOLD_MS = Duration.ofSeconds(60).toMillis();
 

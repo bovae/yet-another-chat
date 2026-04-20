@@ -16,6 +16,7 @@ import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.AttachmentRepository;
 import com.bovae.yac.repository.MessageRepository;
+import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UserRepository;
@@ -46,6 +47,7 @@ public class MessageService {
     private final RoomMemberRepository roomMemberRepository;
     private final UserRepository userRepository;
     private final AttachmentRepository attachmentRepository;
+    private final RoomBanRepository roomBanRepository;
 
     @Transactional
     public Message sendMessage(Room room, User sender, String content, Message replyTo) {
@@ -54,6 +56,10 @@ public class MessageService {
         }
 
         validateContentSize(content);
+
+        if (room.getVisibility() != RoomVisibility.DIRECT && roomBanRepository.existsByRoomAndUser(room, sender)) {
+            throw new ForbiddenException("You are banned from this room");
+        }
 
         if (room.getVisibility() == RoomVisibility.DIRECT) {
             checkDirectChatBan(room, sender);
@@ -68,6 +74,7 @@ public class MessageService {
                 .sender(sender)
                 .content(content)
                 .replyTo(replyTo)
+                .originalReplyToId(replyTo != null ? replyTo.getId() : null)
                 .edited(false)
                 .watermark(watermark)
                 .build();
@@ -82,7 +89,7 @@ public class MessageService {
 
     @Transactional
     public Message editMessage(UUID messageId, User author, String newContent) {
-        Message message = messageRepository.findById(messageId)
+        Message message = messageRepository.findByIdWithSender(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Message not found: %s".formatted(messageId)));
 
@@ -129,7 +136,7 @@ public class MessageService {
     public MessagePage getMessageHistory(Room room, Long cursor, int size) {
         long effectiveCursor = (cursor != null) ? cursor : 0L;
 
-        List<Message> messages = messageRepository.findByRoomAndWatermarkGreaterThanOrderByWatermarkAsc(
+        List<Message> messages = messageRepository.findByRoomAndWatermarkGreaterThanWithFetches(
                 room, effectiveCursor, PageRequest.of(0, size + 1));
 
         boolean hasMore = messages.size() > size;
@@ -174,13 +181,19 @@ public class MessageService {
 
     private ChatMessageResponse toResponse(Message message, List<AttachmentInfo> attachments) {
         Message replyTo = message.getReplyTo();
+        UUID replyToId = null;
         String replyToSenderUsername = null;
         String replyToContentSnippet = null;
 
         if (replyTo != null) {
+            replyToId = replyTo.getId();
             replyToSenderUsername = replyTo.getSender().getUsername();
             String content = replyTo.getContent();
             replyToContentSnippet = content.length() > 100 ? content.substring(0, 100) : content;
+        } else if (message.getOriginalReplyToId() != null) {
+            // The original replied-to message was deleted (ON DELETE SET NULL nullified reply_to_id),
+            // but we preserved the original reference. This lets the template render "Original message deleted".
+            replyToId = message.getOriginalReplyToId();
         }
 
         return new ChatMessageResponse(
@@ -188,8 +201,9 @@ public class MessageService {
                 message.getRoom().getId(),
                 message.getSender().getId(),
                 message.getSender().getUsername(),
+                message.getSender().getDisplayName(),
                 message.getContent(),
-                replyTo != null ? replyTo.getId() : null,
+                replyToId,
                 replyToSenderUsername,
                 replyToContentSnippet,
                 message.isEdited(),

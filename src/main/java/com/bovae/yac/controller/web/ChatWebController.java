@@ -1,11 +1,13 @@
 package com.bovae.yac.controller.web;
 
+import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.model.dto.MessagePage;
 import com.bovae.yac.model.dto.RoomMemberDto;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.model.enums.RoomVisibility;
+import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.NotificationService;
@@ -32,9 +34,13 @@ public class ChatWebController {
     private final MessageService messageService;
     private final NotificationService notificationService;
     private final UserRepository userRepository;
+    private final RoomBanRepository roomBanRepository;
 
     @GetMapping("/chat")
-    public String chat() {
+    public String chat(Model model, Principal principal) {
+        User user = userRepository.findByEmail(principal.getName())
+                .orElseThrow();
+        model.addAttribute("currentUser", user);
         return "chat/index";
     }
 
@@ -44,7 +50,15 @@ public class ChatWebController {
         User user = userRepository.findByEmail(principal.getName())
                 .orElseThrow();
 
+        if (roomBanRepository.existsByRoomAndUser(room, user)) {
+            throw new ForbiddenException("You are banned from this room");
+        }
+
         boolean isMember = roomMemberService.isMember(room, user);
+
+        if (!isMember && room.getVisibility() != RoomVisibility.PUBLIC) {
+            throw new ForbiddenException("Access denied to this room");
+        }
 
         List<RoomMemberDto> members = roomMemberService.listMembers(room);
 
@@ -64,6 +78,14 @@ public class ChatWebController {
 
         if (room.getVisibility() == RoomVisibility.DIRECT && room.getName().startsWith("saved-messages-")) {
             model.addAttribute("displayName", "Saved Messages");
+        } else if (room.getVisibility() == RoomVisibility.DIRECT && room.getName().startsWith("dm-")) {
+            String dmDisplayName = members.stream()
+                    .filter(m -> !m.userId().equals(user.getId()))
+                    .findFirst()
+                    .map(m -> m.displayName() != null ? m.displayName() : m.username())
+                    .map(name -> "Chat with " + name)
+                    .orElse(room.getName());
+            model.addAttribute("displayName", dmDisplayName);
         } else {
             model.addAttribute("displayName", room.getName());
         }

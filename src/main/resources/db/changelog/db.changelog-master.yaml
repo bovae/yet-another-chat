@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/migrations/001-init-schema.sql
   - include:
       file: db/changelog/migrations/002-schema-changes.sql
+  - include:
+      file: db/changelog/migrations/003-add-original-reply-to-id.sql

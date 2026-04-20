@@ -1,6 +1,7 @@
 package com.bovae.yac.property;
 
 import com.bovae.yac.controller.web.ChatWebController;
+import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.model.dto.MessagePage;
 import com.bovae.yac.model.dto.RoomMemberDto;
 import com.bovae.yac.model.entity.Room;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -62,9 +64,10 @@ class RoomViewUnreadPropertyTest {
         messageService = mock(MessageService.class);
         notificationService = mock(NotificationService.class);
         userRepository = mock(UserRepository.class);
+        var roomBanRepository = mock(com.bovae.yac.repository.RoomBanRepository.class);
         controller = new ChatWebController(
                 roomService, roomMemberService, messageService,
-                notificationService, userRepository
+                notificationService, userRepository, roomBanRepository
         );
     }
 
@@ -165,21 +168,21 @@ class RoomViewUnreadPropertyTest {
     }
 
     /**
-     * Property 7b: Non-member viewing room → markRoomAsRead is NOT called
+     * Property 7b: Non-member viewing a PUBLIC room → markRoomAsRead is NOT called
      *
      * The application SHALL only call markRoomAsRead when the user is a member of the room.
+     * Non-members can only view PUBLIC rooms (non-PUBLIC rooms throw ForbiddenException).
      *
      * Validates: Requirements 8.3
      */
     @Property(tries = 20)
-    void nonMemberViewingRoom_shallNotCallMarkRoomAsRead(
+    void nonMemberViewingPublicRoom_shallNotCallMarkRoomAsRead(
             @ForAll("validEmails") String email,
             @ForAll("validUsernames") String username,
-            @ForAll("watermarks") long nextWatermark,
-            @ForAll("roomVisibilities") RoomVisibility visibility
+            @ForAll("watermarks") long nextWatermark
     ) {
         User user = buildUser(email, username);
-        Room room = buildRoom(visibility, nextWatermark);
+        Room room = buildRoom(RoomVisibility.PUBLIC, nextWatermark);
 
         stubControllerDependencies(room, user, false);
 
@@ -187,6 +190,33 @@ class RoomViewUnreadPropertyTest {
         Model model = new ConcurrentModel();
 
         controller.roomView(room.getId(), model, principal);
+
+        verify(notificationService, never()).markRoomAsRead(any(User.class), any(Room.class));
+    }
+
+    /**
+     * Property 7c: Non-member viewing a non-PUBLIC room → ForbiddenException is thrown
+     *
+     * After Bug 10 fix, non-members are denied access to PRIVATE and DIRECT rooms.
+     *
+     * Validates: Requirements 2.10
+     */
+    @Property(tries = 20)
+    void nonMemberViewingNonPublicRoom_shallThrowForbiddenException(
+            @ForAll("validEmails") String email,
+            @ForAll("validUsernames") String username,
+            @ForAll("watermarks") long nextWatermark
+    ) {
+        User user = buildUser(email, username);
+        Room room = buildRoom(RoomVisibility.PRIVATE, nextWatermark);
+
+        stubControllerDependencies(room, user, false);
+
+        Principal principal = () -> email;
+        Model model = new ConcurrentModel();
+
+        assertThatThrownBy(() -> controller.roomView(room.getId(), model, principal))
+                .isInstanceOf(ForbiddenException.class);
 
         verify(notificationService, never()).markRoomAsRead(any(User.class), any(Room.class));
     }

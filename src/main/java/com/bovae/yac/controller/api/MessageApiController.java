@@ -67,7 +67,7 @@ public class MessageApiController {
 
         Message replyTo = null;
         if (request.replyToId() != null) {
-            replyTo = messageRepository.findById(request.replyToId())
+            replyTo = messageRepository.findByIdWithSender(request.replyToId())
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Reply-to message not found: %s".formatted(request.replyToId())));
         }
@@ -112,15 +112,26 @@ public class MessageApiController {
     }
 
     private ChatMessageResponse toResponse(Message message) {
+        Message replyTo = message.getReplyTo();
+        String replyToSenderUsername = null;
+        String replyToContentSnippet = null;
+
+        if (replyTo != null) {
+            replyToSenderUsername = replyTo.getSender().getUsername();
+            String content = replyTo.getContent();
+            replyToContentSnippet = content.length() > 100 ? content.substring(0, 100) : content;
+        }
+
         return new ChatMessageResponse(
                 message.getId(),
                 message.getRoom().getId(),
                 message.getSender().getId(),
                 message.getSender().getUsername(),
+                message.getSender().getDisplayName(),
                 message.getContent(),
-                message.getReplyTo() != null ? message.getReplyTo().getId() : null,
-                null,
-                null,
+                replyTo != null ? replyTo.getId() : null,
+                replyToSenderUsername,
+                replyToContentSnippet,
                 message.isEdited(),
                 message.getWatermark(),
                 message.getCreatedAt(),

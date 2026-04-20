@@ -33,6 +33,7 @@ public class SecurityConfig {
                                 "/", "/login", "/register", "/forgot-password", "/reset-password",
                                 "/css/**", "/js/**", "/webjars/**",
                                 "/api/health", "/actuator/health",
+                                "/api/password/reset", "/api/password/reset-request",
                                 "/ws/**"
                         ).permitAll()
                         .anyRequest().authenticated()

@@ -1,10 +1,14 @@
 package com.bovae.yac.controller.api;
 
+import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.RoomBan;
+import com.bovae.yac.model.entity.RoomMemberId;
 import com.bovae.yac.model.entity.User;
+import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.repository.RoomBanRepository;
+import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.ModerationService;
 import com.bovae.yac.service.RoomService;
@@ -36,16 +40,24 @@ public class RoomBanApiController {
     private final RoomService roomService;
     private final ModerationService moderationService;
     private final RoomBanRepository roomBanRepository;
+    private final RoomMemberRepository roomMemberRepository;
     private final UserRepository userRepository;
 
     @GetMapping
     public ResponseEntity<List<BanResponse>> listBans(
             @PathVariable UUID roomId,
             Principal principal) {
-        resolveUser(principal);
+        User user = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
 
-        List<BanResponse> bans = roomBanRepository.findByRoom(room).stream()
+        if (!room.getOwner().getId().equals(user.getId())) {
+            RoomMemberId memberId = new RoomMemberId(room.getId(), user.getId());
+            roomMemberRepository.findById(memberId)
+                    .filter(member -> member.getRole() == RoomRole.ADMIN || member.getRole() == RoomRole.OWNER)
+                    .orElseThrow(() -> new ForbiddenException("Only room owners and admins can view the ban list"));
+        }
+
+        List<BanResponse> bans = roomBanRepository.findByRoomWithUserAndBannedBy(room).stream()
                 .map(this::toBanResponse)
                 .toList();
 

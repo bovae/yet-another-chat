@@ -2,7 +2,7 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <body>
 <div th:fragment="message-item(msg, currentUserId, isAdmin)" class="message-item d-flex mb-3"
-     th:attr="data-message-id=${msg.id()},data-watermark=${msg.watermark()}">
+     th:attr="data-message-id=${msg.id()},data-watermark=${msg.watermark()},data-reply-to-id=${msg.replyToId()}">
   <div class="message-avatar me-2">
     <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center"
          style="width: 36px; height: 36px;">

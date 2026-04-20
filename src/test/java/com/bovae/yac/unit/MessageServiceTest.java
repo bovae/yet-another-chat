@@ -8,6 +8,7 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.AttachmentRepository;
 import com.bovae.yac.repository.MessageRepository;
+import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.service.MessageService;
@@ -61,6 +62,9 @@ class MessageServiceTest {
 
     @Mock
     private AttachmentRepository attachmentRepository;
+
+    @Mock
+    private RoomBanRepository roomBanRepository;
 
     @InjectMocks
     private MessageService messageService;
@@ -175,7 +179,7 @@ class MessageServiceTest {
                 .watermark(3L)
                 .build();
 
-        when(messageRepository.findById(messageId)).thenReturn(Optional.of(existingMessage));
+        when(messageRepository.findByIdWithSender(messageId)).thenReturn(Optional.of(existingMessage));
         when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Message result = messageService.editMessage(messageId, sender, "Updated content");
@@ -201,7 +205,7 @@ class MessageServiceTest {
                 .watermark(3L)
                 .build();
 
-        when(messageRepository.findById(messageId)).thenReturn(Optional.of(existingMessage));
+        when(messageRepository.findByIdWithSender(messageId)).thenReturn(Optional.of(existingMessage));
 
         assertThatThrownBy(() -> messageService.editMessage(messageId, otherUser, "Hacked content"))
                 .isInstanceOf(ForbiddenException.class)
@@ -272,7 +276,7 @@ class MessageServiceTest {
         msg3.setCreatedAt(Instant.now().minusSeconds(10));
 
         // Return size+1 messages to indicate hasMore=true
-        when(messageRepository.findByRoomAndWatermarkGreaterThanOrderByWatermarkAsc(
+        when(messageRepository.findByRoomAndWatermarkGreaterThanWithFetches(
                 eq(room), eq(0L), any(PageRequest.class)))
                 .thenReturn(List.of(msg1, msg2, msg3));
 

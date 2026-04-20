@@ -35,12 +35,15 @@
         <div class="list-group">
           <div th:each="entry : ${catalog}" class="list-group-item d-flex justify-content-between align-items-center">
             <div>
-              <h6 class="mb-1" th:text="${entry.name()}">Room Name</h6>
-              <p class="mb-0 small text-muted" th:text="${entry.description() ?: 'No description'}">Description</p>
+              <a th:href="@{/chat/rooms/{id}(id=${entry.id()})}" class="text-decoration-none">
+                <h6 class="mb-1" th:text="${entry.name()}">Room Name</h6>
+                <p class="mb-0 small text-muted" th:text="${entry.description() ?: 'No description'}">Description</p>
+              </a>
             </div>
             <div class="d-flex align-items-center gap-2">
               <span class="badge bg-secondary" th:text="${entry.memberCount()} + ' members'">0 members</span>
-              <form th:action="@{/rooms/{id}/join(id=${entry.id()})}" method="post" style="display:inline">
+              <span th:if="${joinedRoomIds.contains(entry.id())}" class="badge bg-success">Joined</span>
+              <form th:unless="${joinedRoomIds.contains(entry.id())}" th:action="@{/rooms/{id}/join(id=${entry.id()})}" method="post" style="display:inline">
                 <button type="submit" class="btn btn-outline-primary btn-sm">Join</button>
               </form>
             </div>

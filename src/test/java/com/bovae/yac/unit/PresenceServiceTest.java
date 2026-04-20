@@ -90,7 +90,7 @@ class PresenceServiceTest {
         // Verify heartbeat was stored in Redis
         verify(hashOperations).put(eq(presenceKey), eq("lastHeartbeat"), anyString());
         verify(hashOperations).put(eq(presenceKey), eq("active"), eq("true"));
-        verify(stringRedisTemplate).expire(eq(presenceKey), eq(Duration.ofSeconds(90)));
+        verify(stringRedisTemplate).expire(eq(presenceKey), eq(Duration.ofSeconds(45)));
 
         // Verify computed status is ONLINE
         PresenceStatus status = presenceService.computeStatus(userId);
@@ -120,7 +120,7 @@ class PresenceServiceTest {
         // Verify heartbeat was stored in Redis
         verify(hashOperations).put(eq(presenceKey), eq("lastHeartbeat"), anyString());
         verify(hashOperations).put(eq(presenceKey), eq("active"), eq("false"));
-        verify(stringRedisTemplate).expire(eq(presenceKey), eq(Duration.ofSeconds(90)));
+        verify(stringRedisTemplate).expire(eq(presenceKey), eq(Duration.ofSeconds(45)));
 
         // Verify computed status is AFK
         PresenceStatus status = presenceService.computeStatus(userId);

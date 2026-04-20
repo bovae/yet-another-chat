@@ -90,7 +90,7 @@ public class RoomApiController {
     @GetMapping("/invitations/pending")
     public ResponseEntity<List<PendingInvitationDto>> pendingInvitations(Principal principal) {
         User user = resolveUser(principal);
-        List<RoomInvitation> invitations = roomInvitationRepository.findByInvitee(user);
+        List<RoomInvitation> invitations = roomInvitationRepository.findByInviteeWithRoomAndInviter(user);
         List<PendingInvitationDto> dtos = invitations.stream()
                 .map(inv -> new PendingInvitationDto(
                         inv.getId(),

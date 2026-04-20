@@ -57,15 +57,21 @@ public class ChatMessageHandler {
 
         Message message = messageService.sendMessage(room, sender, request.content(), replyTo);
 
+        String replyToSenderUsername = replyTo != null ? replyTo.getSender().getUsername() : null;
+        String replyToContentSnippet = replyTo != null
+                ? (replyTo.getContent().length() > 100 ? replyTo.getContent().substring(0, 100) : replyTo.getContent())
+                : null;
+
         ChatMessageResponse response = new ChatMessageResponse(
                 message.getId(),
                 room.getId(),
                 sender.getId(),
                 sender.getUsername(),
+                sender.getDisplayName(),
                 message.getContent(),
                 request.replyToId(),
-                null,
-                null,
+                replyToSenderUsername,
+                replyToContentSnippet,
                 message.isEdited(),
                 message.getWatermark(),
                 message.getCreatedAt(),
@@ -76,6 +82,8 @@ public class ChatMessageHandler {
 
         LOG.debug("Broadcast message to /topic/room.{}: messageId={}, sender={}",
                 room.getId(), message.getId(), sender.getUsername());
+
+        notificationService.markRoomAsRead(sender, room);
 
         List<RoomMember> members = roomMemberRepository.findByRoomWithUsers(room);
         for (RoomMember member : members) {

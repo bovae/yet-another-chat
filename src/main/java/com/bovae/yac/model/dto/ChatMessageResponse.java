@@ -9,6 +9,7 @@ public record ChatMessageResponse(
         UUID roomId,
         UUID senderId,
         String senderUsername,
+        String senderDisplayName,
         String content,
         UUID replyToId,
         String replyToSenderUsername,

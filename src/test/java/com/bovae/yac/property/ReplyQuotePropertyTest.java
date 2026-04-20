@@ -64,10 +64,11 @@ class ReplyQuotePropertyTest {
         roomMemberRepository = mock(RoomMemberRepository.class);
         userRepository = mock(UserRepository.class);
         attachmentRepository = mock(AttachmentRepository.class);
+        var roomBanRepository = mock(com.bovae.yac.repository.RoomBanRepository.class);
         messageService = new MessageService(
                 messageRepository, roomRepository, roomMemberService,
                 userBanService, roomMemberRepository, userRepository,
-                attachmentRepository
+                attachmentRepository, roomBanRepository
         );
     }
 
@@ -140,7 +141,7 @@ class ReplyQuotePropertyTest {
         Message replyMessage = buildMessage(room, replier, "reply text", 2L, originalMessage);
 
         // Stub repository to return the reply message
-        when(messageRepository.findByRoomAndWatermarkGreaterThanOrderByWatermarkAsc(
+        when(messageRepository.findByRoomAndWatermarkGreaterThanWithFetches(
                 eq(room), eq(0L), any(Pageable.class)))
                 .thenReturn(List.of(replyMessage));
         when(attachmentRepository.findByMessageIdIn(any()))
@@ -185,7 +186,7 @@ class ReplyQuotePropertyTest {
 
         Message message = buildMessage(room, sender, content, 1L, null);
 
-        when(messageRepository.findByRoomAndWatermarkGreaterThanOrderByWatermarkAsc(
+        when(messageRepository.findByRoomAndWatermarkGreaterThanWithFetches(
                 eq(room), eq(0L), any(Pageable.class)))
                 .thenReturn(List.of(message));
         when(attachmentRepository.findByMessageIdIn(any()))
@@ -226,7 +227,7 @@ class ReplyQuotePropertyTest {
         Message originalMessage = buildMessage(room, sender, originalContent, 1L, null);
         Message replyMessage = buildMessage(room, replier, "reply", 2L, originalMessage);
 
-        when(messageRepository.findByRoomAndWatermarkGreaterThanOrderByWatermarkAsc(
+        when(messageRepository.findByRoomAndWatermarkGreaterThanWithFetches(
                 eq(room), eq(0L), any(Pageable.class)))
                 .thenReturn(List.of(replyMessage));
         when(attachmentRepository.findByMessageIdIn(any()))

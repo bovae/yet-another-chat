@@ -83,6 +83,10 @@ public class RoomMemberService {
 
     @Transactional
     public void leaveRoom(Room room, User user) {
+        if (room.getVisibility() == RoomVisibility.DIRECT) {
+            throw new ForbiddenException("Cannot leave a direct message room");
+        }
+
         RoomMember member = roomMemberRepository.findById(new RoomMemberId(room.getId(), user.getId()))
                 .orElseThrow(() -> new ForbiddenException("User is not a member of this room"));
 
