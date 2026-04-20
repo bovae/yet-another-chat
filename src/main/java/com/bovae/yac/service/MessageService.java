@@ -89,7 +89,7 @@ public class MessageService {
 
     @Transactional
     public Message editMessage(UUID messageId, User author, String newContent) {
-        Message message = messageRepository.findByIdWithSender(messageId)
+        Message message = messageRepository.findByIdWithSenderAndReplyTo(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Message not found: %s".formatted(messageId)));
 

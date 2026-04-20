@@ -50,7 +50,7 @@ public class ChatMessageHandler {
 
         Message replyTo = null;
         if (request.replyToId() != null) {
-            replyTo = messageRepository.findById(request.replyToId())
+            replyTo = messageRepository.findByIdWithSenderAndReplyTo(request.replyToId())
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Reply-to message not found: %s".formatted(request.replyToId())));
         }

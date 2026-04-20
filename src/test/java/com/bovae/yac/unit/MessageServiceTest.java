@@ -179,7 +179,7 @@ class MessageServiceTest {
                 .watermark(3L)
                 .build();
 
-        when(messageRepository.findByIdWithSender(messageId)).thenReturn(Optional.of(existingMessage));
+        when(messageRepository.findByIdWithSenderAndReplyTo(messageId)).thenReturn(Optional.of(existingMessage));
         when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Message result = messageService.editMessage(messageId, sender, "Updated content");
@@ -205,7 +205,7 @@ class MessageServiceTest {
                 .watermark(3L)
                 .build();
 
-        when(messageRepository.findByIdWithSender(messageId)).thenReturn(Optional.of(existingMessage));
+        when(messageRepository.findByIdWithSenderAndReplyTo(messageId)).thenReturn(Optional.of(existingMessage));
 
         assertThatThrownBy(() -> messageService.editMessage(messageId, otherUser, "Hacked content"))
                 .isInstanceOf(ForbiddenException.class)

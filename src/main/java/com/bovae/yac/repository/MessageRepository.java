@@ -17,6 +17,9 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     @Query("SELECT m FROM Message m JOIN FETCH m.sender WHERE m.id = :id")
     Optional<Message> findByIdWithSender(@Param("id") UUID id);
 
+    @Query("SELECT m FROM Message m JOIN FETCH m.sender LEFT JOIN FETCH m.replyTo rt LEFT JOIN FETCH rt.sender WHERE m.id = :id")
+    Optional<Message> findByIdWithSenderAndReplyTo(@Param("id") UUID id);
+
     List<Message> findByRoomAndWatermarkGreaterThanOrderByWatermarkAsc(Room room, Long watermark, Pageable pageable);
 
     @Query("SELECT m FROM Message m JOIN FETCH m.sender LEFT JOIN FETCH m.replyTo rt LEFT JOIN FETCH rt.sender "
