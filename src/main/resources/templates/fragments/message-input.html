@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <body>
-<div th:fragment="message-input" class="message-input border-top bg-white p-2">
+<div th:fragment="message-input" class="message-input border-top bg-white p-3">
   <div id="reply-indicator" class="d-none small text-muted mb-1 ps-2 d-flex align-items-center">
     <span>Replying to: </span>
     <strong id="reply-to-name" class="ms-1"></strong>
@@ -20,7 +20,7 @@
       🖼
       <input type="file" class="d-none" id="image-input" accept="image/*">
     </label>
-    <textarea class="form-control form-control-sm" rows="1" placeholder="Type a message..."
+    <textarea class="form-control form-control-sm" rows="2" placeholder="Type a message..."
               id="message-textarea"
               style="resize: none; max-height: 120px;"></textarea>
     <button type="button" class="btn btn-primary btn-sm" id="send-btn">Send</button>

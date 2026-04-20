@@ -972,12 +972,8 @@
       var headerDiv = document.querySelector('.chat-header');
       if (headerDiv) {
         var h6 = headerDiv.querySelector('h6');
-        var small = headerDiv.querySelector('small');
         if (h6 && updated.name) {
           h6.textContent = updated.name;
-        }
-        if (small) {
-          small.textContent = updated.description || '';
         }
       }
 
@@ -1233,11 +1229,34 @@
     console.log('[App] YAC app initialized');
   }
 
+  // --- Message deleted handler (called from stomp-client.js) ---
+
+  function onMessageDeleted(event) {
+    var messageId = event.message_id;
+    if (!messageId) {
+      return;
+    }
+
+    // Remove the message element from the DOM
+    var messageEl = document.querySelector('.message-item[data-message-id="' + messageId + '"]');
+    if (messageEl) {
+      messageEl.remove();
+    }
+
+    // Update any reply quotes that reference the deleted message
+    var replyQuotes = document.querySelectorAll('.message-item[data-reply-to-id="' + messageId + '"] .reply-quote');
+    replyQuotes.forEach(function (quote) {
+      quote.innerHTML = '';
+      quote.textContent = 'Original message deleted';
+    });
+  }
+
   // Expose callbacks for stomp-client.js
   window.YAC = window.YAC || {};
   window.YAC.app = {
     onNewMessage: onNewMessage,
-    onNotification: onNotification
+    onNotification: onNotification,
+    onMessageDeleted: onMessageDeleted
   };
 
   document.addEventListener('DOMContentLoaded', init);

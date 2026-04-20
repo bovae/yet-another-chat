@@ -95,6 +95,14 @@
   }
 
   function handleIncomingMessage(msg) {
+    // Deletion events have no watermark — delegate to a separate handler
+    if (msg.type === 'MESSAGE_DELETED') {
+      if (window.YAC && window.YAC.app && window.YAC.app.onMessageDeleted) {
+        window.YAC.app.onMessageDeleted(msg);
+      }
+      return;
+    }
+
     // Track watermark for gap detection
     if (msg.watermark) {
       lastWatermark = msg.watermark;

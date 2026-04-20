@@ -16,11 +16,6 @@
   background: #f8f9fa;
 }
 
-.message-item:hover {
-  background: #f0f2f5;
-  border-radius: 0.375rem;
-}
-
 .message-input textarea {
   max-height: 120px;
   overflow-y: auto;

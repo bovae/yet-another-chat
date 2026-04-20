@@ -4,6 +4,7 @@ import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.dto.ChatMessageRequest;
 import com.bovae.yac.model.dto.ChatMessageResponse;
 import com.bovae.yac.model.dto.EditMessageRequest;
+import com.bovae.yac.model.dto.MessageDeletedEvent;
 import com.bovae.yac.model.dto.MessagePage;
 import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
@@ -16,6 +17,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,6 +43,7 @@ public class MessageApiController {
     private final RoomService roomService;
     private final UserRepository userRepository;
     private final MessageRepository messageRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @GetMapping
     public ResponseEntity<MessagePage> getMessages(
@@ -101,6 +104,9 @@ public class MessageApiController {
         Room room = roomService.getRoomById(roomId);
 
         messageService.deleteMessage(id, user, room);
+
+        MessageDeletedEvent event = MessageDeletedEvent.of(id, roomId, user.getId());
+        messagingTemplate.convertAndSend("/topic/room." + roomId, event);
 
         return ResponseEntity.noContent().build();
     }

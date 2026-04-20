@@ -24,7 +24,6 @@
       <div class="chat-header border-bottom p-2 bg-white d-flex align-items-center justify-content-between">
         <div>
           <h6 class="mb-0" th:text="${displayName}">Room Name</h6>
-          <small class="text-muted" th:text="${room.description}">Room description</small>
         </div>
         <div>
           <span class="badge bg-secondary" th:text="${#lists.size(members)} + ' members'">0 members</span>
