@@ -33,6 +33,3 @@ file-storage/
 
 # Jqwik PBT
 .jqwik-database
-
-# Kiro
-.kiro/
