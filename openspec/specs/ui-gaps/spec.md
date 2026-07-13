@@ -35,11 +35,15 @@ The UI SHALL allow removing a friend and viewing/unbanning blocked users, backed
 - **THEN** the ban is removed and DMs become possible again (subject to friendship)
 
 ### Requirement: Sidebar on the right with accordion compaction (R1-76)
-The rooms/contacts sidebar SHALL render on the right and compact the room list into an accordion when a room is open (req 4.1.1).
+The rooms/contacts sidebar SHALL render on the left of the message area, with all sections (Public Rooms, Private Rooms, Direct Messages) expanded by default in every chat view. Sections remain individually collapsible by the user.
 
 #### Scenario: Entering a room
 - **WHEN** a user opens a room
-- **THEN** the sidebar sits on the right with its sections compacted accordion-style
+- **THEN** the sidebar sits on the left with all its sections expanded
+
+#### Scenario: Opening the chat index
+- **WHEN** a user opens the chat index page
+- **THEN** the sidebar sits on the left with all its sections expanded
 
 ### Requirement: Favicon served (R1-78)
 Every page SHALL reference a favicon so no `/favicon.ico` 404s occur.
