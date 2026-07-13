@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>💬</text></svg>">
+  <title>Profile - YAC</title>
+  <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+  <link rel="stylesheet" th:href="@{/css/chat.css}">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
+</head>
+<body class="d-flex flex-column vh-100">
+
+  <div th:replace="~{fragments/navbar :: navbar}"></div>
+
+  <div class="container mt-4">
+    <div class="row justify-content-center">
+      <div class="col-md-8 col-lg-6">
+        <h4 class="mb-4">Profile</h4>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-title">Username</h6>
+            <p class="text-muted mb-0" th:text="${user.username}">username</p>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-title">Display Name</h6>
+            <form id="display-name-form">
+              <div class="mb-3">
+                <input type="text" class="form-control" id="displayName"
+                       th:value="${user.displayName}" placeholder="Display name">
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-title">Email</h6>
+            <p class="text-muted mb-0" th:text="${user.email}">user@example.com</p>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-title">Change Password</h6>
+            <form id="change-password-form">
+              <div class="mb-3">
+                <input type="password" class="form-control" id="currentPassword" placeholder="Current password">
+              </div>
+              <div class="mb-3">
+                <input type="password" class="form-control" id="newPassword" placeholder="New password">
+              </div>
+              <div class="mb-3">
+                <input type="password" class="form-control" id="confirmNewPassword" placeholder="Confirm new password">
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm">Change password</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <div class="card-body">
+            <a th:href="@{/profile/sessions}" class="btn btn-outline-secondary btn-sm">Manage active sessions</a>
+          </div>
+        </div>
+
+        <div class="card border-danger">
+          <div class="card-body">
+            <h6 class="card-title text-danger">Delete Account</h6>
+            <p class="small text-muted">This action is irreversible. Your rooms and their messages will be deleted.</p>
+            <button type="button" class="btn btn-danger btn-sm" id="delete-account-btn">Delete my account</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script th:src="@{/webjars/bootstrap/js/bootstrap.bundle.min.js}"></script>
+  <script th:src="@{/js/profile.js}"></script>
+</body>
+</html>

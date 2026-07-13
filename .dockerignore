@@ -1,0 +1,10 @@
+.git
+target/
+.idea/
+*.iml
+.DS_Store
+.env
+file-storage/
+.vscode/
+*.log
+.jqwik-database

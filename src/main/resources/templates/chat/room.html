@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>💬</text></svg>">
+  <title th:text="${displayName} + ' - YAC'">Room - YAC</title>
+  <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+  <link rel="stylesheet" th:href="@{/css/chat.css}">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
+</head>
+<body class="d-flex flex-column vh-100">
+
+  <div th:replace="~{fragments/navbar :: navbar}"></div>
+
+  <div class="flex-grow-1 d-flex overflow-hidden">
+    <!-- Left sidebar: rooms + contacts -->
+    <div class="chat-sidebar offcanvas-md offcanvas-start" tabindex="-1" id="sidebarDrawer"
+         aria-labelledby="sidebarDrawerLabel" style="width: 260px; min-width: 260px;">
+      <button type="button" class="btn-close d-md-none m-2 ms-auto d-block"
+              data-bs-dismiss="offcanvas" data-bs-target="#sidebarDrawer" aria-label="Close"></button>
+      <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+    </div>
+
+    <!-- Center: messages -->
+    <div class="flex-grow-1 d-flex flex-column">
+      <div class="chat-header border-bottom p-2 bg-white d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-outline-secondary btn-sm d-md-none" type="button"
+                  data-bs-toggle="offcanvas" data-bs-target="#sidebarDrawer"
+                  aria-controls="sidebarDrawer" title="Rooms &amp; contacts">☰</button>
+          <h6 class="mb-0" th:text="${displayName}">Room Name</h6>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-secondary" th:text="${#lists.size(members)} + ' members'">0 members</span>
+          <button class="btn btn-outline-secondary btn-sm d-md-none" type="button"
+                  data-bs-toggle="offcanvas" data-bs-target="#membersDrawer"
+                  aria-controls="membersDrawer" title="Members">👥</button>
+        </div>
+      </div>
+
+      <!-- Message area -->
+      <div id="message-list" class="message-list flex-grow-1 overflow-auto p-3"
+           th:attr="data-room-id=${room.id}">
+        <div th:if="${hasMore}" class="text-center mb-3">
+          <button class="btn btn-outline-secondary btn-sm" id="load-more-btn">Load older messages</button>
+        </div>
+        <div th:each="msg : ${messages}" class="message-item d-flex mb-3"
+             th:classappend="${msg.senderId() == currentUser.id} ? 'message-own' : 'message-other'"
+             th:attr="data-message-id=${msg.id()},data-watermark=${msg.watermark()},data-reply-to-id=${msg.replyToId()}">
+          <!-- Avatar -->
+          <div class="message-avatar d-flex align-items-center justify-content-center rounded-circle bg-secondary text-white fw-bold"
+               style="width: 36px; height: 36px; font-size: 0.85rem; flex-shrink: 0;">
+            <span th:text="${(msg.senderDisplayName() != null ? msg.senderDisplayName() : msg.senderUsername()).substring(0, 1).toUpperCase()}">U</span>
+          </div>
+          <!-- Bubble wrapper -->
+          <div class="message-bubble ms-2">
+            <!-- Header: username + timestamp -->
+            <div class="message-header small text-muted mb-1">
+              <strong th:text="${msg.senderDisplayName() != null ? msg.senderDisplayName() : msg.senderUsername()}">User</strong>
+              <span th:text="${#temporals.format(msg.createdAt(), 'HH:mm')}">12:00</span>
+              <small class="ms-1" th:if="${msg.edited()}">(edited)</small>
+            </div>
+            <!-- Reply quote -->
+            <div th:if="${msg.replyToId() != null}" class="reply-quote small bg-light border-start border-3 border-primary p-2 mb-1 rounded">
+              <span th:if="${msg.replyToSenderUsername() != null}">
+                Replying to <strong th:text="${msg.replyToSenderUsername()}">User</strong>:
+                <span th:text="${msg.replyToContentSnippet()}">snippet</span>
+              </span>
+              <span th:unless="${msg.replyToSenderUsername() != null}">Original message deleted</span>
+            </div>
+            <!-- Message text -->
+            <div class="message-text" th:text="${msg.content()}">Message content</div>
+            <!-- Attachments -->
+            <div th:if="${msg.attachments() != null and !msg.attachments().isEmpty()}" class="message-attachments mt-1">
+              <div th:each="att : ${msg.attachments()}">
+                <img th:if="${att.contentType() != null and att.contentType().startsWith('image/')}"
+                     th:src="@{'/api/rooms/' + ${msg.roomId()} + '/attachments/' + ${att.id()} + '/download'}"
+                     class="img-fluid rounded" style="max-width: 400px;" alt="attachment">
+                <a th:unless="${att.contentType() != null and att.contentType().startsWith('image/')}"
+                   th:href="@{'/api/rooms/' + ${msg.roomId()} + '/attachments/' + ${att.id()} + '/download'}"
+                   th:text="${att.originalFileName()}" class="small">file</a>
+                <div th:if="${att.comment() != null}" class="attachment-comment small text-muted"
+                     th:text="${att.comment()}">note</div>
+              </div>
+            </div>
+            <!-- Message actions (visible on hover) -->
+            <div class="message-actions mt-1">
+              <button class="btn btn-sm btn-outline-secondary reply-btn"
+                      th:attr="data-message-id=${msg.id()},data-sender-username=${msg.senderUsername()}"
+                      title="Reply">↩</button>
+              <button th:if="${msg.senderId() == currentUser.id}"
+                      class="btn btn-sm btn-outline-secondary edit-btn"
+                      th:attr="data-message-id=${msg.id()}"
+                      title="Edit">✏️</button>
+              <button th:if="${msg.senderId() == currentUser.id}"
+                      class="btn btn-sm btn-outline-danger delete-btn"
+                      th:attr="data-message-id=${msg.id()}"
+                      title="Delete">🗑</button>
+              <button th:if="${msg.senderId() != currentUser.id and currentUserRole != null and (currentUserRole.name() == 'OWNER' or currentUserRole.name() == 'ADMIN')}"
+                      class="btn btn-sm btn-outline-danger delete-btn"
+                      th:attr="data-message-id=${msg.id()}"
+                      title="Delete">🗑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Join banner for non-members viewing a public room -->
+      <div th:if="${!isMember and room.visibility.name() == 'PUBLIC'}" class="alert alert-info d-flex align-items-center justify-content-between m-2 mb-0" role="alert">
+        <span>You're not a member of this room</span>
+        <form th:action="@{/rooms/{id}/join(id=${room.id})}" method="post" class="d-inline">
+          <button type="submit" class="btn btn-primary btn-sm">Join Room</button>
+        </form>
+      </div>
+
+      <!-- Typing indicator -->
+      <div id="typing-indicator" class="small text-muted px-3 py-1" style="min-height: 20px;"></div>
+
+      <!-- Message input for members -->
+      <div th:if="${isMember}" th:replace="~{fragments/message-input :: message-input}"></div>
+
+      <!-- Disabled placeholder for non-members -->
+      <div th:unless="${isMember}" class="message-input border-top bg-white p-2">
+        <div class="d-flex align-items-end gap-2">
+          <input type="text" class="form-control form-control-sm" placeholder="Join this room to send messages" disabled>
+        </div>
+      </div>
+    </div>
+
+    <!-- Members panel — off-canvas drawer below md, inline column at md+ (R2-05) -->
+    <div class="chat-members offcanvas-md offcanvas-end" tabindex="-1" id="membersDrawer"
+         aria-labelledby="membersDrawerLabel" style="width: 220px; min-width: 220px;">
+      <button type="button" class="btn-close d-md-none m-2 ms-auto d-block"
+              data-bs-dismiss="offcanvas" data-bs-target="#membersDrawer" aria-label="Close"></button>
+      <div th:replace="~{fragments/member-list :: member-list-room(members=${members}, room=${room}, currentUser=${currentUser})}"></div>
+    </div>
+  </div>
+
+  <!-- Admin action modals -->
+  <div th:replace="~{fragments/admin-modals :: admin-modals(room=${room})}"></div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="confirmModalLabel">Confirm</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p id="confirmModalMessage"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger btn-sm" id="confirmModalConfirmBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Modal -->
+  <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title text-danger" id="errorModalLabel">Error</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p id="errorModalMessage"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script th:src="@{/webjars/bootstrap/js/bootstrap.bundle.min.js}"></script>
+  <script th:src="@{/webjars/github-com-stomp-js-stompjs/stomp.umd.min.js}"></script>
+  <script th:src="@{/js/app.js}"></script>
+  <script th:src="@{/js/stomp-client.js}"></script>
+  <script th:src="@{/js/presence.js}"></script>
+  <script th:src="@{/js/sidebar.js}"></script>
+  <script th:src="@{/js/emoji.js}"></script>
+  <script th:src="@{/js/typing.js}"></script>
+  <script th:inline="javascript">
+    window.YAC_ROOM = {
+      id: [[${room.id.toString()}]],
+      name: [[${displayName}]]
+    };
+    window.YAC_USER = {
+      id: [[${currentUser.id.toString()}]]
+    };
+  </script>
+</body>
+</html>

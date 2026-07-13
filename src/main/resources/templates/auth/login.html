@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>💬</text></svg>">
+  <title>Sign In - YAC</title>
+  <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+  <link rel="stylesheet" th:href="@{/css/chat.css}">
+</head>
+<body class="bg-light">
+  <nav class="navbar navbar-light bg-white border-bottom px-3">
+    <a class="navbar-brand fw-bold" href="/">YAC</a>
+    <div>
+      <a th:href="@{/login}" class="btn btn-outline-primary btn-sm me-2">Sign in</a>
+      <a th:href="@{/register}" class="btn btn-primary btn-sm">Register</a>
+    </div>
+  </nav>
+
+  <div class="container mt-5">
+    <div class="row justify-content-center">
+      <div class="col-md-5 col-lg-4">
+        <div class="card shadow-sm">
+          <div class="card-body p-4">
+            <h4 class="card-title text-center mb-4">Sign In</h4>
+
+            <div th:if="${param.error}" class="alert alert-danger" role="alert">
+              Invalid email or password.
+            </div>
+            <div th:if="${param.logout}" class="alert alert-success" role="alert">
+              You have been signed out.
+            </div>
+            <div th:if="${success}" class="alert alert-success" role="alert" th:text="${success}">
+              Success
+            </div>
+
+            <form th:action="@{/login}" method="post">
+              <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <input type="email" class="form-control" id="email" name="email" required autofocus>
+              </div>
+              <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" name="password" required>
+              </div>
+              <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="remember-me" name="remember-me">
+                <label class="form-check-label" for="remember-me">Keep me signed in</label>
+              </div>
+              <button type="submit" class="btn btn-primary w-100">Sign in</button>
+            </form>
+
+            <div class="text-center mt-3">
+              <a th:href="@{/forgot-password}" class="text-muted small">Forgot password?</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

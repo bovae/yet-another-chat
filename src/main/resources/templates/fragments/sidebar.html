@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<div th:fragment="sidebar" class="sidebar p-3 bg-white h-100 overflow-auto">
+  <div class="mb-3">
+    <input type="text" class="form-control form-control-sm" placeholder="Search rooms...">
+  </div>
+
+  <div class="accordion" id="roomsAccordion">
+    <!-- Public Rooms -->
+    <div class="accordion-item border-0">
+      <h2 class="accordion-header">
+        <button class="accordion-button py-2 px-0 bg-transparent" type="button"
+                data-bs-toggle="collapse" data-bs-target="#publicRooms"
+                aria-expanded="true" aria-controls="publicRooms">
+          Public Rooms
+        </button>
+      </h2>
+      <div id="publicRooms" class="accordion-collapse collapse show">
+        <div class="accordion-body p-0">
+          <ul class="list-unstyled mb-0" id="public-room-list">
+            <li class="px-2 py-1 text-muted small">No rooms yet</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Private Rooms -->
+    <div class="accordion-item border-0">
+      <h2 class="accordion-header">
+        <button class="accordion-button py-2 px-0 bg-transparent" type="button"
+                data-bs-toggle="collapse" data-bs-target="#privateRooms"
+                aria-expanded="true" aria-controls="privateRooms">
+          Private Rooms
+        </button>
+      </h2>
+      <div id="privateRooms" class="accordion-collapse collapse show">
+        <div class="accordion-body p-0">
+          <ul class="list-unstyled mb-0" id="private-room-list">
+            <li class="px-2 py-1 text-muted small">No rooms yet</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Direct Messages -->
+    <div class="accordion-item border-0">
+      <h2 class="accordion-header">
+        <button class="accordion-button py-2 px-0 bg-transparent" type="button"
+                data-bs-toggle="collapse" data-bs-target="#directMessages"
+                aria-expanded="true" aria-controls="directMessages">
+          Direct Messages
+        </button>
+      </h2>
+      <div id="directMessages" class="accordion-collapse collapse show">
+        <div class="accordion-body p-0">
+          <button id="saved-messages-btn" type="button"
+                  class="btn btn-outline-secondary btn-sm w-100 mb-2">
+            Saved Messages 🔖
+          </button>
+          <ul class="list-unstyled mb-0" id="direct-chat-list">
+            <li class="px-2 py-1 text-muted small">No conversations yet</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr>
+
+  <h6 class="text-uppercase text-muted small">Contacts</h6>
+  <ul class="list-unstyled mb-3" id="contact-list">
+    <li class="px-2 py-1 text-muted small">No contacts yet</li>
+  </ul>
+
+  <hr>
+
+  <h6 class="text-uppercase text-muted small">Actions</h6>
+  <div class="d-flex gap-2">
+    <a th:href="@{/rooms/create}" class="btn btn-outline-primary btn-sm flex-grow-1">Create room</a>
+    <a th:href="@{/rooms/catalog}" class="btn btn-outline-secondary btn-sm flex-grow-1">Browse</a>
+  </div>
+
+  <!-- Add contact by username (R1-50) -->
+  <div class="mt-3">
+    <h6 class="text-uppercase text-muted small">Add contact</h6>
+    <form onsubmit="return sendFriendRequestByUsername();" class="d-flex flex-column gap-2">
+      <input type="text" class="form-control form-control-sm" id="add-friend-username"
+             placeholder="Username" autocomplete="off">
+      <input type="text" class="form-control form-control-sm" id="add-friend-message"
+             placeholder="Message (optional)" autocomplete="off">
+      <button type="submit" class="btn btn-outline-primary btn-sm">Send friend request</button>
+    </form>
+    <div id="add-friend-feedback" class="small mt-1"></div>
+  </div>
+
+  <!-- Blocked users management (R1-51) -->
+  <div class="mt-3">
+    <button type="button" class="btn btn-outline-secondary btn-sm w-100"
+            data-bs-toggle="modal" data-bs-target="#blockedUsersModal">
+      Blocked users
+    </button>
+  </div>
+
+  <!-- Blocked Users Modal (R1-51) -->
+  <div class="modal fade" id="blockedUsersModal" tabindex="-1" aria-labelledby="blockedUsersModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="blockedUsersModalLabel">Blocked Users</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="blocked-users-list">
+            <p class="text-muted small">Loading...</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

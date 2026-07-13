@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<div th:fragment="message-input" class="message-input border-top bg-white p-3">
+  <div id="connection-banner" class="d-none small text-center text-bg-warning rounded py-1 mb-2">
+    Reconnecting…
+  </div>
+  <div id="reply-indicator" class="d-none small text-muted mb-1 ps-2 d-flex align-items-center">
+    <span>Replying to: </span>
+    <strong id="reply-to-name" class="ms-1"></strong>
+    <button type="button" class="btn-close btn-sm ms-2" aria-label="Cancel reply"
+            onclick="cancelReply()"></button>
+    <input type="hidden" id="reply-to-id" value="">
+  </div>
+  <div class="d-flex align-items-end gap-2">
+    <button type="button" class="btn btn-outline-secondary btn-sm" title="Emoji"
+            id="emoji-btn">😊</button>
+    <label class="btn btn-outline-secondary btn-sm mb-0" title="Attach file">
+      📎
+      <input type="file" class="d-none" id="file-input" accept="*/*">
+    </label>
+    <label class="btn btn-outline-secondary btn-sm mb-0" title="Attach image">
+      🖼
+      <input type="file" class="d-none" id="image-input" accept="image/*">
+    </label>
+    <input type="text" class="form-control form-control-sm" id="attachment-comment"
+           placeholder="Attachment note (optional)" autocomplete="off"
+           style="max-width: 180px;" title="Optional note attached to the next uploaded file">
+    <textarea class="form-control form-control-sm" rows="2" placeholder="Type a message..."
+              id="message-textarea"
+              style="resize: none; max-height: 120px;"></textarea>
+    <button type="button" class="btn btn-primary btn-sm" id="send-btn">Send</button>
+  </div>
+</div>
+</body>
+</html>

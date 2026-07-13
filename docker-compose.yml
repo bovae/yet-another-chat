@@ -1,0 +1,63 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: yac
+      DB_USER: yac
+      DB_PASSWORD: yac
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REMEMBER_ME_KEY: change-me-in-production
+      FILE_STORAGE_PATH: /app/file-storage
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    volumes:
+      - file-storage:/app/file-storage
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: yac
+      POSTGRES_USER: yac
+      POSTGRES_PASSWORD: yac
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yac -d yac"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+volumes:
+  pgdata:
+  file-storage:

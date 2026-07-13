@@ -1,0 +1,130 @@
+/* YAC Chat Layout */
+
+.chat-sidebar {
+  border-right: 1px solid #dee2e6;
+  background: #fff;
+  overflow-y: auto;
+}
+
+.chat-members {
+  border-left: 1px solid #dee2e6;
+  background: #fff;
+  overflow-y: auto;
+}
+
+.message-list {
+  background: #f8f9fa;
+}
+
+.message-input textarea {
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.reply-quote {
+  border-left-color: #0d6efd !important;
+}
+
+/* Presence indicators */
+.presence-online {
+  color: #198754;
+}
+
+.presence-afk {
+  color: #ffc107;
+}
+
+.presence-offline {
+  color: #6c757d;
+}
+
+/* Unread badge */
+.unread-badge {
+  font-size: 0.7rem;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  padding: 0 4px;
+}
+
+/* Accordion tweaks for sidebar */
+.accordion-button:not(.collapsed) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.accordion-button:focus {
+  box-shadow: none;
+}
+
+/* Responsive: side panels become Bootstrap off-canvas drawers below md (R2-05).
+   The offcanvas-md classes on the panels handle hide/slide; no display:none needed. */
+
+/* Message bubble layout */
+.message-item {
+  position: relative;
+}
+
+.message-own {
+  flex-direction: row-reverse;
+}
+
+.message-own .message-bubble {
+  background-color: #d1ecf1;
+  margin-right: 8px;
+  margin-left: 0;
+}
+
+.message-own .message-header {
+  text-align: right;
+}
+
+.message-other {
+  flex-direction: row;
+}
+
+.message-other .message-bubble {
+  background-color: #ffffff;
+  border: 1px solid #dee2e6;
+  margin-left: 8px;
+  margin-right: 0;
+}
+
+.message-other .message-header {
+  text-align: left;
+}
+
+.message-bubble {
+  max-width: 70%;
+  border-radius: 12px;
+  padding: 8px 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  word-wrap: break-word;
+}
+
+.message-avatar {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.message-item .message-actions {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.message-bubble:hover .message-actions {
+  opacity: 1;
+}
+
+/* Touch devices can't hover — keep actions visible so reply/edit/delete stay reachable (R2-07). */
+@media (hover: none) {
+  .message-item .message-actions {
+    opacity: 0.85;
+  }
+}
+
+.message-actions button {
+  padding: 2px 6px;
+  font-size: 0.75rem;
+}

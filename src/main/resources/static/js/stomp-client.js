@@ -1,0 +1,301 @@
+// YAC - STOMP WebSocket client
+
+(function () {
+  'use strict';
+
+  var stompClient = null;
+  var lastWatermark = null;
+  var roomSubscription = null;
+  var roomEventsSubscription = null;
+  var errorSubscription = null;
+  var notificationSubscription = null;
+  var connectionChangeCallbacks = [];
+
+  function isConnected() {
+    return !!(stompClient && stompClient.connected);
+  }
+
+  function notifyConnectionChange(connected) {
+    connectionChangeCallbacks.forEach(function (cb) {
+      try {
+        cb(connected);
+      } catch (e) {
+        console.error('[STOMP] connection-change callback failed:', e);
+      }
+    });
+  }
+
+  // Register a listener fired on connect (true) and socket close (false); invoked
+  // immediately with the current state so late subscribers aren't stuck stale (R2-02).
+  function onConnectionChange(cb) {
+    if (typeof cb !== 'function') {
+      return;
+    }
+    connectionChangeCallbacks.push(cb);
+    cb(isConnected());
+  }
+
+  function getCsrfToken() {
+    var meta = document.querySelector('meta[name="_csrf"]');
+    return meta ? meta.content : '';
+  }
+
+  function getCsrfHeader() {
+    var meta = document.querySelector('meta[name="_csrf_header"]');
+    return meta ? meta.content : '';
+  }
+
+  function getRoomId() {
+    return window.YAC_ROOM ? window.YAC_ROOM.id : null;
+  }
+
+  function connect() {
+    if (typeof StompJs === 'undefined') {
+      console.warn('[STOMP] StompJs not loaded, skipping WebSocket connection');
+      return;
+    }
+
+    var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    stompClient = new StompJs.Client({
+      brokerURL: protocol + '//' + window.location.host + '/ws',
+      connectHeaders: {},
+      debug: function (str) {
+        console.log('[STOMP] ' + str);
+      },
+      reconnectDelay: 5000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000
+    });
+
+    stompClient.onConnect = function () {
+      console.log('[STOMP] Connected');
+      subscribeToChannels();
+      fetchMissedMessages();
+      // Report ONLINE right away instead of waiting for the delayed first heartbeat (R2-01).
+      if (window.YAC && window.YAC.presence && window.YAC.presence.sendImmediateActiveHeartbeat) {
+        window.YAC.presence.sendImmediateActiveHeartbeat();
+      }
+      notifyConnectionChange(true);
+    };
+
+    stompClient.onStompError = function (frame) {
+      console.error('[STOMP] Error:', frame.headers['message']);
+    };
+
+    stompClient.onWebSocketClose = function () {
+      console.log('[STOMP] Socket closed');
+      // Reset subscription state so the automatic reconnect re-subscribes everything (R1-06).
+      roomSubscription = null;
+      roomEventsSubscription = null;
+      errorSubscription = null;
+      notificationSubscription = null;
+      if (window.YAC && window.YAC.presence && window.YAC.presence.clearSubscriptions) {
+        window.YAC.presence.clearSubscriptions();
+      }
+      notifyConnectionChange(false);
+    };
+
+    stompClient.activate();
+  }
+
+  function subscribeToChannels() {
+    var roomId = getRoomId();
+
+    // Subscribe to room messages
+    if (roomId) {
+      roomSubscription = stompClient.subscribe('/topic/room.' + roomId, function (message) {
+        var msg = JSON.parse(message.body);
+        handleIncomingMessage(msg);
+      });
+
+      // Subscribe to room events: typing indicators plus membership changes.
+      roomEventsSubscription = stompClient.subscribe('/topic/room.' + roomId + '.events', function (message) {
+        var event = JSON.parse(message.body);
+        if (event.type === 'TYPING') {
+          if (window.YAC && window.YAC.typing && window.YAC.typing.onEvent) {
+            window.YAC.typing.onEvent(event);
+          }
+        } else if (window.YAC && window.YAC.app && window.YAC.app.onRoomEvent) {
+          window.YAC.app.onRoomEvent(event);
+        }
+      });
+    }
+
+    // Subscribe to user error queue
+    errorSubscription = stompClient.subscribe('/user/queue/errors', function (message) {
+      var error = JSON.parse(message.body);
+      console.error('[STOMP] Server error:', error);
+      handleError(error);
+    });
+
+    // Subscribe to user notification queue
+    notificationSubscription = stompClient.subscribe('/user/queue/notifications', function (message) {
+      var notification = JSON.parse(message.body);
+      handleNotification(notification);
+    });
+
+    // Trigger presence subscriptions now that STOMP is connected
+    if (window.YAC && window.YAC.presence && window.YAC.presence.subscribeToAllVisibleUsers) {
+      window.YAC.presence.subscribeToAllVisibleUsers();
+    }
+  }
+
+  function handleIncomingMessage(msg) {
+    // Deletion events have no watermark — delegate to a separate handler
+    if (msg.type === 'MESSAGE_DELETED') {
+      if (window.YAC && window.YAC.app && window.YAC.app.onMessageDeleted) {
+        window.YAC.app.onMessageDeleted(msg);
+      }
+      return;
+    }
+
+    // Edit events replace an existing message in place instead of rendering a new one (R1-04).
+    if (msg.type === 'MESSAGE_EDITED') {
+      if (window.YAC && window.YAC.app && window.YAC.app.onMessageEdited) {
+        window.YAC.app.onMessageEdited(msg);
+      }
+      return;
+    }
+
+    // Track watermark for gap detection
+    if (msg.watermark) {
+      lastWatermark = msg.watermark;
+    }
+
+    // Delegate to app.js for DOM rendering
+    if (window.YAC && window.YAC.app && window.YAC.app.onNewMessage) {
+      window.YAC.app.onNewMessage(msg);
+    }
+  }
+
+  function handleError(error) {
+    var messageList = document.getElementById('message-list');
+    if (messageList) {
+      var errorDiv = document.createElement('div');
+      errorDiv.className = 'alert alert-danger alert-dismissible fade show mx-3 my-1 py-1 px-2 small';
+      errorDiv.setAttribute('role', 'alert');
+      errorDiv.textContent = error.message || 'An error occurred';
+      var closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'btn-close btn-sm';
+      closeBtn.setAttribute('data-bs-dismiss', 'alert');
+      closeBtn.setAttribute('aria-label', 'Close');
+      errorDiv.appendChild(closeBtn);
+      messageList.appendChild(errorDiv);
+    }
+  }
+
+  function handleNotification(notification) {
+    if (window.YAC && window.YAC.app && window.YAC.app.onNotification) {
+      window.YAC.app.onNotification(notification);
+    }
+  }
+
+  function fetchMissedMessages() {
+    var roomId = getRoomId();
+    if (!roomId) {
+      return;
+    }
+    if (!lastWatermark) {
+      // First connect or no messages yet — initialize watermark from DOM
+      initWatermarkFromDom();
+      if (!lastWatermark) {
+        return;
+      }
+    }
+    fetchMissedPage(roomId, lastWatermark);
+  }
+
+  // Page ascending catch-up until the server reports nothing newer (R1-22: no 100-message cap).
+  function fetchMissedPage(roomId, after) {
+    var url = '/api/rooms/' + roomId + '/messages?after=' + after + '&size=100';
+    var headers = { 'Accept': 'application/json' };
+    var csrfHeader = getCsrfHeader();
+    if (csrfHeader) {
+      headers[csrfHeader] = getCsrfToken();
+    }
+    fetch(url, { headers: headers })
+    .then(function (response) {
+      if (!response.ok) {
+        throw new Error('Failed to fetch missed messages: ' + response.status);
+      }
+      return response.json();
+    })
+    .then(function (page) {
+      var maxWatermark = after;
+      if (page.messages && page.messages.length > 0) {
+        page.messages.forEach(function (msg) {
+          handleIncomingMessage(msg);
+          if (msg.watermark != null && msg.watermark > maxWatermark) {
+            maxWatermark = msg.watermark;
+          }
+        });
+      }
+      var hasMore = page.has_more || page.hasMore;
+      if (hasMore && maxWatermark > after) {
+        fetchMissedPage(roomId, maxWatermark);
+      }
+    })
+    .catch(function (err) {
+      console.error('[STOMP] Error fetching missed messages:', err);
+    });
+  }
+
+  function initWatermarkFromDom() {
+    var items = document.querySelectorAll('.message-item[data-watermark]');
+    if (items.length > 0) {
+      var last = items[items.length - 1];
+      var wm = parseInt(last.getAttribute('data-watermark'), 10);
+      if (!isNaN(wm)) {
+        lastWatermark = wm;
+      }
+    }
+  }
+
+  function disconnect() {
+    if (stompClient !== null) {
+      stompClient.deactivate();
+      console.log('[STOMP] Disconnected');
+    }
+  }
+
+  // Returns true when the message was actually published, false when the socket is
+  // down so the caller can keep the composer text instead of dropping it (R2-02).
+  function sendMessage(roomId, content, replyToId) {
+    if (!isConnected()) {
+      return false;
+    }
+    var payload = {
+      room_id: roomId,
+      content: content
+    };
+    if (replyToId) {
+      payload.reply_to_id = replyToId;
+    }
+    stompClient.publish({
+      destination: '/app/chat.send',
+      body: JSON.stringify(payload)
+    });
+    return true;
+  }
+
+  // Expose for global use
+  window.YAC = window.YAC || {};
+  window.YAC.stomp = {
+    connect: connect,
+    disconnect: disconnect,
+    sendMessage: sendMessage,
+    isConnected: isConnected,
+    onConnectionChange: onConnectionChange,
+    getClient: function () { return stompClient; },
+    getLastWatermark: function () { return lastWatermark; }
+  };
+
+  // Auto-connect on page load
+  document.addEventListener('DOMContentLoaded', function () {
+    connect();
+    initWatermarkFromDom();
+  });
+  window.addEventListener('beforeunload', disconnect);
+})();
