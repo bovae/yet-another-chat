@@ -2,6 +2,9 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <body>
 <div th:fragment="message-input" class="message-input border-top bg-white p-3">
+  <div id="connection-banner" class="d-none small text-center text-bg-warning rounded py-1 mb-2">
+    Reconnecting…
+  </div>
   <div id="reply-indicator" class="d-none small text-muted mb-1 ps-2 d-flex align-items-center">
     <span>Replying to: </span>
     <strong id="reply-to-name" class="ms-1"></strong>

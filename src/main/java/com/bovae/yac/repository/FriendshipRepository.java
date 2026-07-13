@@ -18,6 +18,8 @@ public interface FriendshipRepository extends JpaRepository<Friendship, UUID> {
 
     List<Friendship> findByRecipientAndStatus(User recipient, FriendshipStatus status);
 
+    long countByRecipientAndStatus(User recipient, FriendshipStatus status);
+
     Optional<Friendship> findByRequesterAndRecipient(User requester, User recipient);
 
     List<Friendship> findByRequesterOrRecipient(User requester, User recipient);

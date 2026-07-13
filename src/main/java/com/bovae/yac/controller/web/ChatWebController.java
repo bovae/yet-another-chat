@@ -46,7 +46,8 @@ public class ChatWebController {
 
     @GetMapping("/chat/rooms/{id}")
     public String roomView(@PathVariable UUID id, Model model, Principal principal) {
-        Room room = roomService.getRoomById(id);
+        // Owner fetched eagerly — the Room info panel renders owner details and open-in-view is off.
+        Room room = roomService.getRoomByIdWithOwner(id);
         User user = userRepository.findByEmail(principal.getName())
                 .orElseThrow();
 
@@ -84,7 +85,8 @@ public class ChatWebController {
                     .findFirst()
                     .map(m -> m.displayName() != null ? m.displayName() : m.username())
                     .map(name -> "Chat with " + name)
-                    .orElse(room.getName());
+                    // Counterpart gone (e.g. deleted account): never expose the raw dm-{uuid} name (R2-06).
+                    .orElse("Direct message");
             model.addAttribute("displayName", dmDisplayName);
         } else {
             model.addAttribute("displayName", room.getName());

@@ -299,6 +299,17 @@
 
   function onNotification(notification) {
     var type = notification.type;
+    // Any social/unread event can change the navbar aggregate badge (R3-10).
+    if (window.YAC && window.YAC.navbar && window.YAC.navbar.refresh) {
+      window.YAC.navbar.refresh();
+    }
+    // Friend-request events arrive live: refresh the sidebar panels/contacts (R2-03).
+    if (type === 'FRIEND_REQUEST_CREATED' || type === 'FRIEND_REQUEST_ACCEPTED') {
+      if (window.YAC && window.YAC.sidebar && window.YAC.sidebar.refresh) {
+        window.YAC.sidebar.refresh();
+      }
+      return;
+    }
     if (type === 'UNREAD_UPDATE') {
       var roomId = notification.room_id || notification.roomId;
       if (!roomId) {
@@ -550,13 +561,27 @@
     var replyToInput = document.getElementById('reply-to-id');
     var replyToId = replyToInput ? replyToInput.value || null : null;
 
-    if (window.YAC && window.YAC.stomp) {
-      window.YAC.stomp.sendMessage(roomId, content, replyToId);
+    // Keep the composer text if the socket is down — never silently drop a message (R2-02).
+    var sent = window.YAC && window.YAC.stomp && window.YAC.stomp.sendMessage(roomId, content, replyToId);
+    if (!sent) {
+      return;
     }
 
     textarea.value = '';
     textarea.style.height = 'auto';
     cancelReply();
+  }
+
+  // Toggle the "Reconnecting…" banner and Send availability with the socket state (R2-02).
+  function updateConnectionState(connected) {
+    var banner = document.getElementById('connection-banner');
+    if (banner) {
+      banner.classList.toggle('d-none', connected);
+    }
+    var sendBtn = document.getElementById('send-btn');
+    if (sendBtn) {
+      sendBtn.disabled = !connected;
+    }
   }
 
   // --- Reply handling ---
@@ -1070,6 +1095,130 @@
     });
   }
 
+  // --- Manage Room modal: Members & Admins tabs (R2-08) ---
+
+  function populateManageRoom() {
+    // Banned tab reuses the existing banned-users-list renderer.
+    populateBannedUsersModal();
+
+    var roomId = getRoomId();
+    var membersEl = document.getElementById('manage-members-list');
+    var adminsEl = document.getElementById('manage-admins-list');
+    if (!roomId || !membersEl) {
+      return;
+    }
+    membersEl.innerHTML = '<p class="text-muted small">Loading...</p>';
+    if (adminsEl) {
+      adminsEl.innerHTML = '<p class="text-muted small">Loading...</p>';
+    }
+
+    fetch('/api/rooms/' + roomId + '/members', { headers: apiHeaders() })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status);
+        }
+        return response.json();
+      })
+      .then(function (members) {
+        renderManageMembers(members, membersEl, adminsEl);
+      })
+      .catch(function (err) {
+        console.error('[App] Error loading members:', err);
+        membersEl.innerHTML = '<p class="text-danger small">Failed to load members</p>';
+      });
+  }
+
+  function renderManageMembers(members, membersEl, adminsEl) {
+    var myId = window.YAC_USER ? String(window.YAC_USER.id) : null;
+    membersEl.innerHTML = '';
+    if (adminsEl) {
+      adminsEl.innerHTML = '';
+    }
+    var adminCount = 0;
+
+    members.forEach(function (m) {
+      var userId = m.user_id || m.userId;
+      var username = m.username;
+      var displayName = m.display_name || m.displayName || username;
+      var role = m.role;
+      var isSelf = myId && String(userId) === myId;
+
+      var row = buildMemberRow(userId, username, displayName, role, isSelf, false);
+      row.setAttribute('data-member-name', (displayName + ' ' + username).toLowerCase());
+      membersEl.appendChild(row);
+
+      if ((role === 'OWNER' || role === 'ADMIN') && adminsEl) {
+        adminsEl.appendChild(buildMemberRow(userId, username, displayName, role, isSelf, true));
+        adminCount++;
+      }
+    });
+
+    if (!membersEl.children.length) {
+      membersEl.innerHTML = '<p class="text-muted small">No members</p>';
+    }
+    if (adminsEl && adminCount === 0) {
+      adminsEl.innerHTML = '<p class="text-muted small">No admins</p>';
+    }
+  }
+
+  function buildMemberRow(userId, username, displayName, role, isSelf, adminsTab) {
+    var row = document.createElement('div');
+    row.className = 'd-flex align-items-center justify-content-between py-2 border-bottom';
+
+    var info = document.createElement('div');
+    var nameEl = document.createElement('strong');
+    nameEl.className = 'small';
+    nameEl.textContent = displayName;
+    info.appendChild(nameEl);
+    if (role === 'OWNER') {
+      info.appendChild(roleBadge('Owner', 'bg-primary'));
+    } else if (role === 'ADMIN') {
+      info.appendChild(roleBadge('Admin', 'bg-info'));
+    }
+    row.appendChild(info);
+
+    // The room owner and yourself carry no moderation actions.
+    if (!isSelf && role !== 'OWNER') {
+      var actions = document.createElement('div');
+      actions.className = 'd-flex gap-1';
+      if (adminsTab) {
+        actions.appendChild(actionBtn('Demote', 'btn-outline-secondary', userId, username, 'demoteToMember'));
+      } else {
+        if (role === 'MEMBER') {
+          actions.appendChild(actionBtn('Promote', 'btn-outline-secondary', userId, username, 'promoteToAdmin'));
+        } else if (role === 'ADMIN') {
+          actions.appendChild(actionBtn('Demote', 'btn-outline-secondary', userId, username, 'demoteToMember'));
+        }
+        actions.appendChild(actionBtn('Remove', 'btn-outline-warning', userId, username, 'kickMember'));
+        actions.appendChild(actionBtn('Ban', 'btn-outline-danger', userId, username, 'banMember'));
+      }
+      row.appendChild(actions);
+    }
+    return row;
+  }
+
+  function roleBadge(text, cls) {
+    var badge = document.createElement('span');
+    badge.className = 'badge ms-1 ' + cls;
+    badge.textContent = text;
+    return badge;
+  }
+
+  function actionBtn(label, cls, userId, username, handlerName) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm ' + cls + ' py-0 px-1';
+    btn.textContent = label;
+    btn.setAttribute('data-user-id', userId);
+    btn.setAttribute('data-username', username);
+    btn.addEventListener('click', function () {
+      if (typeof window[handlerName] === 'function') {
+        window[handlerName](btn);
+      }
+    });
+    return btn;
+  }
+
   // --- Room settings submission ---
 
   window.submitRoomSettings = function () {
@@ -1117,7 +1266,7 @@
       }
 
       // Close modal
-      var modalEl = document.getElementById('roomSettingsModal');
+      var modalEl = document.getElementById('manageRoomModal');
       if (modalEl) {
         var modal = bootstrap.Modal.getInstance(modalEl);
         if (modal) {
@@ -1402,11 +1551,24 @@
       });
     }
 
-    // --- Banned users modal population ---
-    var bannedUsersModalEl = document.getElementById('bannedUsersModal');
-    if (bannedUsersModalEl) {
-      bannedUsersModalEl.addEventListener('show.bs.modal', function () {
-        populateBannedUsersModal();
+    // Reflect the WS connection state in the composer (R2-02).
+    if (window.YAC && window.YAC.stomp && window.YAC.stomp.onConnectionChange) {
+      window.YAC.stomp.onConnectionChange(updateConnectionState);
+    }
+
+    // --- Manage Room modal population (R2-08) ---
+    var manageRoomModalEl = document.getElementById('manageRoomModal');
+    if (manageRoomModalEl) {
+      manageRoomModalEl.addEventListener('show.bs.modal', populateManageRoom);
+    }
+
+    var manageMembersSearch = document.getElementById('manage-members-search');
+    if (manageMembersSearch) {
+      manageMembersSearch.addEventListener('input', function () {
+        var term = manageMembersSearch.value.trim().toLowerCase();
+        document.querySelectorAll('#manage-members-list [data-member-name]').forEach(function (row) {
+          row.style.display = (!term || row.getAttribute('data-member-name').indexOf(term) !== -1) ? '' : 'none';
+        });
       });
     }
 

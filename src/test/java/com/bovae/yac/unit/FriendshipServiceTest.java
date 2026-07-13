@@ -2,15 +2,19 @@ package com.bovae.yac.unit;
 
 import com.bovae.yac.exception.ConflictException;
 import com.bovae.yac.exception.ForbiddenException;
+import com.bovae.yac.model.dto.NotificationEvent;
 import com.bovae.yac.model.entity.Friendship;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.FriendshipStatus;
 import com.bovae.yac.repository.FriendshipRepository;
 import com.bovae.yac.repository.UserBanRepository;
 import com.bovae.yac.service.FriendshipService;
+import com.bovae.yac.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -21,6 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,6 +44,12 @@ class FriendshipServiceTest {
 
     @Mock
     private UserBanRepository userBanRepository;
+
+    @Mock
+    private NotificationService notificationService;
+
+    @Captor
+    private ArgumentCaptor<NotificationEvent> eventCaptor;
 
     @InjectMocks
     private FriendshipService friendshipService;
@@ -159,6 +170,46 @@ class FriendshipServiceTest {
 
         verify(friendshipRepository).delete(pending);
         assertThat(result.getId()).isEqualTo(friendshipId);
+    }
+
+    // -----------------------------------------------------------------------
+    // Live WS notifications on send/accept (R2-03)
+    // -----------------------------------------------------------------------
+
+    /** Validates R2-03: a sent request pushes FRIEND_REQUEST_CREATED to the recipient. */
+    @Test
+    void sendFriendRequest_broadcastsCreatedEventToRecipient() {
+        when(friendshipRepository.findByRequesterAndRecipient(userA, userB)).thenReturn(Optional.empty());
+        when(friendshipRepository.findByRequesterAndRecipient(userB, userA)).thenReturn(Optional.empty());
+        when(userBanRepository.existsByBlockerAndBlocked(userA, userB)).thenReturn(false);
+        when(userBanRepository.existsByBlockerAndBlocked(userB, userA)).thenReturn(false);
+        when(friendshipRepository.save(any(Friendship.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        friendshipService.sendFriendRequest(userA, userB, "Hi!");
+
+        verify(notificationService).broadcastNotification(eq(userB), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo("FRIEND_REQUEST_CREATED");
+    }
+
+    /** Validates R2-03: accepting pushes FRIEND_REQUEST_ACCEPTED back to the original requester. */
+    @Test
+    void acceptFriendRequest_broadcastsAcceptedEventToRequester() {
+        UUID friendshipId = UUID.randomUUID();
+        Friendship pending = Friendship.builder()
+                .id(friendshipId)
+                .requester(userA)
+                .recipient(userB)
+                .status(FriendshipStatus.PENDING)
+                .build();
+        when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.of(pending));
+        when(friendshipRepository.save(any(Friendship.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        friendshipService.acceptFriendRequest(friendshipId, userB);
+
+        verify(notificationService).broadcastNotification(eq(userA), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo("FRIEND_REQUEST_ACCEPTED");
     }
 
     // -----------------------------------------------------------------------

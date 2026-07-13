@@ -52,8 +52,8 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 - [x] R1-16 — Room/account/message deletion never removes files from disk
 - [x] R1-17 — Banned user can rejoin a private room via invitation
 - [x] R1-18 — Remove all Property-Based Tests (slow); port uniquely-covered behaviour first *(user request)*
-- [ ] R2-01 — Freshly loaded/focused tab shows AFK, not ONLINE, until the mouse moves *(verified)*
-- [ ] R2-02 — Message silently lost (and input cleared) when the STOMP socket is down
+- [x] R2-01 — Freshly loaded/focused tab shows AFK, not ONLINE, until the mouse moves *(verified)*
+- [x] R2-02 — Message silently lost (and input cleared) when the STOMP socket is down
 
 ### Medium
 
@@ -95,13 +95,13 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 - [x] R1-54 — Attachment Content-Disposition untested in a real integration test
 - [x] R1-55 — Add a dev-only seed migration (users/chats) for local env *(user request)*
 - [x] R1-56 — Room member-list endpoint has no membership check (private-room enumeration)
-- [ ] R2-03 — Friend requests never arrive live and show no pending-count badge *(verified)*
-- [ ] R2-04 — Presence conveyed by colour only — no label/tooltip/ARIA (colourblind + screen-reader)
-- [ ] R2-05 — Sidebar + members panel fully hidden on mobile; DMs/contacts unreachable
-- [ ] R3-01 — Add automated Playwright UI/E2E tests (Playwright-for-Java, own Maven profile) *(user request)*
-- [ ] R3-02 — Per-member "Add friend"/"Block user" is admin-gated; members can't friend/ban from the user list
-- [ ] R3-03 — Sidebar "Search rooms" only filters joined rooms; can't discover catalog rooms
-- [ ] R3-04 — Sidebar rooms & DMs render unsorted (no recency/alphabetical order)
+- [x] R2-03 — Friend requests never arrive live and show no pending-count badge *(verified)*
+- [x] R2-04 — Presence conveyed by colour only — no label/tooltip/ARIA (colourblind + screen-reader)
+- [x] R2-05 — Sidebar + members panel fully hidden on mobile; DMs/contacts unreachable
+- [x] R3-01 — Add automated Playwright UI/E2E tests (Playwright-for-Java, own Maven profile) *(user request)*
+- [x] R3-02 — Per-member "Add friend"/"Block user" is admin-gated; members can't friend/ban from the user list
+- [x] R3-03 — Sidebar "Search rooms" only filters joined rooms; can't discover catalog rooms
+- [x] R3-04 — Sidebar rooms & DMs render unsorted (no recency/alphabetical order)
 
 ### Low
 
@@ -130,16 +130,16 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 - [x] R1-79 — HTMX loaded on every page but never used
 - [x] R1-80 — Dead code: duplicate badge updater, unused cursor state, orphan fragment
 - [x] R1-81 — `/chat` index renders an enabled composer that silently no-ops
-- [ ] R2-06 — Orphaned DM leaks a raw `dm-{uuid}-{uuid}` name into title/header/modals
-- [ ] R2-07 — Message action buttons (reply/edit/delete) invisible on touch devices
-- [ ] R2-08 — Admin actions scattered, not the spec's single tabbed "Manage Room" modal
-- [ ] R2-09 — Dead reusable fragments `room-item` / `contact-item`
-- [ ] R3-05 — Right-panel member list unsorted (owner/admins not surfaced first)
-- [ ] R3-06 — Room-info panel omits the explicit "Owner: <name>" line
-- [ ] R3-07 — Sidebar lists fail silently — fetch error leaves the "No rooms/contacts yet" placeholder
-- [ ] R3-08 — "Sessions" buried in the Profile dropdown, not a top-level nav item
-- [ ] R3-09 — Navbar never highlights the active page
-- [ ] R3-10 — No aggregate unread/request badge on the navbar (invisible on non-chat pages)
+- [x] R2-06 — Orphaned DM leaks a raw `dm-{uuid}-{uuid}` name into title/header/modals
+- [x] R2-07 — Message action buttons (reply/edit/delete) invisible on touch devices
+- [x] R2-08 — Admin actions scattered, not the spec's single tabbed "Manage Room" modal
+- [x] R2-09 — Dead reusable fragments `room-item` / `contact-item`
+- [x] R3-05 — Right-panel member list unsorted (owner/admins not surfaced first)
+- [x] R3-06 — Room-info panel omits the explicit "Owner: <name>" line
+- [x] R3-07 — Sidebar lists fail silently — fetch error leaves the "No rooms/contacts yet" placeholder
+- [x] R3-08 — "Sessions" buried in the Profile dropdown, not a top-level nav item
+- [x] R3-09 — Navbar never highlights the active page
+- [x] R3-10 — No aggregate unread/request badge on the navbar (invisible on non-chat pages)
 
 ---
 

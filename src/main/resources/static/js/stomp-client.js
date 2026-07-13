@@ -9,6 +9,31 @@
   var roomEventsSubscription = null;
   var errorSubscription = null;
   var notificationSubscription = null;
+  var connectionChangeCallbacks = [];
+
+  function isConnected() {
+    return !!(stompClient && stompClient.connected);
+  }
+
+  function notifyConnectionChange(connected) {
+    connectionChangeCallbacks.forEach(function (cb) {
+      try {
+        cb(connected);
+      } catch (e) {
+        console.error('[STOMP] connection-change callback failed:', e);
+      }
+    });
+  }
+
+  // Register a listener fired on connect (true) and socket close (false); invoked
+  // immediately with the current state so late subscribers aren't stuck stale (R2-02).
+  function onConnectionChange(cb) {
+    if (typeof cb !== 'function') {
+      return;
+    }
+    connectionChangeCallbacks.push(cb);
+    cb(isConnected());
+  }
 
   function getCsrfToken() {
     var meta = document.querySelector('meta[name="_csrf"]');
@@ -47,6 +72,11 @@
       console.log('[STOMP] Connected');
       subscribeToChannels();
       fetchMissedMessages();
+      // Report ONLINE right away instead of waiting for the delayed first heartbeat (R2-01).
+      if (window.YAC && window.YAC.presence && window.YAC.presence.sendImmediateActiveHeartbeat) {
+        window.YAC.presence.sendImmediateActiveHeartbeat();
+      }
+      notifyConnectionChange(true);
     };
 
     stompClient.onStompError = function (frame) {
@@ -63,6 +93,7 @@
       if (window.YAC && window.YAC.presence && window.YAC.presence.clearSubscriptions) {
         window.YAC.presence.clearSubscriptions();
       }
+      notifyConnectionChange(false);
     };
 
     stompClient.activate();
@@ -229,20 +260,24 @@
     }
   }
 
+  // Returns true when the message was actually published, false when the socket is
+  // down so the caller can keep the composer text instead of dropping it (R2-02).
   function sendMessage(roomId, content, replyToId) {
-    if (stompClient && stompClient.connected) {
-      var payload = {
-        room_id: roomId,
-        content: content
-      };
-      if (replyToId) {
-        payload.reply_to_id = replyToId;
-      }
-      stompClient.publish({
-        destination: '/app/chat.send',
-        body: JSON.stringify(payload)
-      });
+    if (!isConnected()) {
+      return false;
     }
+    var payload = {
+      room_id: roomId,
+      content: content
+    };
+    if (replyToId) {
+      payload.reply_to_id = replyToId;
+    }
+    stompClient.publish({
+      destination: '/app/chat.send',
+      body: JSON.stringify(payload)
+    });
+    return true;
   }
 
   // Expose for global use
@@ -251,6 +286,8 @@
     connect: connect,
     disconnect: disconnect,
     sendMessage: sendMessage,
+    isConnected: isConnected,
+    onConnectionChange: onConnectionChange,
     getClient: function () { return stompClient; },
     getLastWatermark: function () { return lastWatermark; }
   };

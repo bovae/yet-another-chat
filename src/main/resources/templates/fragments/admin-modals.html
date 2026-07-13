@@ -1,42 +1,106 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <body>
+<!-- Single consolidated admin modal with tabs (R2-08, wireframe 4.5). -->
 <div th:fragment="admin-modals(room)">
-
-  <!-- Invite User Modal -->
-  <div class="modal fade" id="inviteModal" tabindex="-1" aria-labelledby="inviteModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+  <div class="modal fade" id="manageRoomModal" tabindex="-1" aria-labelledby="manageRoomModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="inviteModalLabel">Invite User</h5>
+          <h5 class="modal-title" id="manageRoomModalLabel">Manage Room</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <div class="mb-3">
-            <label for="invite-username" class="form-label">Username</label>
-            <input type="text" class="form-control" id="invite-username" placeholder="Enter username">
-          </div>
-          <div id="invite-feedback" class="small"></div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-primary btn-sm" onclick="sendInvitation()">Send Invitation</button>
-        </div>
-      </div>
-    </div>
-  </div>
+          <ul class="nav nav-tabs mb-3" id="manageRoomTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="members-tab" data-bs-toggle="tab"
+                      data-bs-target="#tab-members" type="button" role="tab">Members</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="admins-tab" data-bs-toggle="tab"
+                      data-bs-target="#tab-admins" type="button" role="tab">Admins</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="banned-tab" data-bs-toggle="tab"
+                      data-bs-target="#tab-banned" type="button" role="tab">Banned</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="invitations-tab" data-bs-toggle="tab"
+                      data-bs-target="#tab-invitations" type="button" role="tab">Invitations</button>
+            </li>
+            <li class="nav-item" role="presentation" th:if="${room.owner.id == currentUser.id}">
+              <button class="nav-link" id="settings-tab" data-bs-toggle="tab"
+                      data-bs-target="#tab-settings" type="button" role="tab">Settings</button>
+            </li>
+          </ul>
 
-  <!-- Banned Users Modal -->
-  <div class="modal fade" id="bannedUsersModal" tabindex="-1" aria-labelledby="bannedUsersModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="bannedUsersModalLabel">Banned Users</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div id="banned-users-list">
-            <p class="text-muted small">Loading...</p>
+          <div class="tab-content">
+            <!-- Members -->
+            <div class="tab-pane fade show active" id="tab-members" role="tabpanel">
+              <input type="text" class="form-control form-control-sm mb-2" id="manage-members-search"
+                     placeholder="Search members..." autocomplete="off">
+              <div id="manage-members-list">
+                <p class="text-muted small">Loading...</p>
+              </div>
+            </div>
+
+            <!-- Admins -->
+            <div class="tab-pane fade" id="tab-admins" role="tabpanel">
+              <div id="manage-admins-list">
+                <p class="text-muted small">Loading...</p>
+              </div>
+            </div>
+
+            <!-- Banned users -->
+            <div class="tab-pane fade" id="tab-banned" role="tabpanel">
+              <div id="banned-users-list">
+                <p class="text-muted small">Loading...</p>
+              </div>
+            </div>
+
+            <!-- Invitations -->
+            <div class="tab-pane fade" id="tab-invitations" role="tabpanel">
+              <div class="mb-3">
+                <label for="invite-username" class="form-label">Username</label>
+                <input type="text" class="form-control" id="invite-username" placeholder="Enter username">
+              </div>
+              <div id="invite-feedback" class="small mb-2"></div>
+              <button type="button" class="btn btn-primary btn-sm" onclick="sendInvitation()">Send Invitation</button>
+            </div>
+
+            <!-- Settings (owner only) -->
+            <div class="tab-pane fade" id="tab-settings" role="tabpanel" th:if="${room.owner.id == currentUser.id}">
+              <form id="room-settings-form">
+                <div class="mb-3">
+                  <label for="room-settings-name" class="form-label">Name</label>
+                  <input type="text" class="form-control" id="room-settings-name"
+                         th:value="${displayName != null ? displayName : room.name}" placeholder="Room name">
+                </div>
+                <div class="mb-3">
+                  <label for="room-settings-description" class="form-label">Description</label>
+                  <textarea class="form-control" id="room-settings-description" rows="3"
+                            th:text="${room.description}" placeholder="Room description"></textarea>
+                </div>
+                <div class="mb-3">
+                  <label for="room-settings-visibility" class="form-label">Visibility</label>
+                  <select class="form-select" id="room-settings-visibility">
+                    <option th:each="v : ${T(com.bovae.yac.model.enums.RoomVisibility).values()}"
+                            th:if="${v.name() != 'DIRECT'}"
+                            th:value="${v.name()}"
+                            th:text="${v.name()}"
+                            th:selected="${v == room.visibility}">
+                    </option>
+                  </select>
+                </div>
+                <div id="roomSettingsError" class="text-danger small mb-2"></div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="submitRoomSettings()">Save Changes</button>
+              </form>
+              <hr>
+              <button type="button" class="btn btn-outline-danger btn-sm"
+                      onclick="if (confirm('Delete this room? This is irreversible.')) deleteRoom();">
+                Delete Room
+              </button>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -45,69 +109,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Room Settings Modal -->
-  <div class="modal fade" id="roomSettingsModal" tabindex="-1" aria-labelledby="roomSettingsModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="roomSettingsModalLabel">Room Settings</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <form id="room-settings-form">
-            <div class="mb-3">
-              <label for="room-settings-name" class="form-label">Name</label>
-              <input type="text" class="form-control" id="room-settings-name"
-                     th:value="${displayName != null ? displayName : room.name}" placeholder="Room name">
-            </div>
-            <div class="mb-3">
-              <label for="room-settings-description" class="form-label">Description</label>
-              <textarea class="form-control" id="room-settings-description" rows="3"
-                        th:text="${room.description}" placeholder="Room description"></textarea>
-            </div>
-            <div class="mb-3">
-              <label for="room-settings-visibility" class="form-label">Visibility</label>
-              <select class="form-select" id="room-settings-visibility">
-                <option th:each="v : ${T(com.bovae.yac.model.enums.RoomVisibility).values()}"
-                        th:if="${v.name() != 'DIRECT'}"
-                        th:value="${v.name()}"
-                        th:text="${v.name()}"
-                        th:selected="${v == room.visibility}">
-                </option>
-              </select>
-            </div>
-            <div id="roomSettingsError" class="text-danger small"></div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-primary btn-sm" onclick="submitRoomSettings()">Save Changes</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Delete Room Confirmation Modal -->
-  <div class="modal fade" id="deleteRoomModal" tabindex="-1" aria-labelledby="deleteRoomModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title text-danger" id="deleteRoomModalLabel">Delete Room</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <p>Are you sure you want to delete <strong th:text="${displayName != null ? displayName : room.name}">Room</strong>?</p>
-          <p class="text-muted small">This action is irreversible. All messages, attachments, and members will be removed.</p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-danger btn-sm" onclick="deleteRoom()">Delete Room</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
 </div>
 </body>
 </html>

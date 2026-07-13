@@ -1,4 +1,36 @@
-# Playwright MCP End-to-End Test Workflows
+# End-to-End Tests
+
+## Automated Playwright-for-Java suite (R3-01)
+
+The `*E2E` classes under `src/test/e2e/java` drive a real browser (Chromium) against a running app.
+They live behind the opt-in Maven `e2e` profile, so the default `./mvnw verify` never compiles them,
+downloads the Playwright driver, or launches a browser.
+
+**Run it:**
+
+```bash
+# 1. Start the app (dev profile seeds users alice/bob/carol @dev.local, password devpass123)
+docker compose up --build -d
+
+# 2. Run the E2E suite against it (downloads browser binaries on first run)
+./mvnw verify -Pe2e
+
+# Point at a different host/port if needed:
+./mvnw verify -Pe2e -De2e.baseUrl=http://localhost:8080
+# Watch it run in a visible browser:
+./mvnw verify -Pe2e -De2e.headed=true
+```
+
+The suite reruns against a persistent database; some social scenarios mutate state. For a clean
+slate: `docker compose down -v && docker compose up --build -d`.
+
+Coverage: register→login→session, two-context live messaging (send/edit/delete + image),
+presence ONLINE-on-load and idle→AFK, live friend request + accept, Saved Messages + DM naming,
+attachment ACL for non-members, and admin ban/unban via the Manage Room modal.
+
+---
+
+# Playwright MCP End-to-End Test Workflows (manual)
 
 Step-by-step Playwright MCP tool call workflows for testing the YAC application through a real browser.
 Each workflow documents the exact MCP tool calls to execute, the expected page state after each step,

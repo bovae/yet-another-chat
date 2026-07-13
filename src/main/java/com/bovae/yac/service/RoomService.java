@@ -26,10 +26,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -114,6 +118,16 @@ public class RoomService {
                 .orElseThrow(() -> new ResourceNotFoundException("Room not found: %s".formatted(roomId)));
     }
 
+    /**
+     * Room with its {@code owner} eagerly fetched, for views that render owner details
+     * (e.g. the Room info "Owner:" line) with {@code open-in-view=false} (R3-06).
+     */
+    @Transactional(readOnly = true)
+    public Room getRoomByIdWithOwner(UUID roomId) {
+        return roomRepository.findByIdWithOwner(roomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Room not found: %s".formatted(roomId)));
+    }
+
     @Transactional(readOnly = true)
     public RoomDto getRoomDtoById(UUID roomId) {
         return roomRepository.findByIdWithOwner(roomId)
@@ -173,6 +187,12 @@ public class RoomService {
             unreadByRoom.put((UUID) row[0], Math.min(((Number) row[1]).intValue(), UNREAD_DISPLAY_CAP));
         }
 
+        // Newest-message time per room in one grouped query, used to sort the sidebar (R3-04).
+        Map<UUID, Instant> lastMessageByRoom = new HashMap<>();
+        for (Object[] row : messageRepository.findLastMessageInstantByRoomIds(roomIds)) {
+            lastMessageByRoom.put((UUID) row[0], (Instant) row[1]);
+        }
+
         // DM counterparts for all DIRECT rooms in a single query.
         List<UUID> directRoomIds = memberships.stream()
                 .map(RoomMember::getRoom)
@@ -188,7 +208,7 @@ public class RoomService {
             }
         }
 
-        return memberships.stream()
+        List<MyRoomEntry> entries = memberships.stream()
                 .map(membership -> {
                     Room room = membership.getRoom();
                     String otherUsername = null;
@@ -204,7 +224,14 @@ public class RoomService {
                     return new MyRoomEntry(room.getId(), room.getName(), room.getVisibility(),
                             unreadByRoom.getOrDefault(room.getId(), 0), otherUsername, otherDisplayName);
                 })
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        // Most recent conversation first; rooms with no messages fall back to name (R3-04).
+        entries.sort(Comparator
+                .comparing((MyRoomEntry e) -> lastMessageByRoom.get(e.id()),
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(MyRoomEntry::name, String.CASE_INSENSITIVE_ORDER));
+        return entries;
     }
 
     @Transactional

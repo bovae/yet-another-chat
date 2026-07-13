@@ -37,6 +37,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -120,6 +121,42 @@ class RoomServiceTest {
                 .owner(owner)
                 .nextWatermark(1L)
                 .build();
+    }
+
+    /**
+     * Validates R3-04: sidebar rooms are ordered by most-recent message first,
+     * with message-less rooms falling back to name order (and placed last).
+     */
+    @Test
+    void listUserRoomsWithUnread_ordersByLastMessageRecencyThenName() {
+        RoomMember alpha = membershipOf("alpha");   // oldest message
+        RoomMember beta = membershipOf("beta");      // newest message
+        RoomMember gamma = membershipOf("gamma");    // no messages
+
+        when(roomMemberRepository.findByUserWithRoomAndOwner(owner))
+                .thenReturn(List.of(alpha, beta, gamma));
+        when(messageRepository.countUnreadPerRoom(eq(owner.getId()), any()))
+                .thenReturn(Collections.emptyList());
+        when(messageRepository.findLastMessageInstantByRoomIds(any())).thenReturn(List.of(
+                new Object[]{alpha.getRoom().getId(), Instant.parse("2026-07-01T00:00:00Z")},
+                new Object[]{beta.getRoom().getId(), Instant.parse("2026-07-10T00:00:00Z")}));
+
+        List<String> names = roomService.listUserRoomsWithUnread(owner).stream()
+                .map(entry -> entry.name())
+                .toList();
+
+        assertThat(names).containsExactly("beta", "alpha", "gamma");
+    }
+
+    private RoomMember membershipOf(String roomName) {
+        Room room = Room.builder()
+                .id(UUID.randomUUID())
+                .name(roomName)
+                .visibility(RoomVisibility.PUBLIC)
+                .owner(owner)
+                .nextWatermark(1L)
+                .build();
+        return RoomMember.builder().room(room).user(owner).role(RoomRole.OWNER).build();
     }
 
     /**
