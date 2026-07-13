@@ -1,5 +1,6 @@
 package com.bovae.yac.config;
 
+import com.bovae.yac.ws.StompAuthChannelInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Configuration;
@@ -26,6 +27,7 @@ public class WebSocketSecurityConfig implements WebSocketMessageBrokerConfigurer
 
     private final ApplicationContext applicationContext;
     private final AuthorizationManager<Message<?>> messageAuthorizationManager;
+    private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
 
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> argumentResolvers) {
@@ -36,6 +38,7 @@ public class WebSocketSecurityConfig implements WebSocketMessageBrokerConfigurer
     public void configureClientInboundChannel(ChannelRegistration registration) {
         var authz = new AuthorizationChannelInterceptor(messageAuthorizationManager);
         authz.setAuthorizationEventPublisher(new SpringAuthorizationEventPublisher(applicationContext));
-        registration.interceptors(new SecurityContextChannelInterceptor(), authz);
+        // Membership/presence/CONNECT checks run after the security context is populated.
+        registration.interceptors(new SecurityContextChannelInterceptor(), authz, stompAuthChannelInterceptor);
     }
 }

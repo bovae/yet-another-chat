@@ -10,25 +10,53 @@
   <div class="collapse navbar-collapse" id="navbarNav">
     <ul class="navbar-nav me-auto">
       <li class="nav-item">
-        <a class="nav-link" th:href="@{/chat}">Public Rooms</a>
+        <a class="nav-link" th:classappend="${activePath != null and activePath.startsWith('/rooms/catalog')} ? 'active'"
+           th:href="@{/rooms/catalog}">Public Rooms</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" th:href="@{/chat}">Private Rooms</a>
+        <a class="nav-link" th:classappend="${activePath == '/chat' and activeSection == 'private'} ? 'active'"
+           th:href="@{/chat(section='private')}">Private Rooms</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" th:href="@{/chat}">Contacts</a>
+        <a class="nav-link" th:classappend="${activePath == '/chat' and activeSection == 'contacts'} ? 'active'"
+           th:href="@{/chat(section='contacts')}">Contacts</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" th:href="@{/sessions}">Sessions</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" th:href="@{/profile}">Profile</a>
+        <a class="nav-link" th:classappend="${activePath != null and activePath.startsWith('/profile/sessions')} ? 'active'"
+           th:href="@{/profile/sessions}">Sessions</a>
       </li>
     </ul>
-    <form th:action="@{/logout}" method="post" class="d-inline">
-      <button type="submit" class="btn btn-outline-secondary btn-sm">Sign out</button>
-    </form>
+    <!-- Aggregate notification badge, visible on pages without the sidebar (R3-10) -->
+    <a th:if="${navbarUser != null}" class="nav-link position-relative me-3" th:href="@{/chat}"
+       id="navbar-notif" title="Notifications" aria-label="Notifications">
+      🔔
+      <span id="navbar-notif-badge"
+            class="badge bg-danger rounded-pill position-absolute top-0 start-100 translate-middle d-none">0</span>
+    </a>
+    <!-- Avatar dropdown for authenticated users -->
+    <div th:if="${navbarUser != null}" class="dropdown">
+      <a class="d-flex align-items-center text-decoration-none dropdown-toggle"
+         href="#" role="button" id="navbarUserDropdown"
+         data-bs-toggle="dropdown" aria-expanded="false">
+        <div class="d-flex align-items-center justify-content-center rounded-circle bg-secondary text-white fw-bold"
+             style="width: 36px; height: 36px; font-size: 1rem;">
+          <span th:text="${#strings.substring(navbarUser.username, 0, 1).toUpperCase()}">U</span>
+        </div>
+        <span class="ms-2 text-dark" th:text="${navbarUser.username}">username</span>
+      </a>
+      <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarUserDropdown">
+        <li><a class="dropdown-item" th:href="@{/profile}">Profile</a></li>
+        <li><a class="dropdown-item" th:href="@{/profile/sessions}">Sessions</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li>
+          <form th:action="@{/logout}" method="post" class="m-0">
+            <button type="submit" class="dropdown-item">Sign out</button>
+          </form>
+        </li>
+      </ul>
+    </div>
   </div>
 </nav>
+<script th:if="${navbarUser != null}" th:src="@{/js/navbar.js}"></script>
 </body>
 </html>

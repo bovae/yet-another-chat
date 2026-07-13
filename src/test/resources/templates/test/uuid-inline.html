@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+<script th:inline="javascript">
+  window.YAC_ROOM = {
+    id: [[${room.id.toString()}]],
+    name: [[${room.name}]],
+    nextCursor: [[${nextCursor}]],
+    hasMore: [[${hasMore}]]
+  };
+</script>
+</body>
+</html>

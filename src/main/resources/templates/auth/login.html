@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>💬</text></svg>">
   <title>Sign In - YAC</title>
   <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
   <link rel="stylesheet" th:href="@{/css/chat.css}">
@@ -28,6 +29,9 @@
             </div>
             <div th:if="${param.logout}" class="alert alert-success" role="alert">
               You have been signed out.
+            </div>
+            <div th:if="${success}" class="alert alert-success" role="alert" th:text="${success}">
+              Success
             </div>
 
             <form th:action="@{/login}" method="post">

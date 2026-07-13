@@ -30,3 +30,8 @@ file-storage/
 
 # Playwright MCP
 .playwright-mcp/
+
+# Claude Code — local per-dev config only
+.claude/settings.local.json
+
+# Jqwik PBT

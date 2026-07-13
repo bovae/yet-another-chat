@@ -1,0 +1,133 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - Room Creation Returns Empty Body
+  - **CRITICAL**: This test MUST FAIL on unfixed code — failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior — it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists
+  - **Scoped PBT Approach**: Use jqwik `@Property` to generate random valid `CreateRoomRequest` inputs (random name strings 1–100 chars, nullable descriptions, PUBLIC/PRIVATE visibility) and verify the API response
+  - Create test class `src/test/java/com/bovae/yac/property/RoomCreationBugConditionPropertyTest.java`
+  - Use `@SpringBootTest` with `@AutoConfigureMockMvc` and Testcontainers (`TestcontainersConfig`)
+  - For each generated valid request, `POST /api/rooms` with authenticated user (use `@WithMockUser` or `SecurityMockMvcRequestPostProcessors.user(...)`)
+  - Assert response status is 201
+  - Assert response body is NOT empty
+  - Assert response body contains `id` field (valid UUID)
+  - Assert response body `name` matches the request name
+  - Assert response body `description` matches the request description
+  - Assert response body `visibility` matches the request visibility
+  - _Bug_Condition: `isBugCondition(input)` where `POST /api/rooms` returns HTTP 201 with empty body AND client calls `resp.json()` on empty body_
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS because `RoomApiController.createRoom` returns `ResponseEntity<Void>` with no body — the response body assertions will fail
+  - Document counterexamples found (e.g., "POST /api/rooms with name='General' returns 201 with empty body instead of JSON with room details")
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 2.1_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Error Responses and Existing Behavior Unchanged
+  - **IMPORTANT**: Follow observation-first methodology
+  - Create test class `src/test/java/com/bovae/yac/property/RoomCreationPreservationPropertyTest.java`
+  - Use `@SpringBootTest` with `@AutoConfigureMockMvc` and Testcontainers (`TestcontainersConfig`)
+  - **Observe on UNFIXED code first:**
+    - Observe: `POST /api/rooms` with duplicate name returns 409 with `ErrorResponse` JSON containing `timestamp`, `status`, `message`, `path` fields
+    - Observe: `POST /api/rooms` with blank name returns 400 with validation error
+    - Observe: `POST /api/rooms` with null visibility returns 400 with validation error
+  - **Write property-based tests capturing observed behavior:**
+    - Property 2a: For all room names that already exist in the database, `POST /api/rooms` returns 409 with `ErrorResponse` shape (`timestamp` non-null, `status` = 409, `message` non-null, `path` = "/api/rooms")
+    - Property 2b: For all blank/empty name strings, `POST /api/rooms` returns 400 with validation error response
+    - Property 2c: For all valid room creation requests, the `RoomService.createRoom` method continues to return the saved `Room` entity (service layer preservation)
+  - Verify tests PASS on UNFIXED code (error paths and service layer are not affected by the bug)
+  - **EXPECTED OUTCOME**: Tests PASS — confirms baseline behavior to preserve
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
+
+- [x] 3. Fix for room creation empty response body and native dialog usage
+
+  - [x] 3.1 Create `CreateRoomResponse` record DTO
+    - Create `src/main/java/com/bovae/yac/model/dto/CreateRoomResponse.java`
+    - Java record with fields: `id` (UUID), `name` (String), `description` (String), `visibility` (RoomVisibility)
+    - Annotate with `@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)` for snake_case JSON serialization
+    - _Bug_Condition: isBugCondition(input) where POST /api/rooms returns empty body_
+    - _Expected_Behavior: API returns JSON body with id, name, description, visibility on 201_
+    - _Preservation: ErrorResponse shape for error cases unchanged_
+    - _Requirements: 2.1_
+
+  - [x] 3.2 Update `RoomApiController.createRoom` to return response body
+    - In `src/main/java/com/bovae/yac/controller/api/RoomApiController.java`
+    - Change return type from `ResponseEntity<Void>` to `ResponseEntity<CreateRoomResponse>`
+    - Capture the `Room` entity returned by `roomService.createRoom(...)` (currently discarded)
+    - Map `Room` to `CreateRoomResponse` record
+    - Return `ResponseEntity.status(HttpStatus.CREATED).body(response)`
+    - _Bug_Condition: isBugCondition(input) where controller returns ResponseEntity.status(201).build() with no body_
+    - _Expected_Behavior: expectedBehavior(result) — response.status == 201 AND response.body contains id, name, description, visibility_
+    - _Preservation: Error paths still throw exceptions handled by GlobalApiExceptionHandler_
+    - _Requirements: 1.1, 1.2, 2.1_
+
+  - [x] 3.3 Add error modal markup to `create.html` and replace `alert()` calls
+    - In `src/main/resources/templates/rooms/create.html`
+    - Add Bootstrap error modal (`#errorModal`) markup before `</body>`, following the same structure as modals in `admin-modals.html` (modal-dialog, modal-content, modal-header with title, modal-body with `#errorModalMessage` for dynamic text, modal-footer with close button)
+    - In the inline `<script>`, replace `alert(data.message || 'Failed to create room')` with code that sets `#errorModalMessage` text and shows the modal via `new bootstrap.Modal(document.getElementById('errorModal')).show()`
+    - Replace the `.catch()` handler's `alert('Failed to create room')` with the same modal approach
+    - _Bug_Condition: isBugCondition(input) where feedback is displayed via native alert()_
+    - _Expected_Behavior: Error messages shown in Bootstrap modal consistent with app design_
+    - _Preservation: Existing deleteRoomModal in admin-modals.html unchanged_
+    - _Requirements: 1.3, 2.2_
+
+  - [x] 3.4 Add `showErrorModal()` and `showConfirmModal()` utility functions to `app.js`
+    - In `src/main/resources/static/js/app.js`
+    - Add `showErrorModal(message)` function inside the IIFE: finds `#errorModal`, sets `#errorModalMessage` text content, shows via `new bootstrap.Modal(...)`.show()
+    - Add `showConfirmModal(message, onConfirm)` function: finds `#confirmModal`, sets `#confirmModalMessage` text content, wires the confirm button's click handler to call `onConfirm` callback then hide the modal, shows via `new bootstrap.Modal(...)`.show()
+    - Expose both functions on `window` so they are accessible from inline scripts and other modules
+    - _Bug_Condition: isBugCondition(input) where admin actions use native alert()/confirm()_
+    - _Expected_Behavior: Reusable modal utilities replace all native dialog calls_
+    - _Preservation: No changes to existing function signatures or success-path behavior_
+    - _Requirements: 2.2, 2.3, 2.4, 2.5_
+
+  - [x] 3.5 Replace all `alert()`/`confirm()` calls in `app.js` with modal utilities
+    - In `src/main/resources/static/js/app.js`
+    - `kickMember`: Replace `confirm('Remove ' + username + ' from this room?')` with `showConfirmModal(message, callback)` where callback performs the fetch; replace `alert(err.message || 'Failed to remove member')` with `showErrorModal(message)`
+    - `banMember`: Replace `confirm('Ban ' + username + ' from this room?')` with `showConfirmModal(message, callback)`; replace `alert(err.message || 'Failed to ban member')` with `showErrorModal(message)`
+    - `promoteToAdmin`: Replace `alert(err.message || 'Failed to promote member')` with `showErrorModal(message)`
+    - `demoteToMember`: Replace `alert(err.message || 'Failed to demote member')` with `showErrorModal(message)`
+    - `deleteRoom`: Replace `alert(err.message || 'Failed to delete room')` with `showErrorModal(message)`
+    - Ensure successful kick/ban still calls `window.location.reload()` (preservation)
+    - Ensure successful promote/demote still calls `window.location.reload()` (preservation)
+    - Ensure successful delete room still redirects to `/chat` (preservation)
+    - Ensure `sendInvitation` continues to use inline `#invite-feedback` (no change needed)
+    - _Bug_Condition: isBugCondition(input) where action IN [kick, ban, promote, demote, delete-room] AND feedback via native alert()/confirm()_
+    - _Expected_Behavior: Bootstrap modals for all confirmation and error feedback_
+    - _Preservation: Success paths (reload, redirect, inline feedback) unchanged_
+    - _Requirements: 1.4, 1.5, 1.6, 2.3, 2.4, 2.5, 3.2, 3.3, 3.4, 3.5_
+
+  - [x] 3.6 Add confirmation and error modal markup to chat room page
+    - In `src/main/resources/templates/chat/room.html` (or as a new Thymeleaf fragment)
+    - Add Bootstrap confirmation modal (`#confirmModal`) with `#confirmModalMessage` body text, Cancel button (`data-bs-dismiss="modal"`), and Confirm button (`#confirmModalConfirmBtn`)
+    - Add Bootstrap error modal (`#errorModal`) with `#errorModalMessage` body text and Close button
+    - Place alongside the existing `admin-modals` include so `app.js` can reference them
+    - _Bug_Condition: isBugCondition(input) where modals are missing from the page_
+    - _Expected_Behavior: Modal markup present on chat room page for app.js utilities to use_
+    - _Preservation: Existing deleteRoomModal, inviteModal, bannedUsersModal unchanged_
+    - _Requirements: 2.3, 2.4, 2.5, 3.6_
+
+  - [x] 3.7 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Room Creation Returns JSON Body
+    - **IMPORTANT**: Re-run the SAME test from task 1 — do NOT write a new test
+    - The test from task 1 encodes the expected behavior (201 with JSON body containing id, name, description, visibility)
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed — API now returns JSON body)
+    - _Requirements: 2.1_
+
+  - [x] 3.8 Verify preservation tests still pass
+    - **Property 2: Preservation** - Error Responses and Existing Behavior Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 — do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions — error responses still use ErrorResponse shape, service layer unchanged)
+    - Confirm all tests still pass after fix (no regressions)
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run full test suite (`./mvnw verify`) to ensure no regressions
+  - Verify bug condition exploration test passes (Property 1)
+  - Verify preservation property tests pass (Property 2)
+  - Verify existing integration tests in `RestApiIntegrationTest` still pass
+  - Ensure all tests pass, ask the user if questions arise

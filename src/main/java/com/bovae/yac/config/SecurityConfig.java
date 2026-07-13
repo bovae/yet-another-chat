@@ -2,8 +2,8 @@ package com.bovae.yac.config;
 
 import java.time.Duration;
 
+import com.bovae.yac.config.properties.SecurityProperties;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,8 +17,8 @@ import org.springframework.security.web.SecurityFilterChain;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    @Value("${app.security.remember-me-key}")
-    private final String rememberMeKey;
+    private final SecurityProperties securityProperties;
+    private final LoginSuccessHandler loginSuccessHandler;
 
     @Bean
     PasswordEncoder passwordEncoder() {
@@ -30,22 +30,24 @@ public class SecurityConfig {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/", "/login", "/register", "/forgot-password",
+                                "/", "/login", "/register", "/forgot-password", "/reset-password",
                                 "/css/**", "/js/**", "/webjars/**",
-                                "/api/health", "/actuator/health"
+                                "/api/health", "/actuator/health",
+                                "/api/password/reset", "/api/password/reset-request",
+                                "/ws/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
                         .loginPage("/login")
                         .loginProcessingUrl("/login")
-                        .defaultSuccessUrl("/chat", true)
+                        .successHandler(loginSuccessHandler)
                         .failureUrl("/login?error=true")
                         .usernameParameter("email")
                         .permitAll()
                 )
                 .rememberMe(remember -> remember
-                        .key(rememberMeKey)
+                        .key(securityProperties.rememberMeKey())
                         .tokenValiditySeconds((int) Duration.ofDays(30).toSeconds())
                         .rememberMeParameter("remember-me")
                 )

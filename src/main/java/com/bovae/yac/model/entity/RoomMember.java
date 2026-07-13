@@ -13,7 +13,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -21,13 +20,13 @@ import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(exclude = {"room", "user"})
 @Entity
 @Table(name = "room_members")
@@ -35,13 +34,11 @@ import java.time.Instant;
 public class RoomMember {
 
     @Id
-    @EqualsAndHashCode.Include
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "room_id", nullable = false)
     private Room room;
 
     @Id
-    @EqualsAndHashCode.Include
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
@@ -53,4 +50,25 @@ public class RoomMember {
     @CreationTimestamp
     @Column(name = "joined_at", nullable = false, updatable = false)
     private Instant joinedAt;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof RoomMember other)) {
+            return false;
+        }
+        UUID roomId = room == null ? null : room.getId();
+        UUID userId = user == null ? null : user.getId();
+        UUID otherRoomId = other.room == null ? null : other.room.getId();
+        UUID otherUserId = other.user == null ? null : other.user.getId();
+        return roomId != null && userId != null
+                && roomId.equals(otherRoomId) && userId.equals(otherUserId);
+    }
+
+    @Override
+    public int hashCode() {
+        return RoomMember.class.hashCode();
+    }
 }

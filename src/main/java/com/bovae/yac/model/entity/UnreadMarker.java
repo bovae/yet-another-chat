@@ -10,40 +10,55 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+
+import java.util.UUID;
 
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = {"user", "room", "lastReadMessage"})
+@ToString(exclude = {"user", "room"})
 @Entity
 @Table(name = "unread_markers")
 @IdClass(UnreadMarkerId.class)
 public class UnreadMarker {
 
     @Id
-    @EqualsAndHashCode.Include
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
     @Id
-    @EqualsAndHashCode.Include
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "room_id", nullable = false)
     private Room room;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "last_read_message_id")
-    private Message lastReadMessage;
+    @Column(name = "last_read_watermark")
+    private Long lastReadWatermark;
 
-    @Column(name = "unread_count", nullable = false)
-    private int unreadCount;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof UnreadMarker other)) {
+            return false;
+        }
+        UUID roomId = room == null ? null : room.getId();
+        UUID userId = user == null ? null : user.getId();
+        UUID otherRoomId = other.room == null ? null : other.room.getId();
+        UUID otherUserId = other.user == null ? null : other.user.getId();
+        return roomId != null && userId != null
+                && roomId.equals(otherRoomId) && userId.equals(otherUserId);
+    }
+
+    @Override
+    public int hashCode() {
+        return UnreadMarker.class.hashCode();
+    }
 }

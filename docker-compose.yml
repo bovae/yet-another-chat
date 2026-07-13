@@ -4,6 +4,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      SPRING_PROFILES_ACTIVE: dev
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: yac
@@ -13,11 +14,15 @@ services:
       REDIS_PORT: 6379
       REMEMBER_ME_KEY: change-me-in-production
       FILE_STORAGE_PATH: /app/file-storage
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     volumes:
       - file-storage:/app/file-storage
 
@@ -46,6 +51,12 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+      - "1025:1025"
 
 volumes:
   pgdata:
