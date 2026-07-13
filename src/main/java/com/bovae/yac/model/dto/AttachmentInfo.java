@@ -6,6 +6,7 @@ public record AttachmentInfo(
         UUID id,
         String originalFileName,
         String contentType,
-        long fileSize
+        long fileSize,
+        String comment
 ) {
 }

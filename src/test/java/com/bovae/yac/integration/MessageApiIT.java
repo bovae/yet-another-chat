@@ -161,33 +161,33 @@ class MessageApiIT {
         messageService.sendMessage(room, userA, "Message 2", null);
         messageService.sendMessage(room, userB, "Message 3", null);
 
-        // First page: size=2, no cursor
+        // Initial page opens on the NEWEST messages, rendered oldest-first (R1-01).
         mockMvc.perform(get("/api/rooms/{roomId}/messages", room.getId())
                         .with(user(userA.getEmail()).roles("USER"))
                         .param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.messages", hasSize(2)))
-                .andExpect(jsonPath("$.has_more", is(true)))
+                .andExpect(jsonPath("$.has_more", is(true))) // Message 1 is older
                 .andExpect(jsonPath("$.next_cursor", notNullValue()))
-                .andExpect(jsonPath("$.messages[0].content", is("Message 1")))
-                .andExpect(jsonPath("$.messages[1].content", is("Message 2")));
+                .andExpect(jsonPath("$.messages[0].content", is("Message 2")))
+                .andExpect(jsonPath("$.messages[1].content", is("Message 3")));
     }
 
     @Test
-    void getMessages_secondPage_usesNextCursor() throws Exception {
+    void getMessages_loadOlder_usesBeforeCursor() throws Exception {
         messageService.sendMessage(room, userA, "Message 1", null);
         Message msg2 = messageService.sendMessage(room, userA, "Message 2", null);
         messageService.sendMessage(room, userB, "Message 3", null);
 
-        // Second page: cursor = watermark of message 2, size=2
+        // "Load older": before = watermark of message 2 → returns only message 1 (R1-02).
         mockMvc.perform(get("/api/rooms/{roomId}/messages", room.getId())
                         .with(user(userA.getEmail()).roles("USER"))
-                        .param("cursor", msg2.getWatermark().toString())
+                        .param("before", msg2.getWatermark().toString())
                         .param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.messages", hasSize(1)))
                 .andExpect(jsonPath("$.has_more", is(false)))
-                .andExpect(jsonPath("$.messages[0].content", is("Message 3")));
+                .andExpect(jsonPath("$.messages[0].content", is("Message 1")));
     }
 
     @Test

@@ -5,3 +5,7 @@ databaseChangeLog:
       file: db/changelog/migrations/002-schema-changes.sql
   - include:
       file: db/changelog/migrations/003-add-original-reply-to-id.sql
+  - include:
+      file: db/changelog/migrations/004-schema-hardening.sql
+  - include:
+      file: db/changelog/migrations/005-dev-seed-data.sql

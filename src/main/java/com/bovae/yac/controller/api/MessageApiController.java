@@ -11,7 +11,9 @@ import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.MessageRepository;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.MessageBroadcastService;
 import com.bovae.yac.service.MessageService;
+import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -40,7 +42,9 @@ import java.util.UUID;
 public class MessageApiController {
 
     private final MessageService messageService;
+    private final MessageBroadcastService messageBroadcastService;
     private final RoomService roomService;
+    private final RoomMemberService roomMemberService;
     private final UserRepository userRepository;
     private final MessageRepository messageRepository;
     private final SimpMessagingTemplate messagingTemplate;
@@ -48,14 +52,19 @@ public class MessageApiController {
     @GetMapping
     public ResponseEntity<MessagePage> getMessages(
             @PathVariable UUID roomId,
-            @RequestParam(required = false) Long cursor,
+            @RequestParam(required = false) Long before,
+            @RequestParam(required = false) Long after,
             @RequestParam(defaultValue = "50") int size,
             Principal principal) {
-        resolveUser(principal);
+        User user = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
+        roomMemberService.requireCanRead(room, user); // R1-08
 
         int effectiveSize = Math.min(Math.max(size, 1), 100);
-        MessagePage page = messageService.getMessageHistory(room, cursor, effectiveSize);
+        // `after` = ascending reconnect catch-up; otherwise `before` = backward pagination (newest by default).
+        MessagePage page = (after != null)
+                ? messageService.getMessagesSince(room, after, effectiveSize)
+                : messageService.getMessageHistory(room, before, effectiveSize);
 
         return ResponseEntity.ok(page);
     }
@@ -78,6 +87,8 @@ public class MessageApiController {
         Message message = messageService.sendMessage(room, user, request.content(), replyTo);
 
         ChatMessageResponse response = toResponse(message);
+        // REST sends broadcast through the same path as WS sends so viewers see them live (R1-03).
+        messageBroadcastService.broadcastNewMessage(room, user, response);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -88,9 +99,12 @@ public class MessageApiController {
             @Valid @RequestBody EditMessageRequest request,
             Principal principal) {
         User user = resolveUser(principal);
-        roomService.getRoomById(roomId);
+        Room room = roomService.getRoomById(roomId);
 
         Message message = messageService.editMessage(id, user, request.content());
+
+        // Broadcast the edit so viewers update in place instead of dropping it as a duplicate (R1-04).
+        messageBroadcastService.broadcastEdit(room, message.getId(), message.getContent());
 
         return ResponseEntity.ok(toResponse(message));
     }
@@ -108,6 +122,9 @@ public class MessageApiController {
         MessageDeletedEvent event = MessageDeletedEvent.of(id, roomId, user.getId());
         messagingTemplate.convertAndSend("/topic/room." + roomId, event);
 
+        // Deleting a message can change unread counts, so recompute and re-fan-out (R1-57).
+        messageBroadcastService.recomputeUnread(room);
+
         return ResponseEntity.noContent().build();
     }
 
@@ -123,17 +140,18 @@ public class MessageApiController {
         String replyToContentSnippet = null;
 
         if (replyTo != null) {
-            replyToSenderUsername = replyTo.getSender().getUsername();
+            replyToSenderUsername = replyTo.getSender() != null ? replyTo.getSender().getUsername() : "Deleted user";
             String content = replyTo.getContent();
             replyToContentSnippet = content.length() > 100 ? content.substring(0, 100) : content;
         }
 
+        User sender = message.getSender();
         return new ChatMessageResponse(
                 message.getId(),
                 message.getRoom().getId(),
-                message.getSender().getId(),
-                message.getSender().getUsername(),
-                message.getSender().getDisplayName(),
+                sender != null ? sender.getId() : null,
+                sender != null ? sender.getUsername() : "Deleted user",
+                sender != null ? sender.getDisplayName() : null,
                 message.getContent(),
                 replyTo != null ? replyTo.getId() : null,
                 replyToSenderUsername,

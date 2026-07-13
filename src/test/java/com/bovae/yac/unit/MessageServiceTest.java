@@ -11,6 +11,8 @@ import com.bovae.yac.repository.MessageRepository;
 import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
+import com.bovae.yac.service.FileStorageService;
+import com.bovae.yac.service.FriendshipService;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.UserBanService;
@@ -58,6 +60,9 @@ class MessageServiceTest {
     private UserBanService userBanService;
 
     @Mock
+    private FriendshipService friendshipService;
+
+    @Mock
     private RoomMemberRepository roomMemberRepository;
 
     @Mock
@@ -65,6 +70,9 @@ class MessageServiceTest {
 
     @Mock
     private RoomBanRepository roomBanRepository;
+
+    @Mock
+    private FileStorageService fileStorageService;
 
     @InjectMocks
     private MessageService messageService;
@@ -105,7 +113,9 @@ class MessageServiceTest {
     @Test
     void sendMessage_persistsMessageWithCorrectWatermarkAndIncrementsRoomWatermark() {
         when(roomMemberService.isMember(room, sender)).thenReturn(true);
-        when(roomRepository.save(room)).thenReturn(room);
+        // Atomic reservation: incrementWatermark bumps 5 -> 6, nextWatermarkOf returns 6,
+        // and the allocated watermark is that value minus one (5).
+        when(roomRepository.nextWatermarkOf(room.getId())).thenReturn(6L);
         when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> {
             Message m = invocation.getArgument(0);
             m.setId(UUID.randomUUID());
@@ -113,22 +123,22 @@ class MessageServiceTest {
             return m;
         });
 
-        Long originalWatermark = room.getNextWatermark(); // 5
+        long expectedWatermark = room.getNextWatermark(); // 5
 
         Message result = messageService.sendMessage(room, sender, "Hello world", null);
 
-        assertThat(result.getWatermark()).isEqualTo(originalWatermark);
-        assertThat(room.getNextWatermark()).isEqualTo(originalWatermark + 1);
+        assertThat(result.getWatermark()).isEqualTo(expectedWatermark);
         assertThat(result.getContent()).isEqualTo("Hello world");
         assertThat(result.getSender()).isEqualTo(sender);
         assertThat(result.getRoom()).isEqualTo(room);
         assertThat(result.isEdited()).isFalse();
 
-        verify(roomRepository).save(room);
+        // Watermark is reserved via the atomic native increment, not by mutating the entity.
+        verify(roomRepository).incrementWatermark(room.getId());
 
         ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
         verify(messageRepository).save(captor.capture());
-        assertThat(captor.getValue().getWatermark()).isEqualTo(originalWatermark);
+        assertThat(captor.getValue().getWatermark()).isEqualTo(expectedWatermark);
     }
 
     /**
@@ -180,6 +190,8 @@ class MessageServiceTest {
                 .build();
 
         when(messageRepository.findByIdWithSenderAndReplyTo(messageId)).thenReturn(Optional.of(existingMessage));
+        // Editing enforces the same send-time access guard (R1-27).
+        when(roomMemberService.isMember(room, sender)).thenReturn(true);
         when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Message result = messageService.editMessage(messageId, sender, "Updated content");
@@ -237,8 +249,9 @@ class MessageServiceTest {
     }
 
     /**
-     * Validates CP 23: getMessageHistory returns messages ordered by watermark
-     * with correct cursor pagination.
+     * Validates CP 23: getMessageHistory is backward pagination — it returns the newest page
+     * (before == null), rendered oldest-first, with hasMore meaning older messages still exist
+     * and nextCursor being the oldest returned watermark (the next {@code before}).
      */
     @Test
     void getMessageHistory_returnsPaginatedMessagesOrderedByWatermark() {
@@ -275,17 +288,19 @@ class MessageServiceTest {
                 .build();
         msg3.setCreatedAt(Instant.now().minusSeconds(10));
 
-        // Return size+1 messages to indicate hasMore=true
-        when(messageRepository.findByRoomAndWatermarkGreaterThanWithFetches(
-                eq(room), eq(0L), any(PageRequest.class)))
-                .thenReturn(List.of(msg1, msg2, msg3));
+        // Backward query returns newest-first; size+1 rows signal that older messages remain.
+        when(messageRepository.findByRoomAndWatermarkLessThanWithFetches(
+                eq(room), eq(Long.MAX_VALUE), any(PageRequest.class)))
+                .thenReturn(List.of(msg3, msg2, msg1));
 
         MessagePage page = messageService.getMessageHistory(room, null, pageSize);
 
         assertThat(page.hasMore()).isTrue();
         assertThat(page.messages()).hasSize(pageSize);
+        // nextCursor is the oldest returned watermark — the `before` cursor for the next page.
         assertThat(page.nextCursor()).isEqualTo(2L);
-        assertThat(page.messages().get(0).watermark()).isEqualTo(1L);
-        assertThat(page.messages().get(1).watermark()).isEqualTo(2L);
+        // Rendered oldest-first.
+        assertThat(page.messages().get(0).watermark()).isEqualTo(2L);
+        assertThat(page.messages().get(1).watermark()).isEqualTo(3L);
     }
 }

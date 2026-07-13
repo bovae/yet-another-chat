@@ -44,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Import(TestcontainersConfig.class)
 @Transactional
-class RestApiIntegrationTest {
+class RestApiIT {
 
     @Autowired
     private MockMvc mockMvc;
@@ -233,7 +233,7 @@ class RestApiIntegrationTest {
                     .andExpect(status().isCreated());
         }
 
-        // Get first page (size=2)
+        // First page opens on the newest 2 messages; older ones exist (R1-01).
         MvcResult page1 = mockMvc.perform(get("/api/rooms/{roomId}/messages", room.getId())
                         .with(user(userA.getEmail()).roles("USER"))
                         .param("size", "2"))
@@ -243,26 +243,26 @@ class RestApiIntegrationTest {
                 .andExpect(jsonPath("$.next_cursor", notNullValue()))
                 .andReturn();
 
-        Integer nextCursor = com.jayway.jsonpath.JsonPath.read(
+        Integer before1 = com.jayway.jsonpath.JsonPath.read(
                 page1.getResponse().getContentAsString(), "$.next_cursor");
 
-        // Get second page using cursor
+        // Load older via the before cursor (R1-02).
         MvcResult page2 = mockMvc.perform(get("/api/rooms/{roomId}/messages", room.getId())
                         .with(user(userA.getEmail()).roles("USER"))
-                        .param("cursor", String.valueOf(nextCursor))
+                        .param("before", String.valueOf(before1))
                         .param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.messages", hasSize(2)))
                 .andExpect(jsonPath("$.has_more", is(true)))
                 .andReturn();
 
-        Integer cursor2 = com.jayway.jsonpath.JsonPath.read(
+        Integer before2 = com.jayway.jsonpath.JsonPath.read(
                 page2.getResponse().getContentAsString(), "$.next_cursor");
 
-        // Get third page — should have 1 message and hasMore=false
+        // Oldest page — 1 message remaining, nothing older.
         mockMvc.perform(get("/api/rooms/{roomId}/messages", room.getId())
                         .with(user(userA.getEmail()).roles("USER"))
-                        .param("cursor", String.valueOf(cursor2))
+                        .param("before", String.valueOf(before2))
                         .param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.messages", hasSize(1)))

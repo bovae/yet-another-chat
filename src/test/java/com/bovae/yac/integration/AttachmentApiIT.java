@@ -31,6 +31,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -110,7 +111,8 @@ class AttachmentApiIT {
     }
 
     @Test
-    void uploadFile_byAnotherMember_returns201() throws Exception {
+    void uploadFile_toAnotherUsersMessage_returns403() throws Exception {
+        // userB is a member but the message is authored by userA — attachments are author-bound (R1-32).
         MockMultipartFile file = new MockMultipartFile(
                 "file", "notes.txt", MediaType.TEXT_PLAIN_VALUE, "some notes".getBytes());
 
@@ -119,7 +121,7 @@ class AttachmentApiIT {
                         .param("messageId", message.getId().toString())
                         .with(user(userB.getEmail()).roles("USER"))
                         .with(csrf()))
-                .andExpect(status().isCreated());
+                .andExpect(status().isForbidden());
     }
 
     // ---- File download ----
@@ -142,8 +144,31 @@ class AttachmentApiIT {
         mockMvc.perform(get("/api/rooms/{roomId}/attachments/{id}/download", room.getId(), attachment.getId())
                         .with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
-                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"download-me.txt\""));
+                // Non-image download is always attachment disposition with the encoded filename (R1-13, R1-33, R1-54).
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("download-me.txt")));
+    }
+
+    @Test
+    void downloadImage_servedAsAttachmentNotInline() throws Exception {
+        // A PNG (magic bytes) is stored as image/* but still downloaded, never inline (R1-13, R1-54).
+        byte[] png = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0};
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "pic.png", "image/png", png);
+
+        mockMvc.perform(multipart("/api/rooms/{roomId}/attachments", room.getId())
+                        .file(file)
+                        .param("messageId", message.getId().toString())
+                        .with(user(userA.getEmail()).roles("USER"))
+                        .with(csrf()))
+                .andExpect(status().isCreated());
+
+        Attachment attachment = attachmentRepository.findByRoom(room).getFirst();
+
+        mockMvc.perform(get("/api/rooms/{roomId}/attachments/{id}/download", room.getId(), attachment.getId())
+                        .with(user(userA.getEmail()).roles("USER")))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")));
     }
 
     // ---- Non-member access denial ----
@@ -162,21 +187,24 @@ class AttachmentApiIT {
     }
 
     @Test
-    void downloadFile_asNonMember_returns403() throws Exception {
-        // Upload a file as a member first
+    void downloadFile_fromPrivateRoomAsNonMember_returns403() throws Exception {
+        // Non-members can read PUBLIC rooms, so an IDOR test must use a PRIVATE room (R1-15).
+        Room privateRoom = roomService.getRoomById(
+                roomService.createRoom("attach-private", "desc", RoomVisibility.PRIVATE, userA).id());
+        Message privateMsg = messageService.sendMessage(privateRoom, userA, "private msg", null);
+
         MockMultipartFile file = new MockMultipartFile(
                 "file", "private.txt", MediaType.TEXT_PLAIN_VALUE, "private content".getBytes());
-
-        mockMvc.perform(multipart("/api/rooms/{roomId}/attachments", room.getId())
+        mockMvc.perform(multipart("/api/rooms/{roomId}/attachments", privateRoom.getId())
                         .file(file)
-                        .param("messageId", message.getId().toString())
+                        .param("messageId", privateMsg.getId().toString())
                         .with(user(userA.getEmail()).roles("USER"))
                         .with(csrf()))
                 .andExpect(status().isCreated());
 
-        Attachment attachment = attachmentRepository.findByRoom(room).getFirst();
+        Attachment attachment = attachmentRepository.findByRoom(privateRoom).getFirst();
 
-        mockMvc.perform(get("/api/rooms/{roomId}/attachments/{id}/download", room.getId(), attachment.getId())
+        mockMvc.perform(get("/api/rooms/{roomId}/attachments/{id}/download", privateRoom.getId(), attachment.getId())
                         .with(user(nonMember.getEmail()).roles("USER")))
                 .andExpect(status().isForbidden());
     }

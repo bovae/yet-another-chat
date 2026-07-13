@@ -30,6 +30,7 @@ public class RoomMemberService {
     private final RoomBanRepository roomBanRepository;
     private final RoomInvitationRepository roomInvitationRepository;
     private final RoomMemberMapper roomMemberMapper;
+    private final NotificationService notificationService;
 
     @Transactional
     public RoomMember joinPublicRoom(Room room, User user) {
@@ -53,6 +54,13 @@ public class RoomMemberService {
 
         member = roomMemberRepository.save(member);
 
+        // Re-check the ban in-transaction to close the join/ban race (R1-69).
+        if (roomBanRepository.existsByRoomAndUser(room, user)) {
+            throw new ForbiddenException("User is banned from this room");
+        }
+
+        notificationService.ensureMarker(user, room);
+
         LOG.info("User joined public room: userId={}, roomId={}", user.getId(), room.getId());
 
         return member;
@@ -62,6 +70,11 @@ public class RoomMemberService {
     public RoomMember joinPrivateRoomViaInvitation(Room room, User user) {
         RoomInvitation invitation = roomInvitationRepository.findByRoomAndInvitee(room, user)
                 .orElseThrow(() -> new ForbiddenException("No invitation found for this user and room"));
+
+        // A banned user cannot rejoin even with an invitation (R1-17).
+        if (roomBanRepository.existsByRoomAndUser(room, user)) {
+            throw new ForbiddenException("User is banned from this room");
+        }
 
         if (roomMemberRepository.existsByRoomAndUser(room, user)) {
             throw new ConflictException("User is already a member of this room");
@@ -74,7 +87,14 @@ public class RoomMemberService {
                 .build();
 
         member = roomMemberRepository.save(member);
+
+        // Re-check the ban in-transaction to close the join/ban race (R1-69).
+        if (roomBanRepository.existsByRoomAndUser(room, user)) {
+            throw new ForbiddenException("User is banned from this room");
+        }
+
         roomInvitationRepository.delete(invitation);
+        notificationService.ensureMarker(user, room);
 
         LOG.info("User joined private room via invitation: userId={}, roomId={}", user.getId(), room.getId());
 
@@ -106,5 +126,18 @@ public class RoomMemberService {
 
     public boolean isMember(Room room, User user) {
         return roomMemberRepository.existsByRoomAndUser(room, user);
+    }
+
+    /**
+     * Shared read-access guard (design D5): non-members may read only PUBLIC rooms, and a
+     * room-banned user loses access entirely (R1-08, R1-56). Mirrors {@code ChatWebController.roomView}.
+     */
+    public void requireCanRead(Room room, User user) {
+        if (roomBanRepository.existsByRoomAndUser(room, user)) {
+            throw new ForbiddenException("You are banned from this room");
+        }
+        if (room.getVisibility() != RoomVisibility.PUBLIC && !isMember(room, user)) {
+            throw new ForbiddenException("Access denied to this room");
+        }
     }
 }

@@ -16,20 +16,20 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link PresenceService}.
- *
- * <p>Validates Correctness Property: CP 9.
- * <p>Requirements: 5.8, 5.9, 5.10.
+ * Unit tests for the per-session presence model (R1-38 … R1-63): a status is the aggregate over
+ * live sessions — ONLINE if any is active within the idle window, AFK if only idle, OFFLINE when none.
  */
 @ExtendWith(MockitoExtension.class)
 class PresenceServiceTest {
@@ -52,11 +52,11 @@ class PresenceServiceTest {
     private User user;
     private UUID userId;
     private String presenceKey;
+
     @BeforeEach
     void setUp() {
         userId = UUID.randomUUID();
         presenceKey = "presence:" + userId;
-
         user = User.builder()
                 .id(userId)
                 .email("testuser@test.com")
@@ -64,91 +64,51 @@ class PresenceServiceTest {
                 .passwordHash("$2a$10$hash")
                 .build();
 
-        when(stringRedisTemplate.opsForHash()).thenReturn(hashOperations);
+        lenient().when(stringRedisTemplate.opsForHash()).thenReturn(hashOperations);
+        lenient().when(userRepository.findById(userId)).thenReturn(Optional.of(user));
     }
 
-    // -----------------------------------------------------------------------
-    // recordHeartbeat with active=true results in ONLINE status (CP 9)
-    // -----------------------------------------------------------------------
-
-    /**
-     * Validates CP 9, Requirement 5.8: recordHeartbeat with active=true
-     * stores the heartbeat in Redis and results in ONLINE status.
-     */
     @Test
-    void recordHeartbeat_activeTrue_resultsInOnlineStatus() {
-        // Stub the hash get calls that computeStatus will make after the put
-        String nowMillis = String.valueOf(Instant.now().toEpochMilli());
-        when(hashOperations.get(presenceKey, "lastHeartbeat")).thenReturn(nowMillis);
-        when(hashOperations.get(presenceKey, "active")).thenReturn("true");
+    void recordHeartbeat_storesSessionAndRefreshesTtl() {
+        when(hashOperations.entries(presenceKey)).thenReturn(Map.of());
 
-        // Stub userRepository for broadcast
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        presenceService.recordHeartbeat(userId, "s1", true);
 
-        presenceService.recordHeartbeat(userId, true);
-
-        // Verify heartbeat was stored in Redis
-        verify(hashOperations).put(eq(presenceKey), eq("lastHeartbeat"), anyString());
-        verify(hashOperations).put(eq(presenceKey), eq("active"), eq("true"));
-        verify(stringRedisTemplate).expire(eq(presenceKey), eq(Duration.ofSeconds(45)));
-
-        // Verify computed status is ONLINE
-        PresenceStatus status = presenceService.computeStatus(userId);
-        assertThat(status).isEqualTo(PresenceStatus.ONLINE);
+        verify(hashOperations).put(eq(presenceKey), eq("s1"), anyString());
+        verify(stringRedisTemplate).expire(eq(presenceKey), eq(Duration.ofSeconds(90)));
     }
 
-    // -----------------------------------------------------------------------
-    // recordHeartbeat with active=false results in AFK status (CP 9)
-    // -----------------------------------------------------------------------
-
-    /**
-     * Validates CP 9, Requirement 5.9: recordHeartbeat with active=false
-     * stores the heartbeat in Redis and results in AFK status.
-     */
     @Test
-    void recordHeartbeat_activeFalse_resultsInAfkStatus() {
-        // Stub the hash get calls that computeStatus will make after the put
-        String nowMillis = String.valueOf(Instant.now().toEpochMilli());
-        when(hashOperations.get(presenceKey, "lastHeartbeat")).thenReturn(nowMillis);
-        when(hashOperations.get(presenceKey, "active")).thenReturn("false");
+    void computeStatus_recentActiveSession_isOnline() {
+        long now = Instant.now().toEpochMilli();
+        when(hashOperations.entries(presenceKey)).thenReturn(Map.of("s1", now + ":" + now));
 
-        // Stub userRepository for broadcast
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-
-        presenceService.recordHeartbeat(userId, false);
-
-        // Verify heartbeat was stored in Redis
-        verify(hashOperations).put(eq(presenceKey), eq("lastHeartbeat"), anyString());
-        verify(hashOperations).put(eq(presenceKey), eq("active"), eq("false"));
-        verify(stringRedisTemplate).expire(eq(presenceKey), eq(Duration.ofSeconds(45)));
-
-        // Verify computed status is AFK
-        PresenceStatus status = presenceService.computeStatus(userId);
-        assertThat(status).isEqualTo(PresenceStatus.AFK);
+        assertThat(presenceService.computeStatus(userId)).isEqualTo(PresenceStatus.ONLINE);
     }
 
-    // -----------------------------------------------------------------------
-    // removePresence results in OFFLINE status (CP 9)
-    // -----------------------------------------------------------------------
-
-    /**
-     * Validates CP 9, Requirement 5.10: removePresence deletes the Redis key
-     * and results in OFFLINE status.
-     */
     @Test
-    void removePresence_resultsInOfflineStatus() {
-        // Stub userRepository for broadcast (removePresence calls broadcastIfChanged)
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+    void computeStatus_liveButIdlePastThreshold_isAfk() {
+        long now = Instant.now().toEpochMilli();
+        // Live session (recent heartbeat) but last active > 60s ago.
+        when(hashOperations.entries(presenceKey)).thenReturn(Map.of("s1", now + ":" + (now - 70_000)));
 
-        presenceService.removePresence(userId);
+        assertThat(presenceService.computeStatus(userId)).isEqualTo(PresenceStatus.AFK);
+    }
 
-        // Verify the Redis key was deleted
+    @Test
+    void computeStatus_noSessions_isOffline() {
+        when(hashOperations.entries(presenceKey)).thenReturn(Map.of());
+
+        assertThat(presenceService.computeStatus(userId)).isEqualTo(PresenceStatus.OFFLINE);
+    }
+
+    @Test
+    void removeSession_lastSession_deletesKey() {
+        when(hashOperations.size(presenceKey)).thenReturn(0L);
+
+        presenceService.removeSession(userId, "s1");
+
+        verify(hashOperations).delete(presenceKey, "s1");
         verify(stringRedisTemplate).delete(presenceKey);
-
-        // After removal, computeStatus should return OFFLINE (no data in Redis)
-        when(hashOperations.get(presenceKey, "lastHeartbeat")).thenReturn(null);
-
-        PresenceStatus status = presenceService.computeStatus(userId);
-        assertThat(status).isEqualTo(PresenceStatus.OFFLINE);
     }
 }

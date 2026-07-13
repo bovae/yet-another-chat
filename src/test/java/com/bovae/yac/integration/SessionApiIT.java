@@ -118,12 +118,12 @@ class SessionApiIT {
     }
 
     @Test
-    void terminateSession_nonExistentId_returns204() throws Exception {
-        // Terminating a non-existent session is a no-op (deleteById is idempotent)
+    void terminateSession_nonExistentId_returns404() throws Exception {
+        // A session id the caller doesn't own (including non-existent) is rejected with 404 (R1-11).
         mockMvc.perform(delete("/api/sessions/{id}", "non-existent-session-id")
                         .with(user(userA.getEmail()).roles("USER"))
                         .with(csrf()))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isNotFound());
     }
 
     @Test

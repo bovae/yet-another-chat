@@ -14,13 +14,13 @@ import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UnreadMarkerRepository;
 import com.bovae.yac.repository.UserBanRepository;
 import com.bovae.yac.repository.UserRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -43,6 +43,7 @@ public class UserService {
     private final RoomService roomService;
     private final UserMapper userMapper;
 
+    @Transactional
     public UserDto register(String email, String username, String password) {
         if (userRepository.existsByEmail(email)) {
             throw new ConflictException("Email is already taken");
@@ -62,6 +63,7 @@ public class UserService {
         return userMapper.toDto(saved);
     }
 
+    @Transactional
     public UserDto updateProfile(UUID userId, String displayName, String username) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(userId)));
@@ -112,10 +114,12 @@ public class UserService {
         LOG.info("Account deleted for user: username={}", user.getUsername());
     }
 
+    @Transactional(readOnly = true)
     public Optional<UserDto> findByUsername(String username) {
         return userRepository.findByUsername(username).map(userMapper::toDto);
     }
 
+    @Transactional(readOnly = true)
     public UserDto getById(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(userId)));

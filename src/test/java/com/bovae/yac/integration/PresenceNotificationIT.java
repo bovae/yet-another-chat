@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 @Import(TestcontainersConfig.class)
 @Transactional
-class PresenceNotificationIntegrationTest {
+class PresenceNotificationIT {
 
     @Autowired
     private PresenceService presenceService;
@@ -69,11 +69,13 @@ class PresenceNotificationIntegrationTest {
         userB = userRepository.findById(userBDto.id()).orElseThrow();
     }
 
+    private static final String IT_SESSION = "it-session";
+
     @AfterEach
     void cleanup() {
         // Clean up Redis presence keys (not covered by @Transactional rollback)
-        presenceService.removePresence(userA.getId());
-        presenceService.removePresence(userB.getId());
+        presenceService.removeSession(userA.getId(), IT_SESSION);
+        presenceService.removeSession(userB.getId(), IT_SESSION);
     }
 
     // ---- Heartbeat → status change flow ----
@@ -89,7 +91,7 @@ class PresenceNotificationIntegrationTest {
         assertThat(initialStatus).isEqualTo(PresenceStatus.OFFLINE);
 
         // Record an active heartbeat
-        presenceService.recordHeartbeat(userA.getId(), true);
+        presenceService.recordHeartbeat(userA.getId(), IT_SESSION, true);
 
         // Status should now be ONLINE
         PresenceStatus afterHeartbeat = presenceService.getUserStatus(userA.getId());
@@ -97,31 +99,28 @@ class PresenceNotificationIntegrationTest {
     }
 
     /**
-     * Validates Requirement 8.2: Inactive heartbeat changes user status to AFK.
-     * Validates Correctness Property 9.
+     * Validates R1-60: a fresh inactive heartbeat within the idle window is ONLINE, not AFK
+     * (the client owns the 60s idle rule; AFK only after activity ages past the threshold).
      */
     @Test
-    void inactiveHeartbeat_changesStatusToAfk() {
-        // Record an inactive heartbeat
-        presenceService.recordHeartbeat(userA.getId(), false);
+    void freshInactiveHeartbeat_staysOnlineWithinIdleWindow() {
+        presenceService.recordHeartbeat(userA.getId(), IT_SESSION, false);
 
-        // With an inactive heartbeat, status should be AFK
         PresenceStatus status = presenceService.getUserStatus(userA.getId());
-        assertThat(status).isEqualTo(PresenceStatus.AFK);
+        assertThat(status).isEqualTo(PresenceStatus.ONLINE);
     }
 
     /**
-     * Validates Requirement 8.3: Removing presence sets user status to OFFLINE.
-     * Validates Correctness Property 9.
+     * Validates R1-39: removing the last session sets user status to OFFLINE.
      */
     @Test
-    void removePresence_setsStatusToOffline() {
+    void removeLastSession_setsStatusToOffline() {
         // Record active heartbeat first
-        presenceService.recordHeartbeat(userA.getId(), true);
+        presenceService.recordHeartbeat(userA.getId(), IT_SESSION, true);
         assertThat(presenceService.getUserStatus(userA.getId())).isEqualTo(PresenceStatus.ONLINE);
 
-        // Remove presence
-        presenceService.removePresence(userA.getId());
+        // Remove the session
+        presenceService.removeSession(userA.getId(), IT_SESSION);
 
         // Should be OFFLINE
         assertThat(presenceService.getUserStatus(userA.getId())).isEqualTo(PresenceStatus.OFFLINE);

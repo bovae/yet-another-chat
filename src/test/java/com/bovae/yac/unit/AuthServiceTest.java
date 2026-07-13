@@ -1,5 +1,6 @@
 package com.bovae.yac.unit;
 
+import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.AuthService;
@@ -14,13 +15,17 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -86,15 +91,30 @@ class AuthServiceTest {
     }
 
     /**
-     * Validates CP 5: terminateSession deletes only the specified session.
+     * Validates R1-11: terminateSession deletes a session the caller owns.
      */
     @Test
-    void terminateSession_deletesOnlySpecifiedSession() {
+    void terminateSession_ownedSession_deletesIt() {
         String sessionId = "session-abc-123";
+        Session session = mock(Session.class);
+        doReturn(Map.of(sessionId, session))
+                .when(sessionRepository).findByPrincipalName(existingUser.getEmail());
 
-        authService.terminateSession(sessionId);
+        authService.terminateSession(sessionId, existingUser.getEmail());
 
         verify(sessionRepository).deleteById(sessionId);
-        verifyNoMoreInteractions(sessionRepository);
+    }
+
+    /**
+     * Validates R1-11: terminating another user's session is rejected with 404 and no delete.
+     */
+    @Test
+    void terminateSession_notOwned_throwsNotFoundAndDoesNotDelete() {
+        doReturn(Map.of()).when(sessionRepository).findByPrincipalName(existingUser.getEmail());
+
+        assertThatThrownBy(() -> authService.terminateSession("someone-elses-session", existingUser.getEmail()))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(sessionRepository, never()).deleteById(any());
     }
 }

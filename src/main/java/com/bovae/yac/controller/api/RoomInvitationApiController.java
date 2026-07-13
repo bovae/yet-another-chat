@@ -1,11 +1,17 @@
 package com.bovae.yac.controller.api;
 
+import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.RoomInvitation;
+import com.bovae.yac.model.entity.RoomMember;
+import com.bovae.yac.model.entity.RoomMemberId;
 import com.bovae.yac.model.entity.User;
+import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.repository.RoomInvitationRepository;
+import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.MessageBroadcastService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import jakarta.validation.Valid;
@@ -34,7 +40,9 @@ public class RoomInvitationApiController {
 
     private final RoomService roomService;
     private final RoomMemberService roomMemberService;
+    private final MessageBroadcastService messageBroadcastService;
     private final RoomInvitationRepository roomInvitationRepository;
+    private final RoomMemberRepository roomMemberRepository;
     private final UserRepository userRepository;
 
     @PostMapping
@@ -46,6 +54,13 @@ public class RoomInvitationApiController {
         User inviter = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
         User invitee = resolveUserById(request.userId());
+
+        // Only owners/admins of the room may invite (R1-12), matching the UI affordance.
+        RoomMember inviterMember = roomMemberRepository.findById(new RoomMemberId(room.getId(), inviter.getId()))
+                .orElseThrow(() -> new ForbiddenException("Only room members can invite users"));
+        if (inviterMember.getRole() != RoomRole.OWNER && inviterMember.getRole() != RoomRole.ADMIN) {
+            throw new ForbiddenException("Only owners and admins can invite users");
+        }
 
         roomInvitationRepository.findByRoomAndInvitee(room, invitee)
                 .ifPresent(roomInvitationRepository::delete);
@@ -85,6 +100,7 @@ public class RoomInvitationApiController {
         }
 
         roomMemberService.joinPrivateRoomViaInvitation(room, user);
+        messageBroadcastService.broadcastMembership(room, user, "MEMBER_JOINED");
 
         return ResponseEntity.ok().build();
     }
@@ -94,7 +110,7 @@ public class RoomInvitationApiController {
             @PathVariable UUID roomId,
             @PathVariable UUID id,
             Principal principal) {
-        resolveUser(principal);
+        User caller = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
 
         RoomInvitation invitation = roomInvitationRepository.findById(id)
@@ -104,6 +120,16 @@ public class RoomInvitationApiController {
         if (!invitation.getRoom().getId().equals(room.getId())) {
             throw new ResourceNotFoundException(
                     "Invitation %s does not belong to room %s".formatted(id, roomId));
+        }
+
+        // Only the invitee, the inviter, or a room admin may decline/cancel (R1-64).
+        boolean isInvitee = invitation.getInvitee().getId().equals(caller.getId());
+        boolean isInviter = invitation.getInviter().getId().equals(caller.getId());
+        boolean isRoomAdmin = roomMemberRepository.findById(new RoomMemberId(room.getId(), caller.getId()))
+                .map(m -> m.getRole() == RoomRole.OWNER || m.getRole() == RoomRole.ADMIN)
+                .orElse(false);
+        if (!isInvitee && !isInviter && !isRoomAdmin) {
+            throw new ForbiddenException("Not allowed to modify this invitation");
         }
 
         roomInvitationRepository.delete(invitation);

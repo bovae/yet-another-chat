@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
-import java.util.Optional;
 
 @Slf4j
 @Validated
@@ -33,9 +32,8 @@ public class PasswordApiController {
     @PostMapping("/reset-request")
     public ResponseEntity<Void> requestPasswordReset(
             @Valid @RequestBody PasswordResetRequest request) {
-        Optional<User> user = userRepository.findByEmail(request.email());
-        // Always return 200 to prevent email enumeration
-        user.ifPresent(passwordService::createResetToken);
+        // Actually creates and mails the token (R1-10); always 200 to prevent email enumeration.
+        passwordService.requestReset(request.email());
         return ResponseEntity.ok().build();
     }
 

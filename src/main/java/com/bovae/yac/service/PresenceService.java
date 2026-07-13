@@ -5,6 +5,8 @@ import com.bovae.yac.model.enums.PresenceStatus;
 import com.bovae.yac.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -12,155 +14,188 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Multi-device presence (design D10). Each user's presence is a Redis hash keyed by STOMP
+ * session id, so a status is the aggregate of all live sessions rather than last-writer-wins
+ * (R1-38). A session is ONLINE while active or active within the last idle window, AFK once
+ * idle past it, and OFFLINE when its heartbeats stop. Explicit disconnect events remove a
+ * session immediately instead of waiting for TTL (R1-39, R1-63).
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PresenceService {
 
     private static final String PRESENCE_KEY_PREFIX = "presence:";
-    private static final String FIELD_LAST_HEARTBEAT = "lastHeartbeat";
-    private static final String FIELD_ACTIVE = "active";
-    private static final Duration PRESENCE_TTL = Duration.ofSeconds(45);
-    private static final long HEARTBEAT_INTERVAL_MS = Duration.ofSeconds(30).toMillis();
-    private static final long AFK_THRESHOLD_MS = Duration.ofSeconds(60).toMillis();
+    private static final Duration SESSION_TTL = Duration.ofSeconds(90);
+    private static final long IDLE_THRESHOLD_MS = Duration.ofSeconds(60).toMillis();
 
     private final StringRedisTemplate stringRedisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final UserRepository userRepository;
 
-    /**
-     * Tracks the last known status per user so we only broadcast on changes.
-     */
+    /** Last broadcast status per user, so transitions fire exactly once (R1-61). */
     private final Map<UUID, PresenceStatus> lastKnownStatus = new ConcurrentHashMap<>();
 
-    public void recordHeartbeat(UUID userId, boolean active) {
+    /** Records a heartbeat for one device/session (R1-38). */
+    public void recordHeartbeat(UUID userId, String sessionId, boolean active) {
         String key = PRESENCE_KEY_PREFIX + userId;
+        long now = Instant.now().toEpochMilli();
 
-        stringRedisTemplate.opsForHash().put(key, FIELD_LAST_HEARTBEAT,
-                String.valueOf(Instant.now().toEpochMilli()));
-        stringRedisTemplate.opsForHash().put(key, FIELD_ACTIVE, String.valueOf(active));
-        stringRedisTemplate.expire(key, PRESENCE_TTL);
+        Object existing = stringRedisTemplate.opsForHash().get(key, sessionId);
+        long lastActive = active ? now : parseLastActive(existing, now);
 
-        PresenceStatus newStatus = computeStatus(userId);
-        broadcastIfChanged(userId, newStatus);
+        stringRedisTemplate.opsForHash().put(key, sessionId, now + ":" + lastActive);
+        stringRedisTemplate.expire(key, SESSION_TTL);
 
-        LOG.debug("Recorded heartbeat for user {}: active={}, status={}", userId, active, newStatus);
+        broadcastIfChanged(userId, computeStatus(userId));
+        LOG.debug("Heartbeat: user={}, session={}, active={}", userId, sessionId, active);
     }
 
-    public PresenceStatus computeStatus(UUID userId) {
+    /** Removes one session on disconnect; broadcasts OFFLINE when it was the last one (R1-39, R1-63). */
+    public void removeSession(UUID userId, String sessionId) {
         String key = PRESENCE_KEY_PREFIX + userId;
+        stringRedisTemplate.opsForHash().delete(key, sessionId);
 
-        String lastHeartbeatStr = (String) stringRedisTemplate.opsForHash()
-                .get(key, FIELD_LAST_HEARTBEAT);
-        String activeStr = (String) stringRedisTemplate.opsForHash()
-                .get(key, FIELD_ACTIVE);
-
-        if (lastHeartbeatStr == null) {
-            return PresenceStatus.OFFLINE;
+        Long remaining = stringRedisTemplate.opsForHash().size(key);
+        if (remaining == null || remaining == 0) {
+            stringRedisTemplate.delete(key);
+            broadcastIfChanged(userId, PresenceStatus.OFFLINE);
+        } else {
+            broadcastIfChanged(userId, computeStatus(userId));
         }
-
-        long lastHeartbeat;
-        try {
-            lastHeartbeat = Long.parseLong(lastHeartbeatStr);
-        } catch (NumberFormatException ex) {
-            LOG.warn("Invalid lastHeartbeat value for user {}: {}", userId, lastHeartbeatStr);
-            return PresenceStatus.OFFLINE;
-        }
-
-        long now = Instant.now().toEpochMilli();
-        long elapsed = now - lastHeartbeat;
-
-        if (elapsed > PRESENCE_TTL.toMillis()) {
-            return PresenceStatus.OFFLINE;
-        }
-
-        boolean active = Boolean.parseBoolean(activeStr);
-
-        if (active && elapsed <= HEARTBEAT_INTERVAL_MS) {
-            return PresenceStatus.ONLINE;
-        }
-
-        if (!active && elapsed > AFK_THRESHOLD_MS) {
-            return PresenceStatus.AFK;
-        }
-
-        // Active heartbeat but older than interval — still consider ONLINE
-        // as long as within TTL and was active
-        if (active) {
-            return PresenceStatus.ONLINE;
-        }
-
-        // Inactive but within AFK threshold — transitional, treat as AFK
-        return PresenceStatus.AFK;
+        LOG.debug("Removed presence session: user={}, session={}, remaining={}", userId, sessionId, remaining);
     }
 
     public PresenceStatus getUserStatus(UUID userId) {
         return computeStatus(userId);
     }
 
+    public PresenceStatus computeStatus(UUID userId) {
+        String key = PRESENCE_KEY_PREFIX + userId;
+        Map<Object, Object> sessions = stringRedisTemplate.opsForHash().entries(key);
+        return aggregate(sessions.values(), Instant.now().toEpochMilli());
+    }
+
+    /**
+     * Periodic sweep using SCAN (never KEYS, R1-59): prunes stale session fields, deletes empty
+     * keys, and re-broadcasts any resulting transitions.
+     */
     @Scheduled(fixedRate = 30000)
     public void cleanupStalePresence() {
-        Set<String> keys = stringRedisTemplate.keys(PRESENCE_KEY_PREFIX + "*");
-        if (keys == null || keys.isEmpty()) {
-            return;
+        List<String> keys = new ArrayList<>();
+        ScanOptions options = ScanOptions.scanOptions().match(PRESENCE_KEY_PREFIX + "*").count(100).build();
+        try (Cursor<String> cursor = stringRedisTemplate.scan(options)) {
+            cursor.forEachRemaining(keys::add);
         }
 
+        long now = Instant.now().toEpochMilli();
         for (String key : keys) {
-            String userIdStr = key.substring(PRESENCE_KEY_PREFIX.length());
-            try {
-                UUID userId = UUID.fromString(userIdStr);
-                PresenceStatus status = computeStatus(userId);
-                broadcastIfChanged(userId, status);
-            } catch (IllegalArgumentException ex) {
-                LOG.warn("Invalid presence key format: {}", key);
+            UUID userId = parseUserId(key);
+            if (userId == null) {
+                continue;
+            }
+            pruneStaleSessions(key, now);
+
+            Long remaining = stringRedisTemplate.opsForHash().size(key);
+            if (remaining == null || remaining == 0) {
+                stringRedisTemplate.delete(key);
+                broadcastIfChanged(userId, PresenceStatus.OFFLINE);
+            } else {
+                broadcastIfChanged(userId, computeStatus(userId));
             }
         }
+    }
 
-        // Broadcast OFFLINE for tracked users whose Redis keys have expired
-        lastKnownStatus.entrySet().removeIf(entry -> {
-            UUID userId = entry.getKey();
-            String key = PRESENCE_KEY_PREFIX + userId;
-            Boolean exists = stringRedisTemplate.hasKey(key);
-            if (exists != null && !exists && entry.getValue() != PresenceStatus.OFFLINE) {
-                broadcastPresenceUpdate(userId, PresenceStatus.OFFLINE);
-                LOG.debug("Cleaned up expired presence for user {}", userId);
-                return true;
+    private void pruneStaleSessions(String key, long now) {
+        Map<Object, Object> sessions = stringRedisTemplate.opsForHash().entries(key);
+        for (Map.Entry<Object, Object> entry : sessions.entrySet()) {
+            if (isExpired(entry.getValue(), now)) {
+                stringRedisTemplate.opsForHash().delete(key, entry.getKey());
             }
-            return false;
-        });
+        }
     }
 
-    public void removePresence(UUID userId) {
-        String key = PRESENCE_KEY_PREFIX + userId;
-        stringRedisTemplate.delete(key);
-        broadcastIfChanged(userId, PresenceStatus.OFFLINE);
-        lastKnownStatus.remove(userId);
-        LOG.debug("Removed presence for user {}", userId);
+    private PresenceStatus aggregate(Iterable<Object> sessionValues, long now) {
+        boolean anyLive = false;
+        boolean anyOnline = false;
+        for (Object value : sessionValues) {
+            if (isExpired(value, now)) {
+                continue;
+            }
+            anyLive = true;
+            long lastActive = parseLastActive(value, 0L);
+            if (now - lastActive <= IDLE_THRESHOLD_MS) {
+                anyOnline = true;
+            }
+        }
+        if (anyOnline) {
+            return PresenceStatus.ONLINE;
+        }
+        return anyLive ? PresenceStatus.AFK : PresenceStatus.OFFLINE;
     }
 
+    // Transition detection is a single atomic map operation so a heartbeat and the sweep
+    // cannot double-broadcast or drop a change (R1-61).
     private void broadcastIfChanged(UUID userId, PresenceStatus newStatus) {
-        PresenceStatus previous = lastKnownStatus.get(userId);
-        if (previous == newStatus) {
-            return;
-        }
-
-        lastKnownStatus.put(userId, newStatus);
-        broadcastPresenceUpdate(userId, newStatus);
-
-        LOG.info("Presence changed for user {}: {} -> {}", userId, previous, newStatus);
+        lastKnownStatus.compute(userId, (id, previous) -> {
+            if (previous != newStatus) {
+                broadcastPresenceUpdate(userId, newStatus);
+                LOG.info("Presence changed for user {}: {} -> {}", userId, previous, newStatus);
+            }
+            // Drop the mapping once OFFLINE so the map does not grow without bound.
+            return newStatus == PresenceStatus.OFFLINE ? null : newStatus;
+        });
     }
 
     private void broadcastPresenceUpdate(UUID userId, PresenceStatus status) {
         String username = userRepository.findById(userId)
                 .map(user -> user.getUsername())
                 .orElse("unknown");
-
         PresenceUpdate update = new PresenceUpdate(userId, username, status, Instant.now());
         messagingTemplate.convertAndSend("/topic/presence." + userId, update);
+    }
+
+    private boolean isExpired(Object value, long now) {
+        return now - parseLastBeat(value) > SESSION_TTL.toMillis();
+    }
+
+    private long parseLastBeat(Object value) {
+        String[] parts = String.valueOf(value).split(":");
+        return parseLong(parts.length > 0 ? parts[0] : null, 0L);
+    }
+
+    private long parseLastActive(Object value, long fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String[] parts = String.valueOf(value).split(":");
+        return parseLong(parts.length > 1 ? parts[1] : null, fallback);
+    }
+
+    private long parseLong(String s, long fallback) {
+        if (s == null) {
+            return fallback;
+        }
+        try {
+            return Long.parseLong(s);
+        } catch (NumberFormatException ex) {
+            return fallback;
+        }
+    }
+
+    private UUID parseUserId(String key) {
+        try {
+            return UUID.fromString(key.substring(PRESENCE_KEY_PREFIX.length()));
+        } catch (IllegalArgumentException ex) {
+            LOG.warn("Invalid presence key format: {}", key);
+            return null;
+        }
     }
 }

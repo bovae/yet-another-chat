@@ -8,7 +8,13 @@ import com.bovae.yac.repository.PasswordResetTokenRepository;
 import com.bovae.yac.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailException;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +34,27 @@ public class PasswordService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final FindByIndexNameSessionRepository<? extends Session> sessionRepository;
+    private final JavaMailSender mailSender;
+
+    @Value("${app.base-url}")
+    private final String baseUrl;
+
+    @Value("${app.mail.from}")
+    private final String mailFrom;
+
+    /**
+     * Handles a forgot-password request out-of-band (R1-10, design D6): if the email maps to a
+     * user, a reset token is created and mailed. The caller always responds generically regardless
+     * of whether a user existed — the token is never returned or rendered.
+     */
+    @Transactional
+    public void requestReset(String email) {
+        userRepository.findByEmail(email).ifPresent(user -> {
+            String rawToken = createResetToken(user);
+            sendResetEmail(user, rawToken);
+        });
+    }
 
     /**
      * Generates a password reset token for the given user.
@@ -78,6 +105,10 @@ public class PasswordService {
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
 
+        // Invalidate existing sessions; remember-me cookies are keyed on the password hash and
+        // so are void once it changes (R1-36).
+        invalidateSessions(user.getEmail());
+
         LOG.info("Password reset completed for user: id={}", user.getId());
     }
 
@@ -97,7 +128,33 @@ public class PasswordService {
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
 
+        invalidateSessions(user.getEmail());
+
         LOG.info("Password changed for user: id={}", userId);
+    }
+
+    private void invalidateSessions(String email) {
+        sessionRepository.findByPrincipalName(email).keySet()
+                .forEach(sessionRepository::deleteById);
+    }
+
+    private void sendResetEmail(User user, String rawToken) {
+        String resetLink = baseUrl + "/reset-password?token=" + rawToken;
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailFrom);
+        message.setTo(user.getEmail());
+        message.setSubject("Reset your YAC password");
+        message.setText("A password reset was requested for your account.\n\n"
+                + "Use this link within the next hour to set a new password:\n" + resetLink
+                + "\n\nIf you did not request this, you can ignore this email.");
+        try {
+            mailSender.send(message);
+            LOG.info("Password reset email sent to user: id={}", user.getId());
+        } catch (MailException ex) {
+            // Never fail the request or leak whether the address exists; the user still sees the
+            // generic response. A misconfigured mail host is an operator problem, logged here.
+            LOG.error("Failed to send password reset email for user id={}", user.getId(), ex);
+        }
     }
 
     private String hashToken(String rawToken) {

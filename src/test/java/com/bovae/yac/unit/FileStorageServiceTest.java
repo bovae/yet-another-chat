@@ -11,7 +11,6 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.AttachmentRepository;
 import com.bovae.yac.service.FileStorageService;
-import com.bovae.yac.service.RoomMemberService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,25 +32,26 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link FileStorageService}.
- *
- * <p>Validates Correctness Properties: CP 21.
- * <p>Requirements: 5.5, 5.6, 5.7.
+ * Unit tests for {@link FileStorageService}. Membership is enforced by the controller now; this
+ * layer verifies the message→room→author chain (R1-32), content-type sniffing size caps (R1-34),
+ * and download room-scoping (R1-15).
  */
 @ExtendWith(MockitoExtension.class)
 class FileStorageServiceTest {
 
-    @Mock
-    private AttachmentRepository attachmentRepository;
+    // 8-byte PNG signature so URLConnection.guessContentTypeFromStream reports image/png.
+    private static final byte[] PNG_MAGIC = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    private static final byte[] PLAIN_BYTES = "just some file bytes".getBytes();
 
     @Mock
-    private RoomMemberService roomMemberService;
+    private AttachmentRepository attachmentRepository;
 
     @Mock
     private FileStorageProperties fileStorageProperties;
@@ -60,7 +60,6 @@ class FileStorageServiceTest {
     private FileStorageService fileStorageService;
 
     private User uploader;
-    private User nonMember;
     private Room room;
     private Message message;
 
@@ -70,219 +69,103 @@ class FileStorageServiceTest {
     @BeforeEach
     void setUp() {
         uploader = User.builder()
-                .id(UUID.randomUUID())
-                .email("alice@test.com")
-                .username("alice")
-                .passwordHash("$2a$10$hash")
-                .build();
-
-        nonMember = User.builder()
-                .id(UUID.randomUUID())
-                .email("bob@test.com")
-                .username("bob")
-                .passwordHash("$2a$10$hash")
-                .build();
+                .id(UUID.randomUUID()).email("alice@test.com").username("alice").passwordHash("$2a$10$hash").build();
 
         room = Room.builder()
-                .id(UUID.randomUUID())
-                .name("test-room")
-                .visibility(RoomVisibility.PUBLIC)
-                .owner(uploader)
-                .nextWatermark(1L)
-                .build();
+                .id(UUID.randomUUID()).name("test-room").visibility(RoomVisibility.PUBLIC)
+                .owner(uploader).nextWatermark(1L).build();
 
         message = Message.builder()
-                .id(UUID.randomUUID())
-                .room(room)
-                .sender(uploader)
-                .content("hello")
-                .watermark(1L)
-                .build();
+                .id(UUID.randomUUID()).room(room).sender(uploader).content("hello").watermark(1L).build();
     }
 
-    // -----------------------------------------------------------------------
-    // uploadFile stores file and creates Attachment preserving original name (CP 21)
-    // -----------------------------------------------------------------------
+    private MultipartFile fileOf(String name, long size, byte[] bytes) throws IOException {
+        MultipartFile f = mock(MultipartFile.class);
+        lenient().when(f.getOriginalFilename()).thenReturn(name);
+        lenient().when(f.getSize()).thenReturn(size);
+        lenient().when(f.getInputStream()).thenAnswer(inv -> new ByteArrayInputStream(bytes));
+        return f;
+    }
 
-    /**
-     * Validates CP 21, Requirement 5.5: uploadFile stores the file on disk and
-     * creates an Attachment record preserving the original file name.
-     */
     @Test
-    void uploadFile_storesFileAndCreatesAttachmentPreservingOriginalName() throws IOException {
-        when(roomMemberService.isMember(room, uploader)).thenReturn(true);
+    void uploadFile_storesFileAndSniffsContentType() throws IOException {
         when(fileStorageProperties.basePath()).thenReturn(tempDir.toString());
+        MultipartFile file = fileOf("report.pdf", 1024L, PLAIN_BYTES);
+        when(attachmentRepository.save(any(Attachment.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        MultipartFile multipartFile = mock(MultipartFile.class);
-        when(multipartFile.getOriginalFilename()).thenReturn("report.pdf");
-        when(multipartFile.getSize()).thenReturn(1024L);
-        when(multipartFile.getContentType()).thenReturn("application/pdf");
-        when(multipartFile.getInputStream()).thenReturn(new ByteArrayInputStream("file-content".getBytes()));
+        fileStorageService.uploadFile(file, message, room, uploader, "my comment");
 
-        Attachment savedAttachment = Attachment.builder()
-                .id(UUID.randomUUID())
-                .message(message)
-                .originalFileName("report.pdf")
-                .storagePath("/some/path")
-                .fileSize(1024L)
-                .contentType("application/pdf")
-                .comment("my comment")
-                .build();
-        when(attachmentRepository.save(any(Attachment.class))).thenReturn(savedAttachment);
-
-        Attachment result = fileStorageService.uploadFile(multipartFile, message, room, uploader, "my comment");
-
-        assertThat(result).isNotNull();
-        assertThat(result.getOriginalFileName()).isEqualTo("report.pdf");
-
-        // Verify the attachment was saved with the original file name preserved
         ArgumentCaptor<Attachment> captor = ArgumentCaptor.forClass(Attachment.class);
         verify(attachmentRepository).save(captor.capture());
-        Attachment captured = captor.getValue();
-        assertThat(captured.getOriginalFileName()).isEqualTo("report.pdf");
-        assertThat(captured.getMessage()).isEqualTo(message);
-        assertThat(captured.getFileSize()).isEqualTo(1024L);
-        assertThat(captured.getContentType()).isEqualTo("application/pdf");
-        assertThat(captured.getComment()).isEqualTo("my comment");
+        Attachment saved = captor.getValue();
+        assertThat(saved.getOriginalFileName()).isEqualTo("report.pdf");
+        assertThat(saved.getComment()).isEqualTo("my comment");
+        // Client content type is ignored; unknown bytes sniff to octet-stream (R1-34).
+        assertThat(saved.getContentType()).isEqualTo("application/octet-stream");
 
-        // Verify a file was actually written to the room directory
         Path roomDir = tempDir.resolve(room.getId().toString());
         assertThat(Files.exists(roomDir)).isTrue();
-        assertThat(Files.list(roomDir).count()).isEqualTo(1);
     }
 
-    /**
-     * Validates CP 21: uploadFile by a non-member throws ForbiddenException.
-     */
     @Test
-    void uploadFile_nonMember_throwsForbiddenException() {
-        when(roomMemberService.isMember(room, nonMember)).thenReturn(false);
+    void uploadFile_sniffedImageOverCap_rejected() throws IOException {
+        MultipartFile file = fileOf("photo.png", 3L * 1024 * 1024 + 1, PNG_MAGIC);
 
-        MultipartFile multipartFile = mock(MultipartFile.class);
-
-        assertThatThrownBy(() -> fileStorageService.uploadFile(multipartFile, message, room, nonMember, null))
-                .isInstanceOf(ForbiddenException.class)
-                .hasMessageContaining("not a member");
-
-        verify(attachmentRepository, never()).save(any());
-    }
-
-    // -----------------------------------------------------------------------
-    // uploadFile rejects oversized files (CP 21)
-    // -----------------------------------------------------------------------
-
-    /**
-     * Validates CP 21, Requirement 5.6: uploadFile rejects non-image files exceeding 20 MB.
-     */
-    @Test
-    void uploadFile_fileExceeding20MB_throwsFileStorageException() {
-        when(roomMemberService.isMember(room, uploader)).thenReturn(true);
-
-        MultipartFile multipartFile = mock(MultipartFile.class);
-        long oversizedBytes = 20L * 1024 * 1024 + 1;
-        when(multipartFile.getSize()).thenReturn(oversizedBytes);
-        when(multipartFile.getContentType()).thenReturn("application/pdf");
-
-        assertThatThrownBy(() -> fileStorageService.uploadFile(multipartFile, message, room, uploader, null))
-                .isInstanceOf(FileStorageException.class)
-                .hasMessageContaining("20 MB");
-
-        verify(attachmentRepository, never()).save(any());
-    }
-
-    /**
-     * Validates CP 21, Requirement 5.6: uploadFile rejects images exceeding 3 MB.
-     */
-    @Test
-    void uploadFile_imageExceeding3MB_throwsFileStorageException() {
-        when(roomMemberService.isMember(room, uploader)).thenReturn(true);
-
-        MultipartFile multipartFile = mock(MultipartFile.class);
-        long oversizedImageBytes = 3L * 1024 * 1024 + 1;
-        when(multipartFile.getSize()).thenReturn(oversizedImageBytes);
-        when(multipartFile.getContentType()).thenReturn("image/png");
-
-        assertThatThrownBy(() -> fileStorageService.uploadFile(multipartFile, message, room, uploader, null))
+        assertThatThrownBy(() -> fileStorageService.uploadFile(file, message, room, uploader, null))
                 .isInstanceOf(FileStorageException.class)
                 .hasMessageContaining("3 MB");
 
         verify(attachmentRepository, never()).save(any());
     }
 
-    /**
-     * Validates CP 21: uploadFile accepts a non-image file at exactly 20 MB (boundary).
-     */
     @Test
-    void uploadFile_fileExactly20MB_succeeds() throws IOException {
-        when(roomMemberService.isMember(room, uploader)).thenReturn(true);
-        when(fileStorageProperties.basePath()).thenReturn(tempDir.toString());
+    void uploadFile_nonImageOver20MB_rejected() throws IOException {
+        MultipartFile file = fileOf("big.bin", 20L * 1024 * 1024 + 1, PLAIN_BYTES);
 
-        MultipartFile multipartFile = mock(MultipartFile.class);
-        long exactLimit = 20L * 1024 * 1024;
-        when(multipartFile.getSize()).thenReturn(exactLimit);
-        when(multipartFile.getContentType()).thenReturn("application/pdf");
-        when(multipartFile.getOriginalFilename()).thenReturn("big.pdf");
-        when(multipartFile.getInputStream()).thenReturn(new ByteArrayInputStream("data".getBytes()));
+        assertThatThrownBy(() -> fileStorageService.uploadFile(file, message, room, uploader, null))
+                .isInstanceOf(FileStorageException.class)
+                .hasMessageContaining("20 MB");
 
-        Attachment savedAttachment = Attachment.builder()
-                .id(UUID.randomUUID())
-                .message(message)
-                .originalFileName("big.pdf")
-                .storagePath("/path")
-                .fileSize(exactLimit)
-                .contentType("application/pdf")
-                .build();
-        when(attachmentRepository.save(any(Attachment.class))).thenReturn(savedAttachment);
-
-        Attachment result = fileStorageService.uploadFile(multipartFile, message, room, uploader, null);
-
-        assertThat(result).isNotNull();
-        verify(attachmentRepository).save(any(Attachment.class));
+        verify(attachmentRepository, never()).save(any());
     }
 
-    /**
-     * Validates CP 21: uploadFile accepts an image at exactly 3 MB (boundary).
-     */
     @Test
     void uploadFile_imageExactly3MB_succeeds() throws IOException {
-        when(roomMemberService.isMember(room, uploader)).thenReturn(true);
         when(fileStorageProperties.basePath()).thenReturn(tempDir.toString());
+        MultipartFile file = fileOf("photo.png", 3L * 1024 * 1024, PNG_MAGIC);
+        when(attachmentRepository.save(any(Attachment.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        MultipartFile multipartFile = mock(MultipartFile.class);
-        long exactImageLimit = 3L * 1024 * 1024;
-        when(multipartFile.getSize()).thenReturn(exactImageLimit);
-        when(multipartFile.getContentType()).thenReturn("image/jpeg");
-        when(multipartFile.getOriginalFilename()).thenReturn("photo.jpg");
-        when(multipartFile.getInputStream()).thenReturn(new ByteArrayInputStream("img".getBytes()));
+        fileStorageService.uploadFile(file, message, room, uploader, null);
 
-        Attachment savedAttachment = Attachment.builder()
-                .id(UUID.randomUUID())
-                .message(message)
-                .originalFileName("photo.jpg")
-                .storagePath("/path")
-                .fileSize(exactImageLimit)
-                .contentType("image/jpeg")
-                .build();
-        when(attachmentRepository.save(any(Attachment.class))).thenReturn(savedAttachment);
-
-        Attachment result = fileStorageService.uploadFile(multipartFile, message, room, uploader, null);
-
-        assertThat(result).isNotNull();
         verify(attachmentRepository).save(any(Attachment.class));
     }
 
-    // -----------------------------------------------------------------------
-    // downloadFile succeeds for member, throws ForbiddenException for non-member (CP 21)
-    // -----------------------------------------------------------------------
-
-    /**
-     * Validates CP 21, Requirement 5.7: downloadFile succeeds for a room member.
-     */
     @Test
-    void downloadFile_roomMember_succeeds() throws IOException {
-        when(roomMemberService.isMember(room, uploader)).thenReturn(true);
+    void uploadFile_messageNotInPathRoom_throwsNotFound() throws IOException {
+        Room otherRoom = Room.builder().id(UUID.randomUUID()).name("other").visibility(RoomVisibility.PUBLIC)
+                .owner(uploader).nextWatermark(1L).build();
+        MultipartFile file = fileOf("f.txt", 10L, PLAIN_BYTES);
 
-        // Create a real file on disk so UrlResource can resolve it
+        assertThatThrownBy(() -> fileStorageService.uploadFile(file, message, otherRoom, uploader, null))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(attachmentRepository, never()).save(any());
+    }
+
+    @Test
+    void uploadFile_notAuthor_throwsForbidden() throws IOException {
+        User other = User.builder().id(UUID.randomUUID()).email("bob@test.com").username("bob")
+                .passwordHash("$2a$10$hash").build();
+        MultipartFile file = fileOf("f.txt", 10L, PLAIN_BYTES);
+
+        assertThatThrownBy(() -> fileStorageService.uploadFile(file, message, room, other, null))
+                .isInstanceOf(ForbiddenException.class);
+
+        verify(attachmentRepository, never()).save(any());
+    }
+
+    @Test
+    void downloadFile_attachmentInRoom_succeeds() throws IOException {
         Path roomDir = tempDir.resolve(room.getId().toString());
         Files.createDirectories(roomDir);
         Path filePath = roomDir.resolve("stored-file.pdf");
@@ -290,13 +173,8 @@ class FileStorageServiceTest {
 
         UUID attachmentId = UUID.randomUUID();
         Attachment attachment = Attachment.builder()
-                .id(attachmentId)
-                .message(message)
-                .originalFileName("report.pdf")
-                .storagePath(filePath.toString())
-                .fileSize(12L)
-                .contentType("application/pdf")
-                .build();
+                .id(attachmentId).message(message).originalFileName("report.pdf")
+                .storagePath(filePath.toString()).fileSize(12L).contentType("application/octet-stream").build();
         when(attachmentRepository.findById(attachmentId)).thenReturn(Optional.of(attachment));
 
         Resource result = fileStorageService.downloadFile(attachmentId, room, uploader);
@@ -305,29 +183,23 @@ class FileStorageServiceTest {
         assertThat(result.exists()).isTrue();
     }
 
-    /**
-     * Validates CP 21, Requirement 5.7: downloadFile throws ForbiddenException for a non-member.
-     */
     @Test
-    void downloadFile_nonMember_throwsForbiddenException() {
-        when(roomMemberService.isMember(room, nonMember)).thenReturn(false);
-
+    void downloadFile_attachmentInDifferentRoom_throwsNotFound() {
+        Room otherRoom = Room.builder().id(UUID.randomUUID()).name("other").visibility(RoomVisibility.PUBLIC)
+                .owner(uploader).nextWatermark(1L).build();
         UUID attachmentId = UUID.randomUUID();
+        // Attachment's message belongs to `room`, but the request names `otherRoom` (R1-15).
+        Attachment attachment = Attachment.builder()
+                .id(attachmentId).message(message).originalFileName("report.pdf")
+                .storagePath("/x").fileSize(1L).build();
+        when(attachmentRepository.findById(attachmentId)).thenReturn(Optional.of(attachment));
 
-        assertThatThrownBy(() -> fileStorageService.downloadFile(attachmentId, room, nonMember))
-                .isInstanceOf(ForbiddenException.class)
-                .hasMessageContaining("not a member");
-
-        verify(attachmentRepository, never()).findById(any());
+        assertThatThrownBy(() -> fileStorageService.downloadFile(attachmentId, otherRoom, uploader))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    /**
-     * Validates CP 21: downloadFile throws ResourceNotFoundException for non-existent attachment.
-     */
     @Test
-    void downloadFile_nonExistentAttachment_throwsResourceNotFoundException() {
-        when(roomMemberService.isMember(room, uploader)).thenReturn(true);
-
+    void downloadFile_nonExistentAttachment_throwsNotFound() {
         UUID attachmentId = UUID.randomUUID();
         when(attachmentRepository.findById(attachmentId)).thenReturn(Optional.empty());
 

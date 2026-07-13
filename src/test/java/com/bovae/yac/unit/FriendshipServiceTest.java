@@ -152,19 +152,13 @@ class FriendshipServiceTest {
         Friendship sent = friendshipService.sendFriendRequest(userA, userB, null);
         assertThat(sent.getStatus()).isEqualTo(FriendshipStatus.PENDING);
 
-        // --- decline ---
+        // --- decline: now deletes the row so the pair can re-request (R1-30) ---
         when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.of(pending));
 
-        Friendship declined = Friendship.builder()
-                .id(friendshipId)
-                .requester(userA)
-                .recipient(userB)
-                .status(FriendshipStatus.DECLINED)
-                .build();
-        when(friendshipRepository.save(any(Friendship.class))).thenReturn(declined);
-
         Friendship result = friendshipService.declineFriendRequest(friendshipId, userB);
-        assertThat(result.getStatus()).isEqualTo(FriendshipStatus.DECLINED);
+
+        verify(friendshipRepository).delete(pending);
+        assertThat(result.getId()).isEqualTo(friendshipId);
     }
 
     // -----------------------------------------------------------------------

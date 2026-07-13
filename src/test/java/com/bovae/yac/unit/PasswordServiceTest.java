@@ -6,6 +6,9 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.PasswordResetTokenRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.PasswordService;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,10 +20,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doReturn;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -45,6 +50,12 @@ class PasswordServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private FindByIndexNameSessionRepository<? extends Session> sessionRepository;
+
+    @Mock
+    private JavaMailSender mailSender;
 
     @InjectMocks
     private PasswordService passwordService;
@@ -117,6 +128,7 @@ class PasswordServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(userRepository.save(any(User.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        doReturn(Map.of()).when(sessionRepository).findByPrincipalName(existingUser.getEmail());
 
         passwordService.resetPassword(rawToken, newPassword);
 
@@ -170,6 +182,7 @@ class PasswordServiceTest {
         when(passwordEncoder.matches(currentPassword, existingUser.getPasswordHash())).thenReturn(true);
         when(passwordEncoder.encode(newPassword)).thenReturn(encodedNewPassword);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doReturn(Map.of()).when(sessionRepository).findByPrincipalName(existingUser.getEmail());
 
         passwordService.changePassword(userId, currentPassword, newPassword);
 

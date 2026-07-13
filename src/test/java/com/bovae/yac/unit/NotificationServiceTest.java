@@ -4,12 +4,13 @@ import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.UnreadMarker;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
+import com.bovae.yac.repository.MessageRepository;
+import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UnreadMarkerRepository;
 import com.bovae.yac.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -19,21 +20,24 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link NotificationService}.
- *
- * <p>Validates Correctness Property: CP 24.
- * <p>Requirements: 4.8, 4.9.
+ * Unit tests for the reworked unread accounting (R1-70, R1-24, R1-57): mark-read is an upsert
+ * against the current room watermark, and unread counts derive from undeleted message rows.
  */
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceTest {
 
     @Mock
     private UnreadMarkerRepository unreadMarkerRepository;
+
+    @Mock
+    private MessageRepository messageRepository;
+
+    @Mock
+    private RoomRepository roomRepository;
 
     @Mock
     private SimpMessagingTemplate messagingTemplate;
@@ -43,6 +47,7 @@ class NotificationServiceTest {
 
     private User user;
     private Room room;
+    private UUID roomId;
 
     @BeforeEach
     void setUp() {
@@ -53,8 +58,9 @@ class NotificationServiceTest {
                 .passwordHash("$2a$10$hash")
                 .build();
 
+        roomId = UUID.randomUUID();
         room = Room.builder()
-                .id(UUID.randomUUID())
+                .id(roomId)
                 .name("test-room")
                 .visibility(RoomVisibility.PUBLIC)
                 .owner(user)
@@ -62,150 +68,55 @@ class NotificationServiceTest {
                 .build();
     }
 
-    /**
-     * Validates CP 24: markRoomAsRead sets lastReadWatermark to the current room
-     * watermark minus one (i.e. room.nextWatermark - 1).
-     */
     @Test
-    void markRoomAsRead_setsLastReadWatermarkToCurrentRoomWatermarkMinusOne() {
-        when(unreadMarkerRepository.findByUserAndRoom(user, room))
-                .thenReturn(Optional.empty());
-        when(unreadMarkerRepository.save(any(UnreadMarker.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+    void markRoomAsRead_upsertsAtCurrentWatermark() {
+        when(roomRepository.nextWatermarkOf(roomId)).thenReturn(10L);
 
         notificationService.markRoomAsRead(user, room);
 
-        ArgumentCaptor<UnreadMarker> captor = ArgumentCaptor.forClass(UnreadMarker.class);
-        verify(unreadMarkerRepository).save(captor.capture());
-
-        UnreadMarker saved = captor.getValue();
-        assertThat(saved.getLastReadWatermark()).isEqualTo(room.getNextWatermark() - 1);
-        assertThat(saved.getUser()).isEqualTo(user);
-        assertThat(saved.getRoom()).isEqualTo(room);
+        // Latest readable watermark = nextWatermark - 1 = 9.
+        verify(unreadMarkerRepository).upsertLastRead(user.getId(), roomId, 9L);
     }
 
-    /**
-     * Validates CP 24: markRoomAsRead updates an existing marker's lastReadWatermark
-     * to the current room watermark minus one.
-     */
     @Test
-    void markRoomAsRead_withExistingMarker_updatesLastReadWatermark() {
-        UnreadMarker existingMarker = UnreadMarker.builder()
-                .user(user)
-                .room(room)
-                .lastReadWatermark(3L)
-                .build();
+    void ensureMarker_insertsAtCurrentWatermarkIfAbsent() {
+        when(roomRepository.nextWatermarkOf(roomId)).thenReturn(10L);
 
-        when(unreadMarkerRepository.findByUserAndRoom(user, room))
-                .thenReturn(Optional.of(existingMarker));
-        when(unreadMarkerRepository.save(any(UnreadMarker.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        notificationService.ensureMarker(user, room);
 
-        notificationService.markRoomAsRead(user, room);
-
-        ArgumentCaptor<UnreadMarker> captor = ArgumentCaptor.forClass(UnreadMarker.class);
-        verify(unreadMarkerRepository).save(captor.capture());
-
-        UnreadMarker saved = captor.getValue();
-        assertThat(saved.getLastReadWatermark()).isEqualTo(room.getNextWatermark() - 1);
+        verify(unreadMarkerRepository).insertMarkerIfAbsent(user.getId(), roomId, 9L);
     }
 
-    /**
-     * Validates CP 24: computeUnreadCount returns
-     * min(room.nextWatermark - 1 - lastReadWatermark, 999).
-     */
     @Test
-    void computeUnreadCount_returnsCorrectUnreadCount() {
-        // room.nextWatermark = 10, lastReadWatermark = 5
-        // unread = 10 - 1 - 5 = 4
-        UnreadMarker marker = UnreadMarker.builder()
-                .user(user)
-                .room(room)
-                .lastReadWatermark(5L)
-                .build();
+    void computeUnreadCount_countsUndeletedRowsPastMarker() {
+        UnreadMarker marker = UnreadMarker.builder().user(user).room(room).lastReadWatermark(5L).build();
+        when(unreadMarkerRepository.findByUserAndRoom(user, room)).thenReturn(Optional.of(marker));
+        when(messageRepository.countByRoomAndWatermarkGreaterThan(room, 5L)).thenReturn(4L);
 
-        when(unreadMarkerRepository.findByUserAndRoom(user, room))
-                .thenReturn(Optional.of(marker));
-
-        int unreadCount = notificationService.computeUnreadCount(user, room);
-
-        assertThat(unreadCount).isEqualTo(4);
+        assertThat(notificationService.computeUnreadCount(user, room)).isEqualTo(4);
     }
 
-    /**
-     * Validates CP 24: computeUnreadCount caps at 999 when unread exceeds display cap.
-     */
     @Test
-    void computeUnreadCount_capsAt999WhenUnreadExceedsDisplayCap() {
-        // room.nextWatermark = 2000, lastReadWatermark = 0
-        // unread = 2000 - 1 - 0 = 1999, capped to 999
-        room.setNextWatermark(2000L);
+    void computeUnreadCount_capsAt999() {
+        UnreadMarker marker = UnreadMarker.builder().user(user).room(room).lastReadWatermark(0L).build();
+        when(unreadMarkerRepository.findByUserAndRoom(user, room)).thenReturn(Optional.of(marker));
+        when(messageRepository.countByRoomAndWatermarkGreaterThan(room, 0L)).thenReturn(1999L);
 
-        UnreadMarker marker = UnreadMarker.builder()
-                .user(user)
-                .room(room)
-                .lastReadWatermark(0L)
-                .build();
-
-        when(unreadMarkerRepository.findByUserAndRoom(user, room))
-                .thenReturn(Optional.of(marker));
-
-        int unreadCount = notificationService.computeUnreadCount(user, room);
-
-        assertThat(unreadCount).isEqualTo(999);
+        assertThat(notificationService.computeUnreadCount(user, room)).isEqualTo(999);
     }
 
-    /**
-     * Validates CP 24: computeUnreadCount returns 0 when no marker exists.
-     */
     @Test
-    void computeUnreadCount_returnsZeroWhenNoMarkerExists() {
-        when(unreadMarkerRepository.findByUserAndRoom(user, room))
-                .thenReturn(Optional.empty());
+    void computeUnreadCount_zeroWhenNoMarker() {
+        when(unreadMarkerRepository.findByUserAndRoom(user, room)).thenReturn(Optional.empty());
 
-        int unreadCount = notificationService.computeUnreadCount(user, room);
-
-        assertThat(unreadCount).isEqualTo(0);
+        assertThat(notificationService.computeUnreadCount(user, room)).isZero();
     }
 
-    /**
-     * Validates CP 24: computeUnreadCount returns 0 when lastReadWatermark is null.
-     */
     @Test
-    void computeUnreadCount_returnsZeroWhenLastReadWatermarkIsNull() {
-        UnreadMarker marker = UnreadMarker.builder()
-                .user(user)
-                .room(room)
-                .lastReadWatermark(null)
-                .build();
+    void computeUnreadCount_zeroWhenLastReadWatermarkNull() {
+        UnreadMarker marker = UnreadMarker.builder().user(user).room(room).lastReadWatermark(null).build();
+        when(unreadMarkerRepository.findByUserAndRoom(user, room)).thenReturn(Optional.of(marker));
 
-        when(unreadMarkerRepository.findByUserAndRoom(user, room))
-                .thenReturn(Optional.of(marker));
-
-        int unreadCount = notificationService.computeUnreadCount(user, room);
-
-        assertThat(unreadCount).isEqualTo(0);
-    }
-
-    /**
-     * Validates CP 24: computeUnreadCount returns 0 when all messages are read
-     * (lastReadWatermark equals room.nextWatermark - 1).
-     */
-    @Test
-    void computeUnreadCount_returnsZeroWhenAllMessagesAreRead() {
-        // room.nextWatermark = 10, lastReadWatermark = 9
-        // unread = 10 - 1 - 9 = 0
-        UnreadMarker marker = UnreadMarker.builder()
-                .user(user)
-                .room(room)
-                .lastReadWatermark(9L)
-                .build();
-
-        when(unreadMarkerRepository.findByUserAndRoom(user, room))
-                .thenReturn(Optional.of(marker));
-
-        int unreadCount = notificationService.computeUnreadCount(user, room);
-
-        assertThat(unreadCount).isEqualTo(0);
+        assertThat(notificationService.computeUnreadCount(user, room)).isZero();
     }
 }
