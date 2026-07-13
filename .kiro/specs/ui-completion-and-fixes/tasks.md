@@ -1,0 +1,314 @@
+# Implementation Plan: UI Completion and Fixes
+
+## Overview
+
+This plan implements 18 discrete UI and backend items for the YAC chat application. Tasks are ordered by dependency: shared DTOs and backend endpoints first, then frontend JS modules, then template wiring. Backend property-based tests are included for the 4 applicable correctness properties (jqwik).
+
+## Tasks
+
+- [x] 1. Create new DTOs and modify existing DTOs
+  - [x] 1.1 Create `UpdateRoomRequest` record in `model/dto/`
+    - Fields: `String name`, `String description`, `RoomVisibility visibility` (all optional/nullable)
+    - _Requirements: 2.1_
+  - [x] 1.2 Create `MyRoomEntry` record in `model/dto/`
+    - Fields: `UUID id`, `String name`, `RoomVisibility visibility`, `int unreadCount`
+    - _Requirements: 4.1_
+  - [x] 1.3 Create `UpdateProfileRequest` record in `model/dto/`
+    - Fields: `String displayName`
+    - _Requirements: 10.1_
+  - [x] 1.4 Create `AttachmentInfo` record in `model/dto/`
+    - Fields: `UUID id`, `String originalFileName`, `String contentType`, `long fileSize`
+    - _Requirements: 15.4, 15.5_
+  - [x] 1.5 Modify `SendFriendRequest` to add optional `requestText` field
+    - Add `String requestText` field (no validation annotation — it's optional)
+    - _Requirements: 3.2_
+  - [x] 1.6 Modify `ChatMessageResponse` to add `List<AttachmentInfo> attachments` field
+    - Add the field to the record, update all call sites that construct `ChatMessageResponse` (in `MessageService.toResponse()`, `MessageApiController.toResponse()`, `ChatMessageHandler.sendMessage()`)
+    - For new messages broadcast via WebSocket, pass `List.of()` as the attachments list
+    - _Requirements: 15.5_
+
+- [x] 2. Backend: Repository additions
+  - [x] 2.1 Add `findByMessageId(UUID messageId)` to `AttachmentRepository`
+    - Returns `List<Attachment>`
+    - _Requirements: 15.4_
+  - [x] 2.2 Add batch query `findByMessageIdIn(List<UUID> messageIds)` to `AttachmentRepository`
+    - Use `@Query("SELECT a FROM Attachment a WHERE a.message.id IN :messageIds")`
+    - _Requirements: 15.4_
+
+- [x] 3. Backend: Service layer changes
+  - [x] 3.1 Add `RoomService.updateRoom()` method
+    - Validate room ownership (throw `ForbiddenException` if not owner)
+    - Validate name uniqueness on change (throw `ConflictException` if conflict)
+    - Apply non-null fields only (partial update)
+    - Return updated `RoomDto`
+    - _Requirements: 2.2, 2.3, 2.4_
+  - [x] 3.2 Add `RoomService.listUserRoomsWithUnread()` method
+    - Query `RoomMemberRepository.findByUserWithRoomAndOwner(user)`
+    - Compute unread count per room (use existing `NotificationService` or `UnreadMarkerRepository`)
+    - Return `List<MyRoomEntry>`
+    - _Requirements: 4.1_
+  - [x] 3.3 Add `FriendshipService.listPendingIncoming()` and `listPendingOutgoing()` methods
+    - Use existing `findByRecipientAndStatusWithUsers` / `findByRequesterAndStatusWithUsers` with `PENDING` status
+    - Return `List<FriendshipDto>`
+    - _Requirements: 13.7_
+  - [x] 3.4 Modify `MessageService.toResponse()` to include attachment metadata
+    - Load attachments via `AttachmentRepository.findByMessageId()`
+    - Map to `List<AttachmentInfo>`
+    - _Requirements: 15.5_
+  - [x] 3.5 Modify `MessageService.getMessageHistory()` to batch-load attachments
+    - After fetching messages, collect all message IDs
+    - Batch-load via `AttachmentRepository.findByMessageIdIn()`
+    - Group by message ID and attach to each `ChatMessageResponse`
+    - _Requirements: 15.4, 15.5_
+
+- [x] 4. Backend: API controller changes
+  - [x] 4.1 Add `PUT /api/rooms/{id}` endpoint to `RoomApiController`
+    - Accept `@Valid @RequestBody UpdateRoomRequest`, delegate to `RoomService.updateRoom()`
+    - Return `ResponseEntity<RoomDto>` with HTTP 200
+    - _Requirements: 2.1, 2.2_
+  - [x] 4.2 Add `GET /api/rooms/my` endpoint to `RoomApiController`
+    - Delegate to `RoomService.listUserRoomsWithUnread()`
+    - Return `ResponseEntity<List<MyRoomEntry>>`
+    - _Requirements: 4.1_
+  - [x] 4.3 Fix `FriendshipApiController.sendFriendRequest()` to pass `request.requestText()` instead of `null`
+    - One-line fix in the existing method
+    - _Requirements: 3.1_
+  - [x] 4.4 Add `GET /api/friends/requests/incoming` and `GET /api/friends/requests/outgoing` endpoints to `FriendshipApiController`
+    - Delegate to `FriendshipService.listPendingIncoming()` / `listPendingOutgoing()`
+    - Return `ResponseEntity<List<FriendshipDto>>`
+    - _Requirements: 13.7_
+  - [x] 4.5 Add `PUT /api/users/me` endpoint to `UserApiController`
+    - Accept `@Valid @RequestBody UpdateProfileRequest`, delegate to `UserService.updateProfile()`
+    - Return `ResponseEntity<UserDto>` with HTTP 200
+    - _Requirements: 10.1_
+  - [x] 4.6 Add `GET /reset-password` route to `AuthWebController`
+    - Accept optional `token` query param, add to model, return `"auth/reset-password"` view
+    - _Requirements: 1.7_
+  - [x] 4.7 Add `/reset-password` to `SecurityConfig` permitAll list
+    - Add to the existing `requestMatchers(...)` in `securityFilterChain`
+    - _Requirements: 1.7_
+
+- [x] 5. Checkpoint — Backend compilation and tests
+  - Ensure all backend code compiles, existing tests pass, ask the user if questions arise.
+
+- [x] 6. Backend property-based tests (jqwik)
+  - [x] 6.1 Write property test for room update round-trip
+    - **Property 1: Room update round-trip preserves fields**
+    - Create `RoomUpdatePropertyTest` in `src/test/java/com/bovae/yac/property/`
+    - Generate random room names, descriptions, visibility values, null/non-null combinations
+    - Verify returned `RoomDto` matches provided non-null fields
+    - **Validates: Requirements 2.2**
+  - [x] 6.2 Write property test for friend request text passthrough
+    - **Property 2: Friend request text passthrough**
+    - Create `FriendRequestTextPropertyTest` in `src/test/java/com/bovae/yac/property/`
+    - Generate random `requestText` strings including null, empty, unicode, max-length
+    - Verify persisted `Friendship.requestText` equals the input value
+    - **Validates: Requirements 3.1, 3.3**
+  - [x] 6.3 Write property test for friend request endpoint filtering
+    - **Property 11: Friend request endpoint filtering**
+    - Create `FriendRequestFilterPropertyTest` in `src/test/java/com/bovae/yac/property/`
+    - Generate random sets of friendships with varying statuses and requester/recipient roles
+    - Verify incoming returns only PENDING where user is recipient; outgoing returns only PENDING where user is requester
+    - **Validates: Requirements 13.7**
+  - [x] 6.4 Write property test for message DTO attachment metadata
+    - **Property 13: Message DTO includes attachment metadata**
+    - Create `MessageAttachmentPropertyTest` in `src/test/java/com/bovae/yac/property/`
+    - Generate random messages with 0–5 attachments, varying content types and filenames
+    - Verify `ChatMessageResponse.attachments` contains matching `id`, `originalFileName`, `contentType`, `fileSize` for each attachment; empty list when no attachments
+    - **Validates: Requirements 15.5**
+
+- [x] 7. Password reset page template
+  - [x] 7.1 Create `src/main/resources/templates/auth/reset-password.html`
+    - Form with token input (pre-filled from `th:value="${token}"`), new password, confirm password, submit button
+    - Inline `<script>` for client-side password match validation (prevent submit if mismatch, show error)
+    - On submit: `fetch('/api/password/reset', ...)` with token + newPassword
+    - On success: show success message with link to `/login`
+    - On error: display error message without clearing fields
+    - Include CSRF meta tags and Bootstrap CSS/JS
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6_
+
+- [x] 8. Navbar link corrections
+  - [x] 8.1 Update `src/main/resources/templates/fragments/navbar.html`
+    - "Public Rooms" → `th:href="@{/rooms/catalog}"`
+    - "Private Rooms" → `th:href="@{/chat(section='private')}"`
+    - "Contacts" → `th:href="@{/chat(section='contacts')}"`
+    - "Sessions" → `th:href="@{/profile/sessions}"`
+    - _Requirements: 18.1, 18.2, 18.3, 18.4_
+
+- [x] 9. Template changes for room settings, member list, and typing indicator
+  - [x] 9.1 Add "Room Settings" modal to `admin-modals.html`
+    - Modal with pre-filled name, description, visibility fields
+    - Submit button triggers JS to PUT `/api/rooms/{id}`
+    - Error feedback area within the modal
+    - _Requirements: 2.5, 2.6, 2.7_
+  - [x] 9.2 Add "Settings" button to `member-list.html` (visible to room owner only)
+    - Button opens the room settings modal (`data-bs-target="#roomSettingsModal"`)
+    - _Requirements: 2.5_
+  - [x] 9.3 Add "Add friend" dropdown item to `member-list.html` for non-self members
+    - `<button>` with `data-username` attribute, calls `addFriend(this)`
+    - _Requirements: 12.1_
+  - [x] 9.4 Add "Leave room" button to `member-list.html` for non-owner members
+    - `th:if="${room.owner.id != currentUser.id}"`, calls `leaveRoom()`
+    - _Requirements: 16.1, 16.5_
+  - [x] 9.5 Add typing indicator `<div>` to `room.html`
+    - `<div id="typing-indicator" class="small text-muted px-3 py-1" style="min-height: 20px;"></div>` below message list, above message input
+    - _Requirements: 6.3_
+  - [x] 9.6 Expose `window.YAC_USER` in `room.html` inline script
+    - Add `window.YAC_USER = { id: '[[${currentUser.id.toString()}]]' }` to the existing inline script block
+    - _Requirements: 7.1_
+  - [x] 9.7 Add new JS `<script>` tags to `room.html` and `chat/index.html`
+    - Add `sidebar.js`, `emoji.js`, `typing.js` script tags to both `room.html` and `index.html`
+    - Add `sidebar.js` to `index.html`
+    - _Requirements: 4.1, 5.1, 6.1_
+  - [x] 9.8 Add `profile.js` script tag and CSRF meta tags to `profile/index.html`
+    - Add `<script th:src="@{/js/profile.js}"></script>` before `</body>`
+    - Verify CSRF meta tags are present (they already are)
+    - _Requirements: 10.1_
+
+- [x] 10. Checkpoint — Templates compile and render
+  - Ensure all templates are syntactically valid, application starts, ask the user if questions arise.
+
+- [x] 11. Create `sidebar.js` — Sidebar population, search, friend requests, DM initiation
+  - [x] 11.1 Implement sidebar room population
+    - IIFE exposing `window.YAC.sidebar`
+    - On `DOMContentLoaded`, fetch `GET /api/rooms/my` and populate `#public-room-list`, `#private-room-list`, `#direct-chat-list`
+    - Each room rendered as `<li>` with `<a href="/chat/rooms/{id}">` and unread badge if count > 0
+    - _Requirements: 4.1, 4.2, 4.3_
+  - [x] 11.2 Implement sidebar contact population
+    - Fetch `GET /api/friends` and populate `#contact-list`
+    - Each contact rendered with presence dot (CSS class based on status) and clickable name
+    - _Requirements: 4.4, 4.5_
+  - [x] 11.3 Implement sidebar search filtering
+    - Attach `input` event listener to sidebar search `<input>`
+    - Filter all `<li>` elements in room and contact lists by case-insensitive text match
+    - Restore all on empty input
+    - _Requirements: 11.1, 11.2, 11.3_
+  - [x] 11.4 Implement friend request panel
+    - Render a "Friend Requests" collapsible section in the contacts area
+    - Fetch `GET /api/friends/requests/incoming` and `GET /api/friends/requests/outgoing`
+    - Incoming: show requester username, request text, Accept/Decline buttons
+    - Outgoing: show recipient username, "Pending" badge
+    - Accept: `POST /api/friends/{id}/accept`, refresh sidebar
+    - Decline: `POST /api/friends/{id}/decline`, remove entry
+    - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.6_
+  - [x] 11.5 Implement DM initiation from contacts
+    - Click handler on contact name: `POST /api/direct-chats` with `{ userId }`, navigate to `/chat/rooms/{roomId}`
+    - _Requirements: 14.1, 14.2, 14.3_
+  - [x] 11.6 Implement URL section param handling
+    - On load, check `URLSearchParams` for `section` param
+    - `section=private`: expand `#privateRooms` accordion
+    - `section=contacts`: scroll to contacts section
+    - _Requirements: 18.2, 18.3_
+  - [x] 11.7 Implement WebSocket unread count update handler
+    - Expose `window.YAC.sidebar.updateUnreadBadge(roomId, count)` for real-time badge updates
+    - Wire to notification handler in `app.js` or `stomp-client.js`
+    - _Requirements: 4.6_
+
+- [x] 12. Create `emoji.js` — Emoji picker
+  - [x] 12.1 Implement emoji picker popup and insertion
+    - IIFE exposing `window.YAC.emoji`
+    - Build popup `<div>` with CSS grid of ~80 common Unicode emoji characters
+    - Toggle on `#emoji-btn` click, positioned above the button
+    - On emoji click: insert at `#message-textarea` cursor position (`selectionStart`), close popup
+    - Close on outside click via `document.addEventListener('click', ...)`
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
+
+- [x] 13. Create `typing.js` — Typing indicators
+  - [x] 13.1 Implement typing event send with debounce
+    - IIFE exposing `window.YAC.typing`
+    - Attach `input` event listener to `#message-textarea`
+    - Track `lastTypingSent` timestamp, only publish to `/app/typing` if >2s since last send
+    - _Requirements: 6.1, 6.2_
+  - [x] 13.2 Implement typing indicator receive and display
+    - Subscribe to `/topic/room.{roomId}.events` (extend `stomp-client.js` to subscribe and forward events)
+    - Maintain `Map<username, timeoutId>` of typing users
+    - On event: if `userId !== YAC_USER.id`, add/refresh user with 3s timeout
+    - Render in `#typing-indicator`: single → "{name} is typing...", two → "{name1} and {name2} are typing...", 3+ → "{name1}, {name2}, and N others are typing..."
+    - Clear when map is empty
+    - _Requirements: 6.3, 6.4, 6.5, 6.6_
+  - [x] 13.3 Extend `stomp-client.js` to subscribe to room events topic
+    - Add subscription to `/topic/room.{roomId}.events` in `subscribeToChannels()`
+    - Forward events to `window.YAC.typing.onEvent(event)` callback
+    - _Requirements: 6.3_
+
+- [x] 14. Create `profile.js` — Profile form submission
+  - [x] 14.1 Implement profile form handlers
+    - IIFE exposing `window.YAC.profile`
+    - Wire `#display-name-form` submit: `PUT /api/users/me` with `{ displayName }`, show success/error feedback
+    - Wire `#change-password-form` submit: validate new === confirm, then `POST /api/password/change`, clear fields on success, show error on failure
+    - Wire `#delete-account-btn` click: `confirm()` dialog, then `DELETE /api/users/me`, redirect to `/login` on 204
+    - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7_
+
+- [x] 15. Modify `app.js` — Message edit, delete, banned users, room settings, leave room, attachments, add friend
+  - [x] 15.1 Add message edit UI to `createMessageElement()`
+    - Add edit button (✏️) for own messages (check `msg.senderId === YAC_USER.id`)
+    - Edit click: replace `<p>` with `<textarea>` + Save/Cancel buttons
+    - Save: `PUT /api/rooms/{roomId}/messages/{messageId}` with `{ content }`, replace textarea with updated text + "(edited)"
+    - Cancel: restore original text
+    - Error: show message below textarea, keep editing open
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
+  - [x] 15.2 Wire message delete button handler
+    - Attach click handler to 🗑 button (event delegation on `.message-actions`)
+    - Show confirmation via `showConfirmModal()`
+    - On confirm: `DELETE /api/rooms/{roomId}/messages/{messageId}`
+    - On 204: remove `.message-item` from DOM
+    - On error: `showErrorModal(err.message)`
+    - _Requirements: 8.1, 8.2, 8.3, 8.4_
+  - [x] 15.3 Implement banned users modal population
+    - Listen for `bannedUsersModal` `show.bs.modal` event
+    - Fetch `GET /api/rooms/{roomId}/bans`, render entries with username, banning admin, date, Unban button
+    - Empty list: "No banned users" message
+    - Unban: `DELETE /api/rooms/{roomId}/bans/{userId}`, remove entry on 204, show error on failure
+    - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
+  - [x] 15.4 Implement room settings modal submission
+    - Wire room settings modal form submit: `PUT /api/rooms/{roomId}` with name/description/visibility
+    - On success: update room header text, close modal
+    - On error: show error within modal
+    - _Requirements: 2.5, 2.6, 2.7_
+  - [x] 15.5 Implement `leaveRoom()` global function
+    - Confirmation via `showConfirmModal()`
+    - `POST /api/rooms/{roomId}/leave`
+    - On success: redirect to `/chat`
+    - On error: `showErrorModal()`
+    - _Requirements: 16.2, 16.3, 16.4_
+  - [x] 15.6 Implement `addFriend()` global function
+    - `POST /api/friends/request` with `{ username }`
+    - On 201: update button text to "Request sent", disable button
+    - On error: `showErrorModal()`
+    - _Requirements: 12.2, 12.3, 12.4_
+  - [x] 15.7 Add attachment rendering to `createMessageElement()`
+    - After message text, iterate `msg.attachments`
+    - Image types (`contentType` starts with `image/`): render `<img>` with `max-width: 400px` wrapped in `<a>` to download endpoint
+    - Non-image types: render `<a>` with `📎 {originalFileName}` linking to download endpoint
+    - _Requirements: 15.1, 15.2, 15.3, 15.4_
+
+- [x] 16. Checkpoint — Frontend JS and template integration
+  - Ensure all JS files load without errors, basic UI interactions work, ask the user if questions arise.
+
+- [x] 17. Modify `presence.js` — AFK multi-tab coordination
+  - [x] 17.1 Implement BroadcastChannel cross-tab coordination
+    - Add `BroadcastChannel` setup with `localStorage` fallback for unsupported browsers
+    - `recordCursorActivity()` broadcasts `{ type: 'active', tabId, timestamp }` to other tabs
+    - Maintain `lastActivityTimestamps` map (tabId → timestamp) across all tabs
+    - `isActive()` checks if ANY tab had activity within 2s
+    - Add `isAllTabsIdle60s()` — returns true when all tab timestamps are >60s old
+    - `sendHeartbeat()` reports `active: !isAllTabsIdle60s()`
+    - _Requirements: 17.1, 17.2, 17.3, 17.4_
+  - [x] 17.2 Implement visibility/focus immediate heartbeat
+    - On `visibilitychange` (document becomes visible) or `focus` event: immediately send heartbeat with `active: true`
+    - _Requirements: 17.5_
+  - [x] 17.3 Implement tab cleanup on close
+    - On `beforeunload`: close BroadcastChannel listener, remove own entry from `lastActivityTimestamps`, clean up localStorage entries
+    - _Requirements: 17.6_
+
+- [x] 18. Final checkpoint — Full integration verification
+  - Ensure all tests pass (unit, integration, property-based), all templates render correctly, all JS modules load and interact properly, ask the user if questions arise.
+
+## Notes
+
+- Tasks marked with `*` are optional and can be skipped for faster MVP
+- Each task references specific requirements for traceability
+- Checkpoints ensure incremental validation
+- Property tests validate 4 backend correctness properties using jqwik
+- Frontend properties (P3–P10, P12, P14) are documented in the design for specification clarity but validated through example-based tests since the project has no JS PBT framework
+- All backend changes follow existing patterns: `@RequiredArgsConstructor`, `ResponseEntity<T>`, records for DTOs, `@Validated` controllers
