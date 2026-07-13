@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <body>
-<div th:fragment="sidebar(collapsed)" class="sidebar p-3 border-end bg-white h-100 overflow-auto">
+<div th:fragment="sidebar" class="sidebar p-3 bg-white h-100 overflow-auto">
   <div class="mb-3">
     <input type="text" class="form-control form-control-sm" placeholder="Search rooms...">
   </div>
@@ -11,13 +11,12 @@
     <div class="accordion-item border-0">
       <h2 class="accordion-header">
         <button class="accordion-button py-2 px-0 bg-transparent" type="button"
-                th:classappend="${collapsed ? 'collapsed' : ''}"
                 data-bs-toggle="collapse" data-bs-target="#publicRooms"
-                th:attr="aria-expanded=${!collapsed}" aria-controls="publicRooms">
+                aria-expanded="true" aria-controls="publicRooms">
           Public Rooms
         </button>
       </h2>
-      <div id="publicRooms" class="accordion-collapse collapse" th:classappend="${collapsed ? '' : 'show'}">
+      <div id="publicRooms" class="accordion-collapse collapse show">
         <div class="accordion-body p-0">
           <ul class="list-unstyled mb-0" id="public-room-list">
             <li class="px-2 py-1 text-muted small">No rooms yet</li>
@@ -30,13 +29,12 @@
     <div class="accordion-item border-0">
       <h2 class="accordion-header">
         <button class="accordion-button py-2 px-0 bg-transparent" type="button"
-                th:classappend="${collapsed ? 'collapsed' : ''}"
                 data-bs-toggle="collapse" data-bs-target="#privateRooms"
-                th:attr="aria-expanded=${!collapsed}" aria-controls="privateRooms">
+                aria-expanded="true" aria-controls="privateRooms">
           Private Rooms
         </button>
       </h2>
-      <div id="privateRooms" class="accordion-collapse collapse" th:classappend="${collapsed ? '' : 'show'}">
+      <div id="privateRooms" class="accordion-collapse collapse show">
         <div class="accordion-body p-0">
           <ul class="list-unstyled mb-0" id="private-room-list">
             <li class="px-2 py-1 text-muted small">No rooms yet</li>
@@ -49,13 +47,12 @@
     <div class="accordion-item border-0">
       <h2 class="accordion-header">
         <button class="accordion-button py-2 px-0 bg-transparent" type="button"
-                th:classappend="${collapsed ? 'collapsed' : ''}"
                 data-bs-toggle="collapse" data-bs-target="#directMessages"
-                th:attr="aria-expanded=${!collapsed}" aria-controls="directMessages">
+                aria-expanded="true" aria-controls="directMessages">
           Direct Messages
         </button>
       </h2>
-      <div id="directMessages" class="accordion-collapse collapse" th:classappend="${collapsed ? '' : 'show'}">
+      <div id="directMessages" class="accordion-collapse collapse show">
         <div class="accordion-body p-0">
           <button id="saved-messages-btn" type="button"
                   class="btn btn-outline-secondary btn-sm w-100 mb-2">

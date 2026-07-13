@@ -15,6 +15,14 @@
   <div th:replace="~{fragments/navbar :: navbar}"></div>
 
   <div class="flex-grow-1 d-flex overflow-hidden">
+    <!-- Left sidebar: rooms + contacts -->
+    <div class="chat-sidebar offcanvas-md offcanvas-start" tabindex="-1" id="sidebarDrawer"
+         aria-labelledby="sidebarDrawerLabel" style="width: 260px; min-width: 260px;">
+      <button type="button" class="btn-close d-md-none m-2 ms-auto d-block"
+              data-bs-dismiss="offcanvas" data-bs-target="#sidebarDrawer" aria-label="Close"></button>
+      <div th:replace="~{fragments/sidebar :: sidebar}"></div>
+    </div>
+
     <!-- Center: messages -->
     <div class="flex-grow-1 d-flex flex-column">
       <div class="chat-header border-bottom p-2 bg-white d-flex align-items-center justify-content-between">
@@ -44,14 +52,6 @@
       <button type="button" class="btn-close d-md-none m-2 ms-auto d-block"
               data-bs-dismiss="offcanvas" data-bs-target="#membersDrawer" aria-label="Close"></button>
       <div th:replace="~{fragments/member-list :: member-list}"></div>
-    </div>
-
-    <!-- Right sidebar: rooms + contacts -->
-    <div class="chat-sidebar offcanvas-md offcanvas-start" tabindex="-1" id="sidebarDrawer"
-         aria-labelledby="sidebarDrawerLabel" style="width: 260px; min-width: 260px;">
-      <button type="button" class="btn-close d-md-none m-2 ms-auto d-block"
-              data-bs-dismiss="offcanvas" data-bs-target="#sidebarDrawer" aria-label="Close"></button>
-      <div th:replace="~{fragments/sidebar :: sidebar(collapsed=false)}"></div>
     </div>
   </div>
 
