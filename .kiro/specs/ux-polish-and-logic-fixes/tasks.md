@@ -1,0 +1,235 @@
+# Implementation Plan: UX Polish and Logic Fixes
+
+## Overview
+
+This plan implements 19 UX improvements and logic fixes across the YAC chat application. Tasks are ordered by dependency: backend DTOs and services first, then controllers, then frontend templates/JS/CSS, and finally property-based tests. Each task builds incrementally on previous work.
+
+## Tasks
+
+- [x] 1. Modify DTOs for new fields
+  - [x] 1.1 Add `otherUsername` and `otherDisplayName` fields to `MyRoomEntry` record
+    - Add two new `String` fields to the record in `src/main/java/com/bovae/yac/model/dto/MyRoomEntry.java`
+    - These are nullable fields populated only for DIRECT rooms
+    - _Requirements: 3.2_
+  - [x] 1.2 Add `replyToSenderUsername` and `replyToContentSnippet` fields to `ChatMessageResponse` record
+    - Add two new `String` fields after `replyToId` in `src/main/java/com/bovae/yac/model/dto/ChatMessageResponse.java`
+    - _Requirements: 14.3_
+  - [x] 1.3 Create `PresenceStatusEntry` record in `com.bovae.yac.model.dto`
+    - Fields: `UUID userId`, `PresenceStatus status`
+    - _Requirements: 4.5_
+  - [x] 1.4 Create `PendingInvitationDto` record in `com.bovae.yac.model.dto`
+    - Fields: `UUID invitationId`, `UUID roomId`, `String roomName`, `String inviterUsername`, `Instant createdAt`
+    - _Requirements: 12.1_
+
+- [x] 2. Backend service changes
+  - [x] 2.1 Modify `RoomService.listUserRoomsWithUnread()` to populate DM display names
+    - For DIRECT rooms, query `roomMemberRepository.findByRoomWithUsers(room)` and find the other member
+    - Populate `otherUsername` and `otherDisplayName` on `MyRoomEntry`
+    - For self-DM (single member), set both to null
+    - For non-DIRECT rooms, pass null for both fields
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 2.2 Add DIRECT visibility guards to `RoomService.updateRoom()`
+    - If `room.getVisibility() == DIRECT`, throw `ForbiddenException("DIRECT rooms cannot be modified through room settings")`
+    - If `visibility == DIRECT`, throw `ForbiddenException("Rooms cannot be converted to DIRECT visibility")`
+    - Place guards before any field updates
+    - _Requirements: 5.1, 5.2_
+  - [x] 2.3 Modify `DirectChatService` for Saved Messages (self-DM)
+    - Remove the self-check that throws `ForbiddenException("Cannot create a direct chat with yourself")`
+    - Add `getOrCreateSavedMessages(User user)` method that creates a self-DM with single `RoomMember`
+    - Skip friendship check and ban check for self-DM
+    - Set `nextWatermark(1L)` explicitly on room creation
+    - Modify `listDirectChats()` to handle rooms where no "other user" exists (single-member DIRECT room)
+    - _Requirements: 6.1, 6.2, 6.3, 6.5, 16.1, 16.2_
+  - [x] 2.4 Modify `MessageService.checkDirectChatBan()` to skip ban check for self-DM rooms
+    - If room members list has only one distinct user, skip the ban check loop
+    - _Requirements: 6.6_
+  - [x] 2.5 Modify `MessageService.toResponse()` to populate reply quote fields
+    - When `message.getReplyTo() != null`, set `replyToSenderUsername` and `replyToContentSnippet` (first 100 chars)
+    - When `replyTo` is null, set both to null
+    - Update both overloads of `toResponse()`
+    - _Requirements: 14.1, 14.2, 14.3_
+  - [x] 2.6 Modify `PasswordService.createResetToken()` to return the raw token string
+    - Ensure the method returns the raw token value so the controller can build the reset link
+    - _Requirements: 1.1_
+
+- [x] 3. Checkpoint - Compile and verify backend service changes
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 4. Backend controller and advice changes
+  - [x] 4.1 Create `NavbarModelAdvice` in `com.bovae.yac.config`
+    - `@ControllerAdvice` with `@RequiredArgsConstructor`
+    - `@ModelAttribute("navbarUser")` method that resolves the authenticated user from `SecurityContextHolder`
+    - Return null for anonymous/unauthenticated requests
+    - _Requirements: 2.6_
+  - [x] 4.2 Create `PresenceApiController` in `com.bovae.yac.controller.api`
+    - `GET /api/presence` endpoint accepting `userIds` query parameter (comma-separated UUIDs)
+    - Parse UUIDs, call `presenceService.getUserStatus()` for each, return `List<PresenceStatusEntry>`
+    - _Requirements: 4.1, 4.4, 4.5_
+  - [x] 4.3 Modify `AuthWebController.forgotPasswordPost()` to capture and pass reset link
+    - Capture raw token from `passwordService.createResetToken()`
+    - Add `resetLink` flash attribute with value `/reset-password?token={rawToken}`
+    - _Requirements: 1.1, 1.2, 1.4_
+  - [x] 4.4 Modify `ChatWebController.roomView()` to resolve current user's room role and clear unread
+    - Resolve `currentUserRole` from members list and add to model
+    - Call `notificationService.markRoomAsRead(user, room)` when `isMember` is true
+    - Inject `NotificationService` into `ChatWebController`
+    - _Requirements: 7.5, 8.1, 8.2, 8.3_
+  - [x] 4.5 Modify `RoomApiController.createRoom()` to reject DIRECT visibility
+    - Add validation before delegation: if `request.visibility() == DIRECT`, return `ResponseEntity.badRequest().build()`
+    - _Requirements: 15.1, 15.2_
+  - [x] 4.6 Modify `AttachmentApiController.downloadFile()` for inline image display
+    - Determine disposition: if `contentType.startsWith("image/")` → `inline`, else → `attachment`
+    - _Requirements: 17.1, 17.2, 17.3_
+  - [x] 4.7 Modify `ChatMessageHandler.sendMessage()` to broadcast unread notifications
+    - After broadcasting message, query room members via `roomMemberRepository.findByRoom(room)`
+    - For each non-sender member, compute unread count and broadcast `NotificationEvent`
+    - Inject `RoomMemberRepository` and `NotificationService`
+    - _Requirements: 9.1, 9.2, 9.3_
+  - [x] 4.8 Add `POST /api/direct-chats/saved` endpoint to `DirectChatApiController`
+    - Call `directChatService.getOrCreateSavedMessages(user)` and return the room DTO
+    - _Requirements: 6.3, 6.7_
+  - [x] 4.9 Add `GET /api/rooms/invitations/pending` endpoint
+    - Add `findByInvitee(User)` method to `RoomInvitationRepository`
+    - Return `List<PendingInvitationDto>` for the current user
+    - _Requirements: 12.1_
+
+- [x] 5. Checkpoint - Compile and verify all backend changes
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 6. Frontend template changes
+  - [x] 6.1 Update `navbar.html` to use avatar dropdown
+    - Replace flat "Sign out" button with avatar circle (first letter of `navbarUser.username`) + dropdown
+    - Dropdown items: Profile (`/profile`), Sessions (`/profile/sessions`), divider, Sign out (POST `/logout`)
+    - Conditionally render with `th:if="${navbarUser != null}"`
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.7_
+  - [x] 6.2 Update `forgot-password.html` to display reset link
+    - Add conditional `th:if="${resetLink}"` block showing the clickable reset link
+    - _Requirements: 1.2, 1.3_
+  - [x] 6.3 Update `member-list.html` to restrict admin actions by role
+    - Admin actions dropdown: show only when `currentUserRole` is OWNER or ADMIN and member is not self
+    - "Invite user" button: show only for OWNER or ADMIN
+    - "View banned users" button: show only for OWNER or ADMIN
+    - Add "Block user" option to dropdown for non-self members
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 13.1_
+  - [x] 6.4 Update `admin-modals.html` to exclude DIRECT from visibility dropdown
+    - Add `th:if="${v.name() != 'DIRECT'}"` filter on the visibility options loop
+    - _Requirements: 5.3_
+  - [x] 6.5 Update `room.html` for message bubble layout and feature parity
+    - Add `th:classappend` for `message-own` / `message-other` based on `msg.senderId() == currentUser.id`
+    - Add reply button (↩) on all messages
+    - Add edit button (✏️) on own messages
+    - Add admin delete button (🗑) on other users' messages when role is OWNER/ADMIN
+    - Render attachments inline (images as `<img>`, others as download links)
+    - Update reply quote to show `replyToSenderUsername` and `replyToContentSnippet`
+    - Restructure message DOM for bubble layout (avatar outside, bubble wrapper inside)
+    - _Requirements: 10.2, 11.1, 11.2, 11.3, 14.2, 18.1, 18.2, 18.4, 18.5, 18.6, 18.8_
+  - [x] 6.6 Update `sidebar.html` to add Saved Messages quick-access button
+    - Add a "Saved Messages 🔖" button below the DM accordion header
+    - _Requirements: 6.4, 6.7_
+
+- [x] 7. Frontend JavaScript changes
+  - [x] 7.1 Update `app.js` `createMessageElement()` for bubble layout and new features
+    - Apply `message-own` or `message-other` class based on `senderId === YAC_USER.id`
+    - Restructure DOM: avatar outside, bubble wrapper inside with header + reply quote + text + attachments
+    - Add reply button (↩) on all messages with click handler to populate `#reply-to-id`
+    - Update reply quote rendering to use `msg.reply_to_sender_username` and `msg.reply_to_content_snippet`
+    - Add `window.blockUser` function with confirmation modal and POST to `/api/user-bans`
+    - _Requirements: 10.1, 10.3, 10.4, 13.2, 13.3, 13.4, 13.5, 14.1, 18.1, 18.2, 18.7, 18.8, 18.9_
+  - [x] 7.2 Update `presence.js` to add `fetchInitialPresence()` function
+    - New function that calls `GET /api/presence?userIds=...` and updates matching presence dots
+    - Expose on `window.YAC.presence.fetchInitialPresence`
+    - _Requirements: 4.2, 4.3_
+  - [x] 7.3 Update `sidebar.js` for DM display names, Saved Messages, presence fetch, and invitations
+    - In `createRoomItem()`: for DIRECT rooms, use `room.other_display_name || room.other_username || room.name`
+    - For self-DM (both null), display "Saved Messages 🔖"
+    - Add click handler for Saved Messages button: POST to `/api/direct-chats/saved`, navigate to room
+    - After populating contacts, call `window.YAC.presence.fetchInitialPresence(userIds)`
+    - Fetch `GET /api/rooms/invitations/pending` and render invitation panel with accept/decline buttons
+    - _Requirements: 3.1, 3.4, 4.2, 6.7, 9.4, 12.2, 12.3, 12.4, 12.5, 12.6_
+
+- [x] 8. Frontend CSS changes
+  - [x] 8.1 Update `chat.css` for message bubble styles
+    - Add `.message-own`: `flex-direction: row-reverse`, blue bubble (`#d1ecf1`), right-aligned
+    - Add `.message-other`: `flex-direction: row`, white bubble with border, left-aligned
+    - Add `.message-bubble`: `max-width: 70%`, `border-radius: 12px`, `padding: 8px 12px`, subtle shadow
+    - Add `.message-item .message-actions`: `opacity: 0` by default, `opacity: 1` on hover
+    - Avatar: 36px circle outside bubble
+    - _Requirements: 18.3, 18.7, 19.1, 19.2, 19.3, 19.4, 19.5, 19.6_
+
+- [x] 9. Checkpoint - Full compilation and manual smoke test
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 10. Property-based tests
+  - [x] 10.1 Write property test: NavbarUser model attribute injection (Property 1)
+    - **Property 1: NavbarUser model attribute injection**
+    - **Validates: Requirements 2.6**
+    - Create `src/test/java/com/bovae/yac/property/NavbarModelAdvicePropertyTest.java`
+    - Generate random User entities, test authenticated vs anonymous requests
+  - [x] 10.2 Write property test: DM room entry display name resolution (Property 2)
+    - **Property 2: DM room entry display name resolution**
+    - **Validates: Requirements 3.1, 3.2, 3.3, 3.4**
+    - Create `src/test/java/com/bovae/yac/property/DmDisplayNamePropertyTest.java`
+    - Generate random users with/without displayName, DIRECT/PUBLIC/PRIVATE rooms, self-DM
+  - [x] 10.3 Write property test: Presence batch endpoint correctness (Property 3)
+    - **Property 3: Presence batch endpoint correctness**
+    - **Validates: Requirements 4.1, 4.4, 4.5**
+    - Create `src/test/java/com/bovae/yac/property/PresenceBatchPropertyTest.java`
+    - Generate random UUID sets, random PresenceStatus values
+  - [x] 10.4 Write property test: DIRECT visibility immutability (Property 4)
+    - **Property 4: DIRECT visibility immutability**
+    - **Validates: Requirements 5.1, 5.2, 5.4, 15.1**
+    - Create `src/test/java/com/bovae/yac/property/DirectVisibilityGuardPropertyTest.java`
+    - Generate random UpdateRoomRequest fields, DIRECT and non-DIRECT rooms
+  - [x] 10.5 Write property test: Self-DM (Saved Messages) lifecycle (Property 5)
+    - **Property 5: Self-DM (Saved Messages) lifecycle**
+    - **Validates: Requirements 6.1, 6.2, 6.5, 6.6**
+    - Create `src/test/java/com/bovae/yac/property/SavedMessagesPropertyTest.java`
+    - Generate random users, verify idempotency and single-member invariant
+  - [x] 10.6 Write property test: Admin action visibility by room role (Property 6)
+    - **Property 6: Admin action visibility by room role**
+    - **Validates: Requirements 7.1, 7.2, 7.3, 7.4**
+    - Create `src/test/java/com/bovae/yac/property/AdminActionVisibilityPropertyTest.java`
+    - Generate random RoomRole values (OWNER, ADMIN, MEMBER, null)
+  - [x] 10.7 Write property test: Room view clears unread count (Property 7)
+    - **Property 7: Room view clears unread count**
+    - **Validates: Requirements 8.1, 8.2, 8.3**
+    - Create `src/test/java/com/bovae/yac/property/RoomViewUnreadPropertyTest.java`
+    - Generate random rooms with random watermarks and unread counts
+  - [x] 10.8 Write property test: Unread notification broadcast on new message (Property 8)
+    - **Property 8: Unread notification broadcast on new message**
+    - **Validates: Requirements 9.1, 9.2, 9.3**
+    - Create `src/test/java/com/bovae/yac/property/UnreadBroadcastPropertyTest.java`
+    - Generate random room member counts (2-20), random sender selection
+  - [x] 10.9 Write property test: Reply quote DTO enrichment (Property 9)
+    - **Property 9: Reply quote DTO enrichment**
+    - **Validates: Requirements 14.1, 14.2, 14.3**
+    - Create `src/test/java/com/bovae/yac/property/ReplyQuotePropertyTest.java`
+    - Generate random message content (0-3072 bytes), random sender usernames, null/non-null replyTo
+  - [x] 10.10 Write property test: DM room nextWatermark initialization (Property 10)
+    - **Property 10: DM room nextWatermark initialization**
+    - **Validates: Requirements 16.1, 16.2**
+    - Create `src/test/java/com/bovae/yac/property/DmWatermarkPropertyTest.java`
+    - Generate random user pairs
+  - [x] 10.11 Write property test: Content-Disposition based on attachment content type (Property 11)
+    - **Property 11: Content-Disposition based on attachment content type**
+    - **Validates: Requirements 17.1, 17.2, 17.3**
+    - Create `src/test/java/com/bovae/yac/property/AttachmentDispositionPropertyTest.java`
+    - Generate random content types (image/png, image/jpeg, application/pdf, text/plain, null)
+  - [x] 10.12 Write property test: Message alignment class assignment (Property 12)
+    - **Property 12: Message alignment class assignment**
+    - **Validates: Requirements 18.1, 18.2, 18.8, 18.9**
+    - Create `src/test/java/com/bovae/yac/property/MessageAlignmentPropertyTest.java`
+    - Generate random senderIds, random currentUserIds, equality/inequality
+
+- [x] 11. Final checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Notes
+
+- Tasks marked with `*` are optional and can be skipped for faster MVP
+- Each task references specific requirements for traceability
+- Checkpoints ensure incremental validation after backend and frontend phases
+- Property tests validate universal correctness properties from the design document
+- The application uses global SNAKE_CASE Jackson naming strategy — all new DTOs inherit this automatically
+- All JS uses IIFE pattern on `window.YAC.*` namespace
+- Records are used for DTOs, `@RequiredArgsConstructor` for DI
