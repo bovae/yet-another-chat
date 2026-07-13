@@ -31,6 +31,27 @@
     return window.YAC_USER ? window.YAC_USER.id : null;
   }
 
+  // On fetch failure, replace a list's content with an error + Retry row rather than
+  // leaving the misleading "No rooms/contacts yet" empty state (R3-07).
+  function renderErrorRow(listEl, label, retryFn) {
+    if (!listEl) {
+      return;
+    }
+    listEl.innerHTML = '';
+    var li = document.createElement('li');
+    li.className = 'px-2 py-1 small text-danger d-flex align-items-center justify-content-between';
+    var span = document.createElement('span');
+    span.textContent = label;
+    li.appendChild(span);
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-outline-secondary py-0 px-1';
+    btn.textContent = 'Retry';
+    btn.addEventListener('click', retryFn);
+    li.appendChild(btn);
+    listEl.appendChild(li);
+  }
+
   // --- 11.1: Sidebar room population ---
 
   function populateRooms() {
@@ -99,6 +120,9 @@
       })
       .catch(function (err) {
         console.error('[Sidebar] Error loading rooms:', err);
+        ['public-room-list', 'private-room-list', 'direct-chat-list'].forEach(function (id) {
+          renderErrorRow(document.getElementById(id), 'Failed to load rooms', populateRooms);
+        });
       });
   }
 
@@ -183,6 +207,10 @@
           var dot = document.createElement('span');
           dot.className = 'presence-dot me-2 bg-secondary';
           dot.setAttribute('data-user-id', friendId);
+          // Text affordance so presence isn't colour-only (R2-04); refreshed by presence.js.
+          dot.setAttribute('role', 'img');
+          dot.setAttribute('title', 'Offline');
+          dot.setAttribute('aria-label', 'Offline');
           dot.style.cssText = 'width: 8px; height: 8px; border-radius: 50%; display: inline-block;';
           li.appendChild(dot);
 
@@ -227,10 +255,13 @@
       })
       .catch(function (err) {
         console.error('[Sidebar] Error loading contacts:', err);
+        renderErrorRow(document.getElementById('contact-list'), 'Failed to load contacts', populateContacts);
       });
   }
 
-  // --- 11.3: Sidebar search filtering ---
+  // --- 11.3: Sidebar search filtering + catalog discovery (R3-03) ---
+
+  var discoverTimer = null;
 
   function setupSearch() {
     var sidebar = document.querySelector('.chat-sidebar');
@@ -243,7 +274,8 @@
     }
 
     searchInput.addEventListener('input', function () {
-      var term = searchInput.value.trim().toLowerCase();
+      var raw = searchInput.value.trim();
+      var term = raw.toLowerCase();
       var lists = [
         document.getElementById('public-room-list'),
         document.getElementById('private-room-list'),
@@ -265,7 +297,119 @@
           li.style.display = text.indexOf(term) !== -1 ? '' : 'none';
         });
       });
+
+      // Also discover un-joined public rooms from the catalog, debounced (R3-03).
+      if (discoverTimer) {
+        clearTimeout(discoverTimer);
+      }
+      discoverTimer = setTimeout(function () {
+        renderDiscover(raw);
+      }, 300);
     });
+  }
+
+  function renderDiscover(term) {
+    var existing = document.getElementById('discover-section');
+    if (!term) {
+      if (existing) {
+        existing.remove();
+      }
+      return;
+    }
+    fetch('/api/rooms?search=' + encodeURIComponent(term) + '&size=10', { headers: apiHeaders() })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status);
+        }
+        return response.json();
+      })
+      .then(function (page) {
+        var rooms = page.content || [];
+        // Exclude rooms already in the sidebar (already joined).
+        var joined = {};
+        document.querySelectorAll('#public-room-list a[href], #private-room-list a[href], #direct-chat-list a[href]')
+          .forEach(function (a) {
+            var match = a.getAttribute('href').match(/\/chat\/rooms\/([^/?#]+)/);
+            if (match) {
+              joined[match[1]] = true;
+            }
+          });
+        buildDiscoverSection(rooms.filter(function (room) { return !joined[room.id]; }));
+      })
+      .catch(function (err) {
+        console.warn('[Sidebar] Discover search failed:', err);
+      });
+  }
+
+  function buildDiscoverSection(rooms) {
+    var existing = document.getElementById('discover-section');
+    if (existing) {
+      existing.remove();
+    }
+    if (!rooms || rooms.length === 0) {
+      return;
+    }
+    var searchBox = document.querySelector('.chat-sidebar input[type="text"]');
+    var anchor = searchBox ? searchBox.closest('.mb-3') : null;
+    if (!anchor) {
+      return;
+    }
+
+    var section = document.createElement('div');
+    section.id = 'discover-section';
+    section.className = 'mb-3';
+
+    var header = document.createElement('h6');
+    header.className = 'text-uppercase text-muted small';
+    header.textContent = 'Discover';
+    section.appendChild(header);
+
+    var list = document.createElement('ul');
+    list.className = 'list-unstyled mb-0';
+    rooms.forEach(function (room) {
+      var li = document.createElement('li');
+      li.className = 'px-2 py-1 small d-flex align-items-center justify-content-between';
+      var name = document.createElement('span');
+      name.className = 'text-truncate';
+      name.textContent = room.name;
+      li.appendChild(name);
+      var joinBtn = document.createElement('button');
+      joinBtn.type = 'button';
+      joinBtn.className = 'btn btn-outline-primary btn-sm py-0 px-1';
+      joinBtn.textContent = 'Join';
+      joinBtn.addEventListener('click', function () {
+        joinBtn.disabled = true;
+        joinDiscoveredRoom(room.id, joinBtn);
+      });
+      li.appendChild(joinBtn);
+      list.appendChild(li);
+    });
+    section.appendChild(list);
+    anchor.parentNode.insertBefore(section, anchor.nextSibling);
+  }
+
+  function joinDiscoveredRoom(roomId, btn) {
+    fetch('/api/rooms/' + roomId + '/join', { method: 'POST', headers: apiHeaders() })
+      .then(function (response) {
+        if (response.ok) {
+          window.location.href = '/chat/rooms/' + roomId;
+        } else {
+          return response.json().then(function (err) {
+            if (btn) {
+              btn.disabled = false;
+            }
+            if (window.showErrorModal) {
+              window.showErrorModal(err.message || 'Failed to join room');
+            }
+          });
+        }
+      })
+      .catch(function (err) {
+        if (btn) {
+          btn.disabled = false;
+        }
+        console.error('[Sidebar] Join room error:', err);
+      });
   }
 
   // --- 11.4: Friend request panel ---
@@ -292,7 +436,8 @@
     header.style.cursor = 'pointer';
     header.setAttribute('data-bs-toggle', 'collapse');
     header.setAttribute('data-bs-target', '#friendRequestsCollapse');
-    header.innerHTML = '<span class="me-1">&#9654;</span> Friend Requests';
+    header.innerHTML = '<span class="me-1">&#9654;</span> Friend Requests '
+      + '<span class="badge bg-primary ms-1 d-none" id="friend-requests-badge">0</span>';
     section.appendChild(header);
 
     var collapseDiv = document.createElement('div');
@@ -314,6 +459,14 @@
     return Promise.all([incomingPromise, outgoingPromise]).then(function (results) {
       var incoming = results[0];
       var outgoing = results[1];
+
+      // Pending-incoming count badge on the header (R2-03), mirroring Room Invitations.
+      var badge = document.getElementById('friend-requests-badge');
+      if (badge && incoming.length > 0) {
+        badge.textContent = incoming.length;
+        badge.classList.remove('d-none');
+        collapseDiv.classList.add('show');
+      }
 
       if (incoming.length === 0 && outgoing.length === 0) {
         var empty = document.createElement('p');

@@ -237,4 +237,65 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+          Opt-in browser E2E suite (R3-01). Playwright + the *E2E sources live only in this
+          profile, so the default build never compiles them, downloads the driver, or runs a
+          browser. Run against a compose-started app:  ./mvnw verify -Pe2e
+        -->
+        <profile>
+            <id>e2e</id>
+            <dependencies>
+                <dependency>
+                    <groupId>com.microsoft.playwright</groupId>
+                    <artifactId>playwright</artifactId>
+                    <version>1.49.0</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-e2e-test-source</id>
+                                <phase>generate-test-sources</phase>
+                                <goals>
+                                    <goal>add-test-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/test/e2e/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>e2e-tests</id>
+                                <phase>integration-test</phase>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                                <configuration>
+                                    <includes>
+                                        <include>**/*E2E.java</include>
+                                    </includes>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

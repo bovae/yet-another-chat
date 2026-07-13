@@ -57,13 +57,8 @@
   box-shadow: none;
 }
 
-/* Responsive: hide side panels on small screens */
-@media (max-width: 768px) {
-  .chat-sidebar,
-  .chat-members {
-    display: none;
-  }
-}
+/* Responsive: side panels become Bootstrap off-canvas drawers below md (R2-05).
+   The offcanvas-md classes on the panels handle hide/slide; no display:none needed. */
 
 /* Message bubble layout */
 .message-item {
@@ -120,6 +115,13 @@
 
 .message-bubble:hover .message-actions {
   opacity: 1;
+}
+
+/* Touch devices can't hover — keep actions visible so reply/edit/delete stay reachable (R2-07). */
+@media (hover: none) {
+  .message-item .message-actions {
+    opacity: 0.85;
+  }
 }
 
 .message-actions button {

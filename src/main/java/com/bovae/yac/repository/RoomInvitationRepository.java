@@ -19,6 +19,8 @@ public interface RoomInvitationRepository extends JpaRepository<RoomInvitation, 
 
     List<RoomInvitation> findByInvitee(User invitee);
 
+    long countByInvitee(User invitee);
+
     @Query("SELECT ri FROM RoomInvitation ri JOIN FETCH ri.room JOIN FETCH ri.inviter WHERE ri.invitee = :invitee")
     List<RoomInvitation> findByInviteeWithRoomAndInviter(@Param("invitee") User invitee);
 }

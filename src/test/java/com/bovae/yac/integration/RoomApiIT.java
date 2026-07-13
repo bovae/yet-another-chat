@@ -6,6 +6,7 @@ import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.ModerationService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import com.bovae.yac.service.UserService;
@@ -56,6 +57,9 @@ class RoomApiIT {
     private RoomMemberService roomMemberService;
 
     @Autowired
+    private ModerationService moderationService;
+
+    @Autowired
     private UserRepository userRepository;
 
     private User userA;
@@ -67,6 +71,34 @@ class RoomApiIT {
         userA = userRepository.findById(userADto.id()).orElseThrow();
         UserDto userBDto = userService.register("bob@test.com", "bob", "testpass123");
         userB = userRepository.findById(userBDto.id()).orElseThrow();
+    }
+
+    private User register(String email, String username) {
+        return userRepository.findById(userService.register(email, username, "testpass123").id())
+                .orElseThrow();
+    }
+
+    // ---- Member list ordered Owner → Admin → Member, then username (R3-05) ----
+
+    @Test
+    void listMembers_orderedByRoleThenUsername() throws Exception {
+        Room room = roomService.getRoomById(
+                roomService.createRoom("ordering-room", "desc", RoomVisibility.PUBLIC, userA).id());
+        User zoe = register("zoe@test.com", "zoe");
+        User carol = register("carol@test.com", "carol");
+        roomMemberService.joinPublicRoom(room, userB);   // bob → MEMBER
+        roomMemberService.joinPublicRoom(room, zoe);      // zoe → MEMBER, promoted below
+        roomMemberService.joinPublicRoom(room, carol);    // carol → MEMBER
+        moderationService.grantAdminRole(room, userA, zoe);
+
+        mockMvc.perform(get("/api/rooms/{id}/members", room.getId())
+                        .with(user(userA.getEmail()).roles("USER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(4)))
+                .andExpect(jsonPath("$[0].username", is("alice")))  // OWNER first
+                .andExpect(jsonPath("$[1].username", is("zoe")))    // ADMIN before members despite name
+                .andExpect(jsonPath("$[2].username", is("bob")))    // MEMBER, alphabetical
+                .andExpect(jsonPath("$[3].username", is("carol")));
     }
 
     // ---- Room creation with valid CSRF token returns 201 (verifies CSRF fix) ----

@@ -5,6 +5,7 @@ import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.dto.FriendshipDto;
 import com.bovae.yac.model.dto.FriendshipMapper;
+import com.bovae.yac.model.dto.NotificationEvent;
 import com.bovae.yac.model.entity.Friendship;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.FriendshipStatus;
@@ -27,6 +28,7 @@ public class FriendshipService {
     private final FriendshipRepository friendshipRepository;
     private final UserBanRepository userBanRepository;
     private final FriendshipMapper friendshipMapper;
+    private final NotificationService notificationService;
 
     @Transactional
     public Friendship sendFriendRequest(User requester, User recipient, String requestText) {
@@ -57,6 +59,10 @@ public class FriendshipService {
 
         LOG.info("Friend request sent: requesterId={}, recipientId={}", requester.getId(), recipient.getId());
 
+        // Live arrival in the recipient's Friend Requests panel and navbar badge (R2-03).
+        notificationService.broadcastNotification(recipient,
+                new NotificationEvent("FRIEND_REQUEST_CREATED", null, null, 0));
+
         return friendship;
     }
 
@@ -77,6 +83,10 @@ public class FriendshipService {
         friendship = friendshipRepository.save(friendship);
 
         LOG.info("Friend request accepted: friendshipId={}, acceptedBy={}", friendshipId, acceptingUser.getId());
+
+        // Tell the original requester their request was accepted so their contacts refresh (R2-03).
+        notificationService.broadcastNotification(friendship.getRequester(),
+                new NotificationEvent("FRIEND_REQUEST_ACCEPTED", null, null, 0));
 
         return friendship;
     }

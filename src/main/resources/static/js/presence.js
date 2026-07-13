@@ -20,8 +20,8 @@
   var channel = null;
   var useLocalStorageFallback = false;
 
-  // Initialize own tab's timestamp
-  lastActivityTimestamps[myTabId] = 0;
+  // Page load counts as activity, so a freshly loaded tab reports ONLINE (R2-01).
+  lastActivityTimestamps[myTabId] = Date.now();
 
   // --- BroadcastChannel setup with localStorage fallback ---
   if (typeof BroadcastChannel !== 'undefined') {
@@ -180,9 +180,21 @@
     }
   }
 
+  function presenceLabel(status) {
+    switch (status) {
+      case 'ONLINE':
+        return 'Online';
+      case 'AFK':
+        return 'AFK';
+      default:
+        return 'Offline';
+    }
+  }
+
   function updatePresenceDot(update) {
     // Update all presence dots for this user (member list + contact list)
     var dots = document.querySelectorAll('.presence-dot[data-user-id="' + update.user_id + '"]');
+    var label = presenceLabel(update.status);
     dots.forEach(function (dot) {
       dot.classList.remove('bg-success', 'bg-warning', 'bg-secondary');
       switch (update.status) {
@@ -196,6 +208,10 @@
           dot.classList.add('bg-secondary');
           break;
       }
+      // Status must not be conveyed by colour alone (R2-04): expose it via text.
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('title', label);
+      dot.setAttribute('aria-label', label);
     });
   }
 
@@ -305,6 +321,7 @@
     subscribeToAllVisibleUsers: subscribeToAllVisibleUsers,
     updatePresenceDot: updatePresenceDot,
     fetchInitialPresence: fetchInitialPresence,
+    sendImmediateActiveHeartbeat: sendImmediateActiveHeartbeat,
     clearSubscriptions: clearSubscriptions
   };
 })();

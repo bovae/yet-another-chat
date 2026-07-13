@@ -17,8 +17,16 @@
   <div class="flex-grow-1 d-flex overflow-hidden">
     <!-- Center: messages -->
     <div class="flex-grow-1 d-flex flex-column">
-      <div class="chat-header border-bottom p-2 bg-white">
-        <h6 class="mb-0 text-muted">Select a room to start chatting</h6>
+      <div class="chat-header border-bottom p-2 bg-white d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-outline-secondary btn-sm d-md-none" type="button"
+                  data-bs-toggle="offcanvas" data-bs-target="#sidebarDrawer"
+                  aria-controls="sidebarDrawer" title="Rooms &amp; contacts">☰</button>
+          <h6 class="mb-0 text-muted">Select a room to start chatting</h6>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm d-md-none" type="button"
+                data-bs-toggle="offcanvas" data-bs-target="#membersDrawer"
+                aria-controls="membersDrawer" title="Members">👥</button>
       </div>
       <div th:replace="~{fragments/message-list :: message-list}"></div>
       <!-- No room selected: disabled composer placeholder (R1-81) -->
@@ -30,13 +38,19 @@
       </div>
     </div>
 
-    <!-- Members panel -->
-    <div class="chat-members" style="width: 220px; min-width: 220px;">
+    <!-- Members panel — off-canvas drawer below md (R2-05) -->
+    <div class="chat-members offcanvas-md offcanvas-end" tabindex="-1" id="membersDrawer"
+         aria-labelledby="membersDrawerLabel" style="width: 220px; min-width: 220px;">
+      <button type="button" class="btn-close d-md-none m-2 ms-auto d-block"
+              data-bs-dismiss="offcanvas" data-bs-target="#membersDrawer" aria-label="Close"></button>
       <div th:replace="~{fragments/member-list :: member-list}"></div>
     </div>
 
     <!-- Right sidebar: rooms + contacts -->
-    <div class="chat-sidebar" style="width: 260px; min-width: 260px;">
+    <div class="chat-sidebar offcanvas-md offcanvas-start" tabindex="-1" id="sidebarDrawer"
+         aria-labelledby="sidebarDrawerLabel" style="width: 260px; min-width: 260px;">
+      <button type="button" class="btn-close d-md-none m-2 ms-auto d-block"
+              data-bs-dismiss="offcanvas" data-bs-target="#sidebarDrawer" aria-label="Close"></button>
       <div th:replace="~{fragments/sidebar :: sidebar(collapsed=false)}"></div>
     </div>
   </div>

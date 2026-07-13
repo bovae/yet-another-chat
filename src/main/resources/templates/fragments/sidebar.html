@@ -125,21 +125,5 @@
     </div>
   </div>
 </div>
-
-<!-- Sidebar room item fragment (reusable) -->
-<li th:fragment="room-item(room, unreadCount)" class="px-2 py-1 d-flex align-items-center">
-  <a th:href="@{/chat/rooms/{id}(id=${room.id})}" class="text-decoration-none text-dark flex-grow-1 text-truncate"
-     th:text="${room.name}">Room</a>
-  <span th:if="${unreadCount != null and unreadCount > 0}"
-        class="badge bg-danger rounded-pill ms-1" th:text="${unreadCount}">0</span>
-</li>
-
-<!-- Sidebar contact item fragment (reusable) -->
-<li th:fragment="contact-item(username, presenceStatus)" class="px-2 py-1 d-flex align-items-center">
-  <span class="presence-dot me-2"
-        th:classappend="${presenceStatus == 'ONLINE'} ? 'bg-success' : (${presenceStatus == 'AFK'} ? 'bg-warning' : 'bg-secondary')"
-        style="width: 8px; height: 8px; border-radius: 50%; display: inline-block;"></span>
-  <span class="text-truncate" th:text="${username}">Username</span>
-</li>
 </body>
 </html>

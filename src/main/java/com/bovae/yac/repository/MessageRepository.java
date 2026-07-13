@@ -48,6 +48,11 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
             + "GROUP BY m.room.id")
     List<Object[]> countUnreadPerRoom(@Param("userId") UUID userId, @Param("roomIds") List<UUID> roomIds);
 
+    // One grouped query for the newest message time per room, to sort the sidebar by
+    // recency without a per-room lookup (R3-04). Returns rows of [roomId, maxCreatedAt].
+    @Query("SELECT m.room.id, MAX(m.createdAt) FROM Message m WHERE m.room.id IN :roomIds GROUP BY m.room.id")
+    List<Object[]> findLastMessageInstantByRoomIds(@Param("roomIds") List<UUID> roomIds);
+
     @Modifying
     @Query("UPDATE Message m SET m.replyTo = null WHERE m.replyTo IN (SELECT msg FROM Message msg WHERE msg.room = :room)")
     void nullifyReplyToByRoom(Room room);
