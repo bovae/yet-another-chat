@@ -19,6 +19,9 @@ public interface RoomMemberRepository extends JpaRepository<RoomMember, RoomMemb
     @Query("SELECT rm FROM RoomMember rm JOIN FETCH rm.user WHERE rm.room = :room")
     List<RoomMember> findByRoomWithUsers(@Param("room") Room room);
 
+    @Query("SELECT rm FROM RoomMember rm JOIN FETCH rm.user WHERE rm.room.id IN :roomIds")
+    List<RoomMember> findByRoomIdInWithUsers(@Param("roomIds") List<UUID> roomIds);
+
     List<RoomMember> findByUser(User user);
 
     @Query("SELECT rm FROM RoomMember rm JOIN FETCH rm.room r JOIN FETCH r.owner WHERE rm.user = :user")
@@ -26,6 +29,16 @@ public interface RoomMemberRepository extends JpaRepository<RoomMember, RoomMemb
 
     boolean existsByRoomAndUser(Room room, User user);
 
+    long countByRoom(Room room);
+
     @Query("SELECT rm.room.id FROM RoomMember rm WHERE rm.user = :user")
     Set<UUID> findRoomIdsByUser(@Param("user") User user);
+
+    @Query("SELECT COUNT(rm) > 0 FROM RoomMember rm WHERE rm.user.id = :userA "
+            + "AND rm.room.id IN (SELECT rm2.room.id FROM RoomMember rm2 WHERE rm2.user.id = :userB)")
+    boolean existsSharedRoom(@Param("userA") UUID userA, @Param("userB") UUID userB);
+
+    @Query("SELECT DISTINCT rm.user.id FROM RoomMember rm WHERE rm.room.id IN "
+            + "(SELECT rm2.room.id FROM RoomMember rm2 WHERE rm2.user.id = :userId) AND rm.user.id <> :userId")
+    Set<UUID> findCoMemberUserIds(@Param("userId") UUID userId);
 }

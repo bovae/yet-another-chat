@@ -31,8 +31,8 @@ public class SessionApiController {
     public ResponseEntity<Void> terminateSession(
             @PathVariable String id,
             Principal principal) {
-        // Ensure user is authenticated (principal is non-null via Spring Security)
-        authService.terminateSession(id);
+        // Only the owning principal may terminate a session; otherwise 404 (R1-11).
+        authService.terminateSession(id, principal.getName());
         return ResponseEntity.noContent().build();
     }
 }

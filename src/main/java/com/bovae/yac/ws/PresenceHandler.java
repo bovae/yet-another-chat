@@ -6,6 +6,7 @@ import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.PresenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.stereotype.Controller;
 
@@ -21,7 +22,9 @@ public class PresenceHandler {
     private final UserRepository userRepository;
 
     @MessageMapping("/presence.heartbeat")
-    public void heartbeat(Map<String, Object> payload, Principal principal) {
+    public void heartbeat(Map<String, Object> payload,
+                          @Header("simpSessionId") String sessionId,
+                          Principal principal) {
         User user = resolveUser(principal);
 
         boolean active = false;
@@ -32,9 +35,9 @@ public class PresenceHandler {
             active = Boolean.parseBoolean(s);
         }
 
-        presenceService.recordHeartbeat(user.getId(), active);
+        presenceService.recordHeartbeat(user.getId(), sessionId, active);
 
-        LOG.debug("Heartbeat from user {}: active={}", user.getUsername(), active);
+        LOG.debug("Heartbeat from user {} (session {}): active={}", user.getUsername(), sessionId, active);
     }
 
     private User resolveUser(Principal principal) {

@@ -120,14 +120,16 @@ class AccessControlIT {
 
     @Test
     void nonMember_downloadAttachment_returns403() throws Exception {
-        // Upload a file as the owner first
-        Message msg = messageService.sendMessage(room, owner, "file msg", null);
+        // Public rooms are readable by non-members, so an IDOR test needs a PRIVATE room (R1-15).
+        Room privateRoom = roomService.getRoomById(
+                roomService.createRoom("ac-private", "private", RoomVisibility.PRIVATE, owner).id());
+        Message msg = messageService.sendMessage(privateRoom, owner, "file msg", null);
         MockMultipartFile file = new MockMultipartFile(
                 "file", "test.txt", "text/plain", "test content".getBytes());
-        Attachment attachment = fileStorageService.uploadFile(file, msg, room, owner, null);
+        Attachment attachment = fileStorageService.uploadFile(file, msg, privateRoom, owner, null);
 
-        // Outsider (non-member) tries to download
-        mockMvc.perform(get("/api/rooms/{roomId}/attachments/{id}/download", room.getId(), attachment.getId())
+        // Outsider (non-member of the private room) tries to download
+        mockMvc.perform(get("/api/rooms/{roomId}/attachments/{id}/download", privateRoom.getId(), attachment.getId())
                         .with(user(outsider.getEmail()).roles("USER")))
                 .andExpect(status().isForbidden());
     }

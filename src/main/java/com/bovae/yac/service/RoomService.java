@@ -19,20 +19,24 @@ import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UnreadMarkerRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class RoomService {
+
+    private static final int UNREAD_DISPLAY_CAP = 999;
 
     private final RoomRepository roomRepository;
     private final RoomMemberRepository roomMemberRepository;
@@ -42,6 +46,7 @@ public class RoomService {
     private final RoomInvitationRepository roomInvitationRepository;
     private final UnreadMarkerRepository unreadMarkerRepository;
     private final NotificationService notificationService;
+    private final FileStorageService fileStorageService;
     private final RoomMapper roomMapper;
 
     @Transactional
@@ -67,6 +72,7 @@ public class RoomService {
                 .build();
 
         roomMemberRepository.save(ownerMember);
+        notificationService.ensureMarker(owner, room);
 
         LOG.info("Created room: name={}, visibility={}, owner={}, id={}",
                 room.getName(), room.getVisibility(), owner.getUsername(), room.getId());
@@ -89,6 +95,7 @@ public class RoomService {
         deleteRoomCascade(room);
     }
 
+    @Transactional(readOnly = true)
     public Page<RoomCatalogEntry> searchCatalog(String searchTerm, Pageable pageable) {
         Page<Room> rooms = roomRepository.findByVisibilityAndNameContainingIgnoreCase(
                 RoomVisibility.PUBLIC, searchTerm, pageable);
@@ -97,15 +104,17 @@ public class RoomService {
                 room.getId(),
                 room.getName(),
                 room.getDescription(),
-                roomMemberRepository.findByRoom(room).size()
+                (int) roomMemberRepository.countByRoom(room) // count query, no member hydration (R1-45)
         ));
     }
 
+    @Transactional(readOnly = true)
     public Room getRoomById(UUID roomId) {
         return roomRepository.findById(roomId)
                 .orElseThrow(() -> new ResourceNotFoundException("Room not found: %s".formatted(roomId)));
     }
 
+    @Transactional(readOnly = true)
     public RoomDto getRoomDtoById(UUID roomId) {
         return roomRepository.findByIdWithOwner(roomId)
                 .map(roomMapper::toDto)
@@ -149,37 +158,56 @@ public class RoomService {
         return roomMapper.toDto(room);
     }
 
+    @Transactional(readOnly = true)
     public List<MyRoomEntry> listUserRoomsWithUnread(User user) {
         List<RoomMember> memberships = roomMemberRepository.findByUserWithRoomAndOwner(user);
+        if (memberships.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> roomIds = memberships.stream().map(m -> m.getRoom().getId()).toList();
+
+        // Unread counts for every room in one grouped query instead of per-room (R1-46).
+        Map<UUID, Integer> unreadByRoom = new HashMap<>();
+        for (Object[] row : messageRepository.countUnreadPerRoom(user.getId(), roomIds)) {
+            unreadByRoom.put((UUID) row[0], Math.min(((Number) row[1]).intValue(), UNREAD_DISPLAY_CAP));
+        }
+
+        // DM counterparts for all DIRECT rooms in a single query.
+        List<UUID> directRoomIds = memberships.stream()
+                .map(RoomMember::getRoom)
+                .filter(r -> r.getVisibility() == RoomVisibility.DIRECT)
+                .map(Room::getId)
+                .toList();
+        Map<UUID, User> counterpartByRoom = new HashMap<>();
+        if (!directRoomIds.isEmpty()) {
+            for (RoomMember rm : roomMemberRepository.findByRoomIdInWithUsers(directRoomIds)) {
+                if (!rm.getUser().getId().equals(user.getId())) {
+                    counterpartByRoom.put(rm.getRoom().getId(), rm.getUser());
+                }
+            }
+        }
 
         return memberships.stream()
                 .map(membership -> {
                     Room room = membership.getRoom();
-                    int unreadCount = notificationService.computeUnreadCount(user, room);
-
                     String otherUsername = null;
                     String otherDisplayName = null;
-
                     if (room.getVisibility() == RoomVisibility.DIRECT) {
-                        List<RoomMember> members = roomMemberRepository.findByRoomWithUsers(room);
-                        RoomMember otherMember = members.stream()
-                                .filter(m -> !m.getUser().getId().equals(user.getId()))
-                                .findFirst()
-                                .orElse(null);
-
-                        if (otherMember != null) {
-                            otherUsername = otherMember.getUser().getUsername();
-                            otherDisplayName = otherMember.getUser().getDisplayName();
+                        User other = counterpartByRoom.get(room.getId());
+                        if (other != null) {
+                            otherUsername = other.getUsername();
+                            otherDisplayName = other.getDisplayName();
                         }
-                        // For self-DM (single member), both remain null
+                        // Self-DM (single member) leaves both null
                     }
-
                     return new MyRoomEntry(room.getId(), room.getName(), room.getVisibility(),
-                            unreadCount, otherUsername, otherDisplayName);
+                            unreadByRoom.getOrDefault(room.getId(), 0), otherUsername, otherDisplayName);
                 })
                 .toList();
     }
 
+    @Transactional
     public void deleteRoomCascade(Room room) {
         LOG.debug("Cascading delete for room: name={}, id={}", room.getName(), room.getId());
 
@@ -206,5 +234,8 @@ public class RoomService {
 
         // Delete the room itself
         roomRepository.delete(room);
+
+        // Remove the room's uploaded files from disk once the transaction commits (R1-16).
+        fileStorageService.deleteRoomDirectoryAfterCommit(room.getId());
     }
 }

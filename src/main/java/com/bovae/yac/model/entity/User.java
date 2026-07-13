@@ -8,7 +8,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -21,14 +20,12 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
 @ToString(callSuper = true, exclude = {"passwordHash"})
 @Entity
 @Table(name = "users")
 public class User extends BaseEntity {
 
     @Id
-    @EqualsAndHashCode.Include
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
@@ -43,4 +40,20 @@ public class User extends BaseEntity {
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof User other)) {
+            return false;
+        }
+        return getId() != null && getId().equals(other.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return User.class.hashCode();
+    }
 }

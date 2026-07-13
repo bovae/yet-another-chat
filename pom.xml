@@ -21,8 +21,6 @@
         <java.version>21</java.version>
         <lombok.version>1.18.44</lombok.version>
         <testcontainers.version>1.21.4</testcontainers.version>
-        <jqwik.version>1.9.3</jqwik.version>
-        <jqwik-spring.version>0.12.0</jqwik-spring.version>
         <htmx-spring-boot.version>5.1.0</htmx-spring-boot.version>
         <htmx.version>2.0.8</htmx.version>
         <htmx-ext-ws.version>2.0.4</htmx-ext-ws.version>
@@ -80,6 +78,10 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -177,18 +179,6 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>net.jqwik</groupId>
-            <artifactId>jqwik</artifactId>
-            <version>${jqwik.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>net.jqwik</groupId>
-            <artifactId>jqwik-spring</artifactId>
-            <version>${jqwik-spring.version}</version>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
@@ -225,7 +215,21 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <environmentVariables>
+                        <REMEMBER_ME_KEY>test-remember-me-key</REMEMBER_ME_KEY>
+                    </environmentVariables>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <environmentVariables>
+                        <REMEMBER_ME_KEY>test-remember-me-key</REMEMBER_ME_KEY>
+                    </environmentVariables>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

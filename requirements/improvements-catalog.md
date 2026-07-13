@@ -34,67 +34,67 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 
 ### High
 
-- [ ] R1-01 — Room opens on the oldest 50 messages, not the newest *(verified)*
-- [ ] R1-02 — No descending "before" pagination; "Load older" is broken
-- [ ] R1-03 — REST/image-upload message send never broadcast (+ no unread fan-out) *(verified)*
-- [ ] R1-04 — Message edit never broadcast (+ client dedup would drop a rebroadcast)
-- [ ] R1-05 — Server STOMP heartbeats disabled → dead connections never detected/reconnected *(verified)*
-- [ ] R1-06 — Presence subscriptions not re-established after STOMP reconnect
-- [ ] R1-07 — Watermark allocation race → duplicate watermarks, dropped messages, wrong unread
-- [ ] R1-08 — Message-history REST endpoint has no membership check (IDOR) *(verified reachable)*
-- [ ] R1-09 — Any authenticated user can SUBSCRIBE to any room topic (live eavesdrop)
-- [ ] R1-10 — Password-reset link shown on the public page → account takeover; API reset is a dead end
-- [ ] R1-11 — Session-termination IDOR: any user can log out any session
-- [ ] R1-12 — Self-invite into any private room, then accept → join
-- [ ] R1-13 — Stored XSS via inline-served SVG/image upload
-- [ ] R1-14 — Path traversal / file overwrite via uploaded filename
-- [ ] R1-15 — Attachment download not scoped to its room (IDOR)
-- [ ] R1-16 — Room/account/message deletion never removes files from disk
-- [ ] R1-17 — Banned user can rejoin a private room via invitation
-- [ ] R1-18 — Remove all Property-Based Tests (slow); port uniquely-covered behaviour first *(user request)*
+- [x] R1-01 — Room opens on the oldest 50 messages, not the newest *(verified)*
+- [x] R1-02 — No descending "before" pagination; "Load older" is broken
+- [x] R1-03 — REST/image-upload message send never broadcast (+ no unread fan-out) *(verified)*
+- [x] R1-04 — Message edit never broadcast (+ client dedup would drop a rebroadcast)
+- [x] R1-05 — Server STOMP heartbeats disabled → dead connections never detected/reconnected *(verified)*
+- [x] R1-06 — Presence subscriptions not re-established after STOMP reconnect
+- [x] R1-07 — Watermark allocation race → duplicate watermarks, dropped messages, wrong unread
+- [x] R1-08 — Message-history REST endpoint has no membership check (IDOR) *(verified reachable)*
+- [x] R1-09 — Any authenticated user can SUBSCRIBE to any room topic (live eavesdrop)
+- [x] R1-10 — Password-reset link shown on the public page → account takeover; API reset is a dead end
+- [x] R1-11 — Session-termination IDOR: any user can log out any session
+- [x] R1-12 — Self-invite into any private room, then accept → join
+- [x] R1-13 — Stored XSS via inline-served SVG/image upload
+- [x] R1-14 — Path traversal / file overwrite via uploaded filename
+- [x] R1-15 — Attachment download not scoped to its room (IDOR)
+- [x] R1-16 — Room/account/message deletion never removes files from disk
+- [x] R1-17 — Banned user can rejoin a private room via invitation
+- [x] R1-18 — Remove all Property-Based Tests (slow); port uniquely-covered behaviour first *(user request)*
 - [ ] R2-01 — Freshly loaded/focused tab shows AFK, not ONLINE, until the mouse moves *(verified)*
 - [ ] R2-02 — Message silently lost (and input cleared) when the STOMP socket is down
 
 ### Medium
 
-- [ ] R1-19 — Unread badge grows for the room the user is actively viewing; no read-ack
-- [ ] R1-20 — First message of a new DM/room is dropped by the sidebar → invisible until reload
-- [ ] R1-21 — No WS events on join/leave/kick/ban → stale member lists; kicked user keeps working
-- [ ] R1-22 — Live message vs missed-message catch-up race → out-of-order; catch-up capped at 100
-- [ ] R1-23 — Attachment links in server-rendered history point at a non-existent route (404)
-- [ ] R1-24 — Unread count is always 0 for rooms never opened
-- [ ] R1-25 — Cross-room message deletion (admin of room A deletes a message in room B)
-- [ ] R1-26 — Unfriending doesn't block DM messaging
-- [ ] R1-27 — Frozen-DM / lost-room-access not enforced on edit or upload
-- [ ] R1-28 — Account deletion wipes the user's messages everywhere and lifts bans they issued
-- [ ] R1-29 — Room-name uniqueness not DB-enforced for private rooms; race → dup or 500
-- [ ] R1-30 — A declined friend request permanently blocks any future request
-- [ ] R1-31 — Orphaned two-person DM misdetected as "Saved Messages"
-- [ ] R1-32 — Upload can attach a file to an arbitrary / another user's message
-- [ ] R1-33 — Content-Disposition header injection via unsanitized filename
-- [ ] R1-34 — 3 MB image cap bypassable via client-supplied content type
-- [ ] R1-35 — Weak hardcoded `REMEMBER_ME_KEY` default; no startup validation
-- [ ] R1-36 — Password reset/change does not invalidate other sessions
-- [ ] R1-37 — Raw exception messages leaked to WS clients
-- [ ] R1-38 — Multi-device presence flaps ONLINE↔AFK (last-writer-wins)
-- [ ] R1-39 — No presence cleanup on disconnect/logout (`removePresence` is dead code)
-- [ ] R1-40 — Typing events have no membership/room check
-- [ ] R1-41 — A hidden (minimized) tab goes OFFLINE instead of AFK
-- [ ] R1-42 — Every mousemove triggers an unthrottled cross-tab broadcast
-- [ ] R1-43 — Simple broker + in-memory presence = single-node only (undocumented ceiling)
-- [ ] R1-44 — Unread fan-out is N+1 per member on every send (1000-member room = ~1000 queries)
-- [ ] R1-45 — N+1 loading member counts in the room catalog
-- [ ] R1-46 — N+1 in sidebar room/DM listings (hottest read path)
-- [ ] R1-47 — Missing FK indexes on hot delete/lookup paths
-- [ ] R1-48 — Sessions screen shows no browser/IP (`USER_AGENT` is never stored)
-- [ ] R1-49 — Attachment comment: no UI to add it, never displayed
-- [ ] R1-50 — No UI to send a friend request by username + optional text; sidebar "More" no-ops
-- [ ] R1-51 — No UI to remove a friend or view/unban blocked users; no `GET /api/user-bans`
-- [ ] R1-52 — Tests assert production *source text* instead of behaviour
-- [ ] R1-53 — `Thread.sleep`-based WebSocket tests are slow/flaky
-- [ ] R1-54 — Attachment Content-Disposition untested in a real integration test
-- [ ] R1-55 — Add a dev-only seed migration (users/chats) for local env *(user request)*
-- [ ] R1-56 — Room member-list endpoint has no membership check (private-room enumeration)
+- [x] R1-19 — Unread badge grows for the room the user is actively viewing; no read-ack
+- [x] R1-20 — First message of a new DM/room is dropped by the sidebar → invisible until reload
+- [x] R1-21 — No WS events on join/leave/kick/ban → stale member lists; kicked user keeps working
+- [x] R1-22 — Live message vs missed-message catch-up race → out-of-order; catch-up capped at 100
+- [x] R1-23 — Attachment links in server-rendered history point at a non-existent route (404)
+- [x] R1-24 — Unread count is always 0 for rooms never opened
+- [x] R1-25 — Cross-room message deletion (admin of room A deletes a message in room B)
+- [x] R1-26 — Unfriending doesn't block DM messaging
+- [x] R1-27 — Frozen-DM / lost-room-access not enforced on edit or upload
+- [x] R1-28 — Account deletion wipes the user's messages everywhere and lifts bans they issued
+- [x] R1-29 — Room-name uniqueness not DB-enforced for private rooms; race → dup or 500
+- [x] R1-30 — A declined friend request permanently blocks any future request
+- [x] R1-31 — Orphaned two-person DM misdetected as "Saved Messages"
+- [x] R1-32 — Upload can attach a file to an arbitrary / another user's message
+- [x] R1-33 — Content-Disposition header injection via unsanitized filename
+- [x] R1-34 — 3 MB image cap bypassable via client-supplied content type
+- [x] R1-35 — Weak hardcoded `REMEMBER_ME_KEY` default; no startup validation
+- [x] R1-36 — Password reset/change does not invalidate other sessions
+- [x] R1-37 — Raw exception messages leaked to WS clients
+- [x] R1-38 — Multi-device presence flaps ONLINE↔AFK (last-writer-wins)
+- [x] R1-39 — No presence cleanup on disconnect/logout (`removePresence` is dead code)
+- [x] R1-40 — Typing events have no membership/room check
+- [x] R1-41 — A hidden (minimized) tab goes OFFLINE instead of AFK
+- [x] R1-42 — Every mousemove triggers an unthrottled cross-tab broadcast
+- [x] R1-43 — Simple broker + in-memory presence = single-node only (undocumented ceiling)
+- [x] R1-44 — Unread fan-out is N+1 per member on every send (1000-member room = ~1000 queries)
+- [x] R1-45 — N+1 loading member counts in the room catalog
+- [x] R1-46 — N+1 in sidebar room/DM listings (hottest read path)
+- [x] R1-47 — Missing FK indexes on hot delete/lookup paths
+- [x] R1-48 — Sessions screen shows no browser/IP (`USER_AGENT` is never stored)
+- [x] R1-49 — Attachment comment: no UI to add it, never displayed
+- [x] R1-50 — No UI to send a friend request by username + optional text; sidebar "More" no-ops
+- [x] R1-51 — No UI to remove a friend or view/unban blocked users; no `GET /api/user-bans`
+- [x] R1-52 — Tests assert production *source text* instead of behaviour
+- [x] R1-53 — `Thread.sleep`-based WebSocket tests are slow/flaky
+- [x] R1-54 — Attachment Content-Disposition untested in a real integration test
+- [x] R1-55 — Add a dev-only seed migration (users/chats) for local env *(user request)*
+- [x] R1-56 — Room member-list endpoint has no membership check (private-room enumeration)
 - [ ] R2-03 — Friend requests never arrive live and show no pending-count badge *(verified)*
 - [ ] R2-04 — Presence conveyed by colour only — no label/tooltip/ARIA (colourblind + screen-reader)
 - [ ] R2-05 — Sidebar + members panel fully hidden on mobile; DMs/contacts unreachable
@@ -105,31 +105,31 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 
 ### Low
 
-- [ ] R1-57 — Deleted messages permanently inflate unread counts (no fan-out on delete)
-- [ ] R1-58 — `WEBSOCKET_ALLOWED_ORIGINS` not trimmed after split
-- [ ] R1-59 — Redis `KEYS` used in the 30s presence sweep
-- [ ] R1-60 — Unreachable AFK branch (threshold > TTL)
-- [ ] R1-61 — Presence check-then-act race in change detection
-- [ ] R1-62 — Unauthenticated clients can hold open WS connections
-- [ ] R1-63 — Presence latency exceeds the 2s target
-- [ ] R1-64 — Anyone can decline/cancel anyone's invitation
-- [ ] R1-65 — Presence subscribable/queryable for any user regardless of relationship
-- [ ] R1-66 — Weak/absent password policy (1-char passwords accepted)
-- [ ] R1-67 — `GET /api/presence` returns 500 on a malformed UUID; unbounded id list
-- [ ] R1-68 — Duplicate DM rooms under concurrent creation
-- [ ] R1-69 — Join/ban and concurrent-join races (500 instead of 409)
-- [ ] R1-70 — `markRoomAsRead` race on first read (500)
-- [ ] R1-71 — File written to disk before the DB row commits (orphan on rollback)
-- [ ] R1-72 — Entity `equals`/`hashCode` issues (transient-equal; lazy-field touch)
-- [ ] R1-73 — Mixed `jakarta`/Spring `@Transactional`; read paths not `readOnly`
-- [ ] R1-74 — Integration tests misnamed `*Test` run in the surefire phase (+ one duplicate)
-- [ ] R1-75 — CI has no `timeout-minutes` and no concurrency cancel
-- [ ] R1-76 — Sidebar is on the left (spec: right); no accordion compaction on entering a room
-- [ ] R1-77 — Jabber/XMPP entirely absent (optional advanced requirement)
-- [ ] R1-78 — `favicon.ico` 404 on every page *(verified)*
-- [ ] R1-79 — HTMX loaded on every page but never used
-- [ ] R1-80 — Dead code: duplicate badge updater, unused cursor state, orphan fragment
-- [ ] R1-81 — `/chat` index renders an enabled composer that silently no-ops
+- [x] R1-57 — Deleted messages permanently inflate unread counts (no fan-out on delete)
+- [x] R1-58 — `WEBSOCKET_ALLOWED_ORIGINS` not trimmed after split
+- [x] R1-59 — Redis `KEYS` used in the 30s presence sweep
+- [x] R1-60 — Unreachable AFK branch (threshold > TTL)
+- [x] R1-61 — Presence check-then-act race in change detection
+- [x] R1-62 — Unauthenticated clients can hold open WS connections
+- [x] R1-63 — Presence latency exceeds the 2s target
+- [x] R1-64 — Anyone can decline/cancel anyone's invitation
+- [x] R1-65 — Presence subscribable/queryable for any user regardless of relationship
+- [x] R1-66 — Weak/absent password policy (1-char passwords accepted)
+- [x] R1-67 — `GET /api/presence` returns 500 on a malformed UUID; unbounded id list
+- [x] R1-68 — Duplicate DM rooms under concurrent creation
+- [x] R1-69 — Join/ban and concurrent-join races (500 instead of 409)
+- [x] R1-70 — `markRoomAsRead` race on first read (500)
+- [x] R1-71 — File written to disk before the DB row commits (orphan on rollback)
+- [x] R1-72 — Entity `equals`/`hashCode` issues (transient-equal; lazy-field touch)
+- [x] R1-73 — Mixed `jakarta`/Spring `@Transactional`; read paths not `readOnly`
+- [x] R1-74 — Integration tests misnamed `*Test` run in the surefire phase (+ one duplicate)
+- [x] R1-75 — CI has no `timeout-minutes` and no concurrency cancel
+- [x] R1-76 — Sidebar is on the left (spec: right); no accordion compaction on entering a room
+- [ ] R1-77 — Jabber/XMPP entirely absent (optional advanced requirement) — DESCOPED (see change proposal; catalog recommends out of scope)
+- [x] R1-78 — `favicon.ico` 404 on every page *(verified)*
+- [x] R1-79 — HTMX loaded on every page but never used
+- [x] R1-80 — Dead code: duplicate badge updater, unused cursor state, orphan fragment
+- [x] R1-81 — `/chat` index renders an enabled composer that silently no-ops
 - [ ] R2-06 — Orphaned DM leaks a raw `dm-{uuid}-{uuid}` name into title/header/modals
 - [ ] R2-07 — Message action buttons (reply/edit/delete) invisible on touch devices
 - [ ] R2-08 — Admin actions scattered, not the spec's single tabbed "Manage Room" modal

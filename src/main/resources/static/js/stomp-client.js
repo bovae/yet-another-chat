@@ -53,6 +53,18 @@
       console.error('[STOMP] Error:', frame.headers['message']);
     };
 
+    stompClient.onWebSocketClose = function () {
+      console.log('[STOMP] Socket closed');
+      // Reset subscription state so the automatic reconnect re-subscribes everything (R1-06).
+      roomSubscription = null;
+      roomEventsSubscription = null;
+      errorSubscription = null;
+      notificationSubscription = null;
+      if (window.YAC && window.YAC.presence && window.YAC.presence.clearSubscriptions) {
+        window.YAC.presence.clearSubscriptions();
+      }
+    };
+
     stompClient.activate();
   }
 
@@ -66,11 +78,15 @@
         handleIncomingMessage(msg);
       });
 
-      // Subscribe to room events (typing indicators, etc.)
+      // Subscribe to room events: typing indicators plus membership changes.
       roomEventsSubscription = stompClient.subscribe('/topic/room.' + roomId + '.events', function (message) {
         var event = JSON.parse(message.body);
-        if (window.YAC && window.YAC.typing && window.YAC.typing.onEvent) {
-          window.YAC.typing.onEvent(event);
+        if (event.type === 'TYPING') {
+          if (window.YAC && window.YAC.typing && window.YAC.typing.onEvent) {
+            window.YAC.typing.onEvent(event);
+          }
+        } else if (window.YAC && window.YAC.app && window.YAC.app.onRoomEvent) {
+          window.YAC.app.onRoomEvent(event);
         }
       });
     }
@@ -99,6 +115,14 @@
     if (msg.type === 'MESSAGE_DELETED') {
       if (window.YAC && window.YAC.app && window.YAC.app.onMessageDeleted) {
         window.YAC.app.onMessageDeleted(msg);
+      }
+      return;
+    }
+
+    // Edit events replace an existing message in place instead of rendering a new one (R1-04).
+    if (msg.type === 'MESSAGE_EDITED') {
+      if (window.YAC && window.YAC.app && window.YAC.app.onMessageEdited) {
+        window.YAC.app.onMessageEdited(msg);
       }
       return;
     }
@@ -139,14 +163,22 @@
 
   function fetchMissedMessages() {
     var roomId = getRoomId();
-    if (!roomId || !lastWatermark) {
-      // First connect or no messages yet — initialize watermark from DOM
-      initWatermarkFromDom();
+    if (!roomId) {
       return;
     }
+    if (!lastWatermark) {
+      // First connect or no messages yet — initialize watermark from DOM
+      initWatermarkFromDom();
+      if (!lastWatermark) {
+        return;
+      }
+    }
+    fetchMissedPage(roomId, lastWatermark);
+  }
 
-    // Fetch messages after our last known watermark
-    var url = '/api/rooms/' + roomId + '/messages?cursor=' + lastWatermark + '&size=100';
+  // Page ascending catch-up until the server reports nothing newer (R1-22: no 100-message cap).
+  function fetchMissedPage(roomId, after) {
+    var url = '/api/rooms/' + roomId + '/messages?after=' + after + '&size=100';
     var headers = { 'Accept': 'application/json' };
     var csrfHeader = getCsrfHeader();
     if (csrfHeader) {
@@ -160,10 +192,18 @@
       return response.json();
     })
     .then(function (page) {
+      var maxWatermark = after;
       if (page.messages && page.messages.length > 0) {
         page.messages.forEach(function (msg) {
           handleIncomingMessage(msg);
+          if (msg.watermark != null && msg.watermark > maxWatermark) {
+            maxWatermark = msg.watermark;
+          }
         });
+      }
+      var hasMore = page.has_more || page.hasMore;
+      if (hasMore && maxWatermark > after) {
+        fetchMissedPage(roomId, maxWatermark);
       }
     })
     .catch(function (err) {

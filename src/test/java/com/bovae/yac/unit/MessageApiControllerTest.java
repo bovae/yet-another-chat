@@ -7,7 +7,9 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.MessageRepository;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.MessageBroadcastService;
 import com.bovae.yac.service.MessageService;
+import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,7 +43,13 @@ class MessageApiControllerTest {
     private MessageService messageService;
 
     @Mock
+    private MessageBroadcastService messageBroadcastService;
+
+    @Mock
     private RoomService roomService;
+
+    @Mock
+    private RoomMemberService roomMemberService;
 
     @Mock
     private UserRepository userRepository;

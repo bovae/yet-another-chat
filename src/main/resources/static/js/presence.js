@@ -3,12 +3,15 @@
 (function () {
   'use strict';
 
-  var HEARTBEAT_INTERVAL = 10000; // 10 seconds per spec
+  var HEARTBEAT_INTERVAL = 10000;         // 10 seconds per spec
+  var HIDDEN_HEARTBEAT_INTERVAL = 30000;  // reduced rate while the tab is hidden (R1-41)
   var ACTIVE_THRESHOLD = 2000;    // cursor moved within last 2 seconds = active
   var IDLE_THRESHOLD = 60000;     // all tabs idle for 60s = AFK
+  var ACTIVITY_BROADCAST_THROTTLE_MS = 1000; // at most one cross-tab activity ping/second (R1-42)
   var CHANNEL_NAME = 'yac-presence';
 
   var heartbeatTimer = null;
+  var lastActivityBroadcast = 0;
   var presenceSubscriptions = {};
 
   // Cross-tab coordination state
@@ -67,7 +70,11 @@
   function recordCursorActivity() {
     var now = Date.now();
     lastActivityTimestamps[myTabId] = now;
-    broadcastMessage({ type: 'active', tabId: myTabId, timestamp: now });
+    // Local timestamp updates every event, but cross-tab broadcasts are throttled (R1-42).
+    if (now - lastActivityBroadcast >= ACTIVITY_BROADCAST_THROTTLE_MS) {
+      lastActivityBroadcast = now;
+      broadcastMessage({ type: 'active', tabId: myTabId, timestamp: now });
+    }
   }
 
   function isActive() {
@@ -131,6 +138,23 @@
     heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
     // Send an initial heartbeat shortly after connect
     setTimeout(sendHeartbeat, 1000);
+  }
+
+  // A hidden tab keeps reporting presence at a reduced rate with active:false, so a user with
+  // only hidden tabs shows AFK (not OFFLINE) until every tab is closed (R1-41).
+  function startHiddenHeartbeat() {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+    }
+    heartbeatTimer = setInterval(function () {
+      var client = window.YAC && window.YAC.stomp && window.YAC.stomp.getClient();
+      if (client && client.connected) {
+        client.publish({
+          destination: '/app/presence.heartbeat',
+          body: JSON.stringify({ active: false, timestamp: new Date().toISOString() })
+        });
+      }
+    }, HIDDEN_HEARTBEAT_INTERVAL);
   }
 
   function stopHeartbeat() {
@@ -200,6 +224,21 @@
       });
   }
 
+  // Drop cached subscriptions so a reconnect re-subscribes from scratch (R1-06).
+  function clearSubscriptions() {
+    Object.keys(presenceSubscriptions).forEach(function (userId) {
+      var sub = presenceSubscriptions[userId];
+      try {
+        if (sub && sub.unsubscribe) {
+          sub.unsubscribe();
+        }
+      } catch (e) {
+        // subscription may already be dead after a socket drop
+      }
+      delete presenceSubscriptions[userId];
+    });
+  }
+
   function subscribeToAllVisibleUsers() {
     // Subscribe to presence for all users visible in the member list and contact list
     var dots = document.querySelectorAll('.presence-dot[data-user-id]');
@@ -222,7 +261,7 @@
   // Visibility/focus — stop heartbeats when tab is hidden, restart when visible (Req 17.5)
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
-      stopHeartbeat();
+      startHiddenHeartbeat();
     } else {
       startHeartbeat();
       sendImmediateActiveHeartbeat();
@@ -265,6 +304,7 @@
     subscribeToFriendPresence: subscribeToFriendPresence,
     subscribeToAllVisibleUsers: subscribeToAllVisibleUsers,
     updatePresenceDot: updatePresenceDot,
-    fetchInitialPresence: fetchInitialPresence
+    fetchInitialPresence: fetchInitialPresence,
+    clearSubscriptions: clearSubscriptions
   };
 })();

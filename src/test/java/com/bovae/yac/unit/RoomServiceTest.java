@@ -22,6 +22,8 @@ import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UnreadMarkerRepository;
+import com.bovae.yac.service.FileStorageService;
+import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -77,6 +79,12 @@ class RoomServiceTest {
 
     @Mock
     private UnreadMarkerRepository unreadMarkerRepository;
+
+    @Mock
+    private NotificationService notificationService;
+
+    @Mock
+    private FileStorageService fileStorageService;
 
     @Mock
     private RoomMapper roomMapper;
@@ -238,16 +246,13 @@ class RoomServiceTest {
                 .nextWatermark(5L)
                 .build();
 
-        RoomMember memberA = RoomMember.builder().room(publicRoom).user(owner).role(RoomRole.OWNER).build();
-        RoomMember memberB = RoomMember.builder().room(publicRoom).user(otherUser).role(RoomRole.MEMBER).build();
-
         Pageable pageable = PageRequest.of(0, 10);
         Page<Room> roomPage = new PageImpl<>(List.of(publicRoom), pageable, 1);
 
         when(roomRepository.findByVisibilityAndNameContainingIgnoreCase(
                 eq(RoomVisibility.PUBLIC), eq("chat"), eq(pageable)))
                 .thenReturn(roomPage);
-        when(roomMemberRepository.findByRoom(publicRoom)).thenReturn(List.of(memberA, memberB));
+        when(roomMemberRepository.countByRoom(publicRoom)).thenReturn(2L);
 
         Page<RoomCatalogEntry> result = roomService.searchCatalog("chat", pageable);
 

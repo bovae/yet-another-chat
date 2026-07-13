@@ -27,6 +27,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -39,35 +42,28 @@ import java.util.stream.Collectors;
 public class MessageService {
 
     private static final int MAX_CONTENT_BYTES = 3072;
+    private static final String DELETED_USER = "Deleted user";
 
     private final MessageRepository messageRepository;
     private final RoomRepository roomRepository;
     private final RoomMemberService roomMemberService;
     private final UserBanService userBanService;
+    private final FriendshipService friendshipService;
     private final RoomMemberRepository roomMemberRepository;
     private final UserRepository userRepository;
     private final AttachmentRepository attachmentRepository;
     private final RoomBanRepository roomBanRepository;
+    private final FileStorageService fileStorageService;
 
     @Transactional
     public Message sendMessage(Room room, User sender, String content, Message replyTo) {
-        if (!roomMemberService.isMember(room, sender)) {
-            throw new ForbiddenException("User is not a member of this room");
-        }
-
+        assertCanPost(room, sender);
         validateContentSize(content);
 
-        if (room.getVisibility() != RoomVisibility.DIRECT && roomBanRepository.existsByRoomAndUser(room, sender)) {
-            throw new ForbiddenException("You are banned from this room");
-        }
-
-        if (room.getVisibility() == RoomVisibility.DIRECT) {
-            checkDirectChatBan(room, sender);
-        }
-
-        Long watermark = room.getNextWatermark();
-        room.setNextWatermark(watermark + 1);
-        roomRepository.save(room);
+        // Atomic watermark reservation: the UPDATE's row lock serializes concurrent
+        // senders so watermarks are gap-free and unique (R1-07).
+        roomRepository.incrementWatermark(room.getId());
+        Long watermark = roomRepository.nextWatermarkOf(room.getId()) - 1;
 
         Message message = Message.builder()
                 .room(room)
@@ -93,10 +89,12 @@ public class MessageService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Message not found: %s".formatted(messageId)));
 
-        if (!message.getSender().getId().equals(author.getId())) {
+        if (message.getSender() == null || !message.getSender().getId().equals(author.getId())) {
             throw new ForbiddenException("Only the author can edit this message");
         }
 
+        // Editing enforces the same access guards as sending (R1-27).
+        assertCanPost(message.getRoom(), author);
         validateContentSize(newContent);
 
         message.setContent(newContent);
@@ -115,7 +113,13 @@ public class MessageService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Message not found: %s".formatted(messageId)));
 
-        boolean isAuthor = message.getSender().getId().equals(requestingUser.getId());
+        // The message must belong to the room named in the URL, before role checks (R1-25).
+        if (!message.getRoom().getId().equals(room.getId())) {
+            throw new ResourceNotFoundException("Message not found in this room: %s".formatted(messageId));
+        }
+
+        boolean isAuthor = message.getSender() != null
+                && message.getSender().getId().equals(requestingUser.getId());
 
         if (!isAuthor) {
             RoomMember member = roomMemberRepository.findById(
@@ -127,23 +131,65 @@ public class MessageService {
             }
         }
 
+        // Capture attachment file paths before the cascade removes their rows, then delete
+        // them from disk once the transaction commits (R1-16).
+        List<Path> attachmentFiles = attachmentRepository.findByMessageId(messageId).stream()
+                .map(a -> Paths.get(a.getStoragePath()))
+                .toList();
+
         messageRepository.delete(message);
+        fileStorageService.deleteFilesAfterCommit(attachmentFiles);
 
         LOG.info("Message deleted: messageId={}, deletedBy={}", messageId, requestingUser.getId());
     }
 
+    /**
+     * Backward pagination for the room view (R1-01, R1-02). Returns up to {@code size}
+     * messages older than {@code before} (newest page when {@code before} is null),
+     * rendered oldest-first. {@code hasMore} means older messages still exist and
+     * {@code nextCursor} is the oldest returned watermark (the next {@code before}).
+     */
     @Transactional(readOnly = true)
-    public MessagePage getMessageHistory(Room room, Long cursor, int size) {
-        long effectiveCursor = (cursor != null) ? cursor : 0L;
+    public MessagePage getMessageHistory(Room room, Long before, int size) {
+        long effectiveBefore = (before != null) ? before : Long.MAX_VALUE;
+
+        List<Message> descending = messageRepository.findByRoomAndWatermarkLessThanWithFetches(
+                room, effectiveBefore, PageRequest.of(0, size + 1));
+
+        boolean hasMore = descending.size() > size;
+        if (hasMore) {
+            descending = descending.subList(0, size);
+        }
+
+        List<Message> ordered = new ArrayList<>(descending);
+        Collections.reverse(ordered); // oldest-first for render
+
+        Long nextCursor = ordered.isEmpty() ? null : ordered.getFirst().getWatermark();
+        return new MessagePage(toResponses(ordered), nextCursor, hasMore);
+    }
+
+    /**
+     * Ascending catch-up for reconnect (R1-22). Returns up to {@code size} messages newer
+     * than {@code after}, oldest-first; {@code hasMore} means even newer messages remain
+     * (client loops with {@code nextCursor} until it clears).
+     */
+    @Transactional(readOnly = true)
+    public MessagePage getMessagesSince(Room room, Long after, int size) {
+        long effectiveAfter = (after != null) ? after : 0L;
 
         List<Message> messages = messageRepository.findByRoomAndWatermarkGreaterThanWithFetches(
-                room, effectiveCursor, PageRequest.of(0, size + 1));
+                room, effectiveAfter, PageRequest.of(0, size + 1));
 
         boolean hasMore = messages.size() > size;
         if (hasMore) {
             messages = messages.subList(0, size);
         }
 
+        Long nextCursor = messages.isEmpty() ? null : messages.getLast().getWatermark();
+        return new MessagePage(toResponses(messages), nextCursor, hasMore);
+    }
+
+    private List<ChatMessageResponse> toResponses(List<Message> messages) {
         // Batch-load attachments for all messages to avoid N+1 queries
         List<UUID> messageIds = messages.stream()
                 .map(Message::getId)
@@ -161,13 +207,18 @@ public class MessageService {
                     ));
         }
 
-        List<ChatMessageResponse> responseMessages = messages.stream()
+        return messages.stream()
                 .map(msg -> toResponse(msg, attachmentsByMessageId.getOrDefault(msg.getId(), List.of())))
                 .toList();
+    }
 
-        Long nextCursor = messages.isEmpty() ? null : messages.getLast().getWatermark();
-
-        return new MessagePage(responseMessages, nextCursor, hasMore);
+    /** Loads a persisted message (with sender, reply-to, attachments) as a broadcast DTO. */
+    @Transactional(readOnly = true)
+    public ChatMessageResponse getMessageResponse(UUID messageId) {
+        Message message = messageRepository.findByIdWithSenderAndReplyTo(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Message not found: %s".formatted(messageId)));
+        return toResponse(message);
     }
 
     private ChatMessageResponse toResponse(Message message) {
@@ -187,7 +238,7 @@ public class MessageService {
 
         if (replyTo != null) {
             replyToId = replyTo.getId();
-            replyToSenderUsername = replyTo.getSender().getUsername();
+            replyToSenderUsername = replyTo.getSender() != null ? replyTo.getSender().getUsername() : DELETED_USER;
             String content = replyTo.getContent();
             replyToContentSnippet = content.length() > 100 ? content.substring(0, 100) : content;
         } else if (message.getOriginalReplyToId() != null) {
@@ -196,12 +247,13 @@ public class MessageService {
             replyToId = message.getOriginalReplyToId();
         }
 
+        User sender = message.getSender();
         return new ChatMessageResponse(
                 message.getId(),
                 message.getRoom().getId(),
-                message.getSender().getId(),
-                message.getSender().getUsername(),
-                message.getSender().getDisplayName(),
+                sender != null ? sender.getId() : null,
+                sender != null ? sender.getUsername() : DELETED_USER,
+                sender != null ? sender.getDisplayName() : null,
                 message.getContent(),
                 replyToId,
                 replyToSenderUsername,
@@ -218,8 +270,25 @@ public class MessageService {
                 attachment.getId(),
                 attachment.getOriginalFileName(),
                 attachment.getContentType(),
-                attachment.getFileSize()
+                attachment.getFileSize(),
+                attachment.getComment()
         );
+    }
+
+    /**
+     * Send-time access guard shared by send, edit, and attachment upload (R1-27): the user must
+     * be a member, not room-banned, and (for DMs) not on either side of a user ban.
+     */
+    public void assertCanPost(Room room, User user) {
+        if (!roomMemberService.isMember(room, user)) {
+            throw new ForbiddenException("User is not a member of this room");
+        }
+        if (room.getVisibility() != RoomVisibility.DIRECT && roomBanRepository.existsByRoomAndUser(room, user)) {
+            throw new ForbiddenException("You are banned from this room");
+        }
+        if (room.getVisibility() == RoomVisibility.DIRECT) {
+            checkDirectChatBan(room, user);
+        }
     }
 
     private void validateContentSize(String content) {
@@ -238,7 +307,7 @@ public class MessageService {
     private void checkDirectChatBan(Room room, User sender) {
         List<RoomMemberDto> members = roomMemberService.listMembers(room);
 
-        // Skip ban check for self-DM (Saved Messages) rooms
+        // Skip friendship/ban checks for self-DM (Saved Messages) rooms
         long distinctUserCount = members.stream()
                 .map(RoomMemberDto::userId)
                 .distinct()
@@ -254,6 +323,10 @@ public class MessageService {
                                 "User not found: %s".formatted(member.userId())));
                 if (userBanService.isBanExistsBetween(sender, otherUser)) {
                     throw new ForbiddenException("Cannot send messages in this direct chat due to a user ban");
+                }
+                // Two-person DMs require the participants to currently be friends (R1-26).
+                if (!friendshipService.areFriends(sender, otherUser)) {
+                    throw new ForbiddenException("You must be friends to message in this direct chat");
                 }
             }
         }

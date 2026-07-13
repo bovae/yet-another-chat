@@ -13,6 +13,8 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.MessageBroadcastService;
+import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import jakarta.validation.Valid;
@@ -44,6 +46,8 @@ public class RoomApiController {
 
     private final RoomService roomService;
     private final RoomMemberService roomMemberService;
+    private final MessageBroadcastService messageBroadcastService;
+    private final NotificationService notificationService;
     private final RoomInvitationRepository roomInvitationRepository;
     private final UserRepository userRepository;
 
@@ -118,6 +122,7 @@ public class RoomApiController {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(id);
         roomMemberService.joinPublicRoom(room, user);
+        messageBroadcastService.broadcastMembership(room, user, "MEMBER_JOINED");
         return ResponseEntity.ok().build();
     }
 
@@ -128,6 +133,17 @@ public class RoomApiController {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(id);
         roomMemberService.leaveRoom(room, user);
+        messageBroadcastService.broadcastMembership(room, user, "MEMBER_LEFT");
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/read")
+    public ResponseEntity<Void> markRead(
+            @PathVariable UUID id,
+            Principal principal) {
+        User user = resolveUser(principal);
+        Room room = roomService.getRoomById(id);
+        notificationService.markRoomAsRead(user, room);
         return ResponseEntity.noContent().build();
     }
 

@@ -67,6 +67,21 @@ Key environment variables (with defaults for local dev):
 | `DB_PASSWORD` | `yac` | Database password |
 | `REDIS_HOST` | `localhost` | Redis host |
 | `REDIS_PORT` | `6379` | Redis port |
-| `REMEMBER_ME_KEY` | `change-me-in-production` | Secret for remember-me tokens |
+| `REMEMBER_ME_KEY` | _(required — no default)_ | Secret for remember-me tokens; startup fails if unset or blank |
 | `WEBSOCKET_ALLOWED_ORIGINS` | `http://localhost:8080` | Comma-separated allowed WebSocket origins |
 | `FILE_STORAGE_PATH` | `./file-storage` | Directory for uploaded files |
+
+## Deployment Constraints
+
+**Single-node only.** The application currently runs as a single instance and cannot be
+horizontally scaled as-is:
+
+- **STOMP broker** — messages are routed through Spring's in-memory simple broker. A second
+  instance would not see topics/queues created on the first. Multi-node requires an external
+  STOMP relay (e.g. RabbitMQ/ActiveMQ) via `enableStompBrokerRelay`.
+- **Presence state** — per-session presence lives in Redis, but the transition-detection map
+  (`lastKnownStatus`) and the sweep are per-JVM. Running two instances would double-broadcast
+  transitions and miss cross-node sessions.
+
+Redis (sessions) and PostgreSQL are shared and safe to point multiple instances at; the broker
+and presence coordination are the blockers. Do not run more than one instance.

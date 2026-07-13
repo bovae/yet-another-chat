@@ -12,6 +12,7 @@ import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
+import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomMemberService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,9 @@ class RoomMemberServiceTest {
 
     @Mock
     private RoomInvitationRepository roomInvitationRepository;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private RoomMemberService roomMemberService;

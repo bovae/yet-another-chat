@@ -189,6 +189,14 @@
           fileLink.textContent = attFileName;
           attContainer.appendChild(fileLink);
         }
+
+        // Attachment comment (R1-49)
+        if (att.comment) {
+          var commentEl = document.createElement('div');
+          commentEl.className = 'attachment-comment small text-muted';
+          commentEl.textContent = att.comment;
+          attContainer.appendChild(commentEl);
+        }
       }
       bubble.appendChild(attContainer);
     }
@@ -238,6 +246,24 @@
     el.scrollTop = el.scrollHeight;
   }
 
+  // Insert a message element at its watermark-ordered position so live messages
+  // arriving during reconnect catch-up land in the right place (R1-22).
+  function insertMessageInOrder(messageList, el, watermark) {
+    if (watermark == null || isNaN(watermark)) {
+      messageList.appendChild(el);
+      return;
+    }
+    var items = messageList.querySelectorAll('.message-item[data-watermark]');
+    for (var i = 0; i < items.length; i++) {
+      var wm = parseInt(items[i].getAttribute('data-watermark'), 10);
+      if (!isNaN(wm) && wm > watermark) {
+        messageList.insertBefore(el, items[i]);
+        return;
+      }
+    }
+    messageList.appendChild(el);
+  }
+
   // --- New message handler (called from stomp-client.js) ---
 
   function onNewMessage(msg) {
@@ -246,48 +272,156 @@
       return;
     }
 
-    // Check if already rendered (dedup)
-    if (msg.id && messageList.querySelector('[data-message-id="' + msg.id + '"]')) {
+    // Dedup — but a re-broadcast that now carries attachments (image upload completes
+    // after its text message) replaces the rendered copy in place instead of dropping.
+    var existing = msg.id ? messageList.querySelector('[data-message-id="' + msg.id + '"]') : null;
+    if (existing) {
+      if (msg.attachments && msg.attachments.length > 0 && !existing.querySelector('.message-attachments')) {
+        existing.replaceWith(createMessageElement(msg));
+      }
       return;
     }
 
     var wasAtBottom = isScrolledToBottom(messageList);
     var el = createMessageElement(msg);
-    messageList.appendChild(el);
+    var watermark = msg.watermark != null ? parseInt(msg.watermark, 10) : NaN;
+    insertMessageInOrder(messageList, el, watermark);
 
     if (wasAtBottom) {
       scrollToBottom(messageList);
     }
+
+    // Viewing this room means the incoming message is read (R1-19).
+    markActiveRoomRead();
   }
 
   // --- Notification handler (called from stomp-client.js) ---
 
   function onNotification(notification) {
-    if (notification.type === 'UNREAD_UPDATE' && notification.room_id) {
-      updateUnreadBadge(notification.room_id, notification.unread_count);
+    var type = notification.type;
+    if (type === 'UNREAD_UPDATE') {
+      var roomId = notification.room_id || notification.roomId;
+      if (!roomId) {
+        return;
+      }
+      var count = notification.unread_count != null ? notification.unread_count : notification.unreadCount;
+      // The room I'm currently viewing stays at zero (R1-19).
+      if (window.YAC_ROOM && String(window.YAC_ROOM.id) === String(roomId)) {
+        updateUnreadBadge(roomId, 0);
+        return;
+      }
+      // A brand-new room not yet in the sidebar → refresh the listing (R1-20).
+      var known = document.querySelector('a[href*="/chat/rooms/' + roomId + '"]');
+      if (!known && window.YAC && window.YAC.sidebar && window.YAC.sidebar.refresh) {
+        window.YAC.sidebar.refresh();
+        return;
+      }
+      updateUnreadBadge(roomId, count);
+      return;
+    }
+    if (type === 'MEMBER_JOINED' || type === 'MEMBER_LEFT' || type === 'MEMBER_BANNED') {
+      // Same membership handling whether delivered on the room-events topic or the personal queue.
+      onRoomEvent(notification);
     }
   }
 
+  // Acknowledge reads for the room in view so its badge never grows (R1-19). Debounced
+  // so a burst of incoming messages produces at most one request per second.
+  var readAckTimer = null;
+
+  function markActiveRoomRead() {
+    var roomId = getRoomId();
+    if (!roomId) {
+      return;
+    }
+    if (readAckTimer) {
+      return;
+    }
+    readAckTimer = setTimeout(function () {
+      readAckTimer = null;
+      fetch('/api/rooms/' + roomId + '/read', { method: 'POST', headers: apiHeaders() })
+        .catch(function (err) {
+          console.error('[App] Error acknowledging read:', err);
+        });
+    }, 1000);
+  }
+
+  // --- Membership event handler (called from stomp-client.js) ---
+
+  function onRoomEvent(event) {
+    var type = event.type;
+    var affectedUserId = event.user_id || event.userId;
+    var eventRoomId = event.room_id || event.roomId;
+    var myId = window.YAC_USER ? window.YAC_USER.id : null;
+    var amAffected = myId && affectedUserId && String(affectedUserId) === String(myId);
+
+    if (type === 'MEMBER_BANNED' && amAffected) {
+      // Leave the room view only if I'm actually looking at the room I was removed from.
+      if (window.YAC_ROOM && eventRoomId && String(window.YAC_ROOM.id) === String(eventRoomId)) {
+        window.location.href = '/chat';
+      }
+      if (window.YAC && window.YAC.sidebar && window.YAC.sidebar.refresh) {
+        window.YAC.sidebar.refresh();
+      }
+      return;
+    }
+
+    if (type === 'MEMBER_LEFT' || type === 'MEMBER_BANNED') {
+      removeMemberFromList(affectedUserId);
+    }
+    // ponytail: MEMBER_JOINED not live-rendered (event lacks role); joiner shows on next load.
+  }
+
+  function removeMemberFromList(userId) {
+    if (!userId) {
+      return;
+    }
+    var dot = document.querySelector('#member-list-items .presence-dot[data-user-id="' + userId + '"]');
+    if (!dot) {
+      return;
+    }
+    var li = dot.closest('li');
+    if (li) {
+      li.remove();
+    }
+    var countBadge = document.getElementById('member-count');
+    if (countBadge) {
+      var n = parseInt(countBadge.textContent, 10);
+      if (!isNaN(n) && n > 0) {
+        countBadge.textContent = n - 1;
+      }
+    }
+  }
+
+  // --- Message edited handler (called from stomp-client.js) ---
+
+  function onMessageEdited(event) {
+    var messageId = event.message_id || event.messageId;
+    if (!messageId) {
+      return;
+    }
+    var item = document.querySelector('.message-item[data-message-id="' + messageId + '"]');
+    if (!item) {
+      return;
+    }
+    var textEl = item.querySelector('.message-text') || item.querySelector('p.mb-0');
+    if (textEl) {
+      textEl.textContent = event.content;
+    }
+    var headerDiv = item.querySelector('.message-header') || item.querySelector('.d-flex.align-items-baseline');
+    if (headerDiv && !headerDiv.querySelector('small')) {
+      var editedEl = document.createElement('small');
+      editedEl.className = 'text-muted ms-1';
+      editedEl.textContent = '(edited)';
+      headerDiv.appendChild(editedEl);
+    }
+  }
+
+  // Single unread-badge implementation lives in sidebar.js; delegate to it (R1-80).
   function updateUnreadBadge(roomId, count) {
-    // Find room links in sidebar and update badge
-    var roomLinks = document.querySelectorAll('a[href*="/chat/rooms/' + roomId + '"]');
-    roomLinks.forEach(function (link) {
-      var li = link.closest('li');
-      if (!li) {
-        return;
-      }
-      var badge = li.querySelector('.badge');
-      if (count > 0) {
-        if (!badge) {
-          badge = document.createElement('span');
-          badge.className = 'badge bg-danger rounded-pill ms-1';
-          li.appendChild(badge);
-        }
-        badge.textContent = count > 999 ? '999+' : count;
-      } else if (badge) {
-        badge.remove();
-      }
-    });
+    if (window.YAC && window.YAC.sidebar && window.YAC.sidebar.updateUnreadBadge) {
+      window.YAC.sidebar.updateUnreadBadge(roomId, count);
+    }
   }
 
   // --- Infinite scroll: load older messages ---
@@ -316,14 +450,9 @@
 
     isLoadingHistory = true;
 
-    // Cursor for "before" this watermark: we need messages with watermark < oldestWatermark
-    // The API returns watermark > cursor, so we need to compute a cursor that gives us older messages
-    // We'll use cursor=0 and let the server return from the beginning, or use a different approach
-    // Actually the API is: GET /api/rooms/{roomId}/messages?cursor=X&size=50 returns watermark > X
-    // To get messages BEFORE oldestWatermark, we need a different cursor
-    // Let's request with cursor = max(0, oldestWatermark - 51) to get the page before
-    var cursor = Math.max(0, oldestWatermark - 51);
-    var url = '/api/rooms/' + roomId + '/messages?cursor=' + cursor + '&size=50';
+    // Backward pagination: server returns the 50 messages older than this watermark,
+    // oldest-first, robust to deletion gaps (R1-01, R1-02).
+    var url = '/api/rooms/' + roomId + '/messages?before=' + oldestWatermark + '&size=50';
 
     fetch(url, {
       headers: apiHeaders()
@@ -494,6 +623,16 @@
       var formData = new FormData();
       formData.append('file', file, file.name || 'pasted-image.png');
       formData.append('messageId', msg.id);
+
+      // Optional attachment comment from the composer (R1-49)
+      var commentInput = document.getElementById('attachment-comment');
+      if (commentInput) {
+        var comment = commentInput.value.trim();
+        if (comment) {
+          formData.append('comment', comment);
+        }
+        commentInput.value = '';
+      }
 
       var uploadHeaders = {};
       if (csrfHeader) {
@@ -1049,6 +1188,60 @@
     });
   };
 
+  // --- Add friend by username (sidebar form, R1-50) ---
+
+  window.sendFriendRequestByUsername = function () {
+    var usernameInput = document.getElementById('add-friend-username');
+    var messageInput = document.getElementById('add-friend-message');
+    var feedback = document.getElementById('add-friend-feedback');
+    var username = usernameInput ? usernameInput.value.trim() : '';
+
+    if (!username) {
+      if (feedback) {
+        feedback.textContent = 'Please enter a username';
+        feedback.className = 'small text-danger';
+      }
+      return false;
+    }
+
+    var body = { username: username };
+    var requestText = messageInput ? messageInput.value.trim() : '';
+    if (requestText) {
+      body.request_text = requestText;
+    }
+
+    fetch('/api/friends/request', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify(body)
+    })
+    .then(function (response) {
+      if (response.ok || response.status === 201) {
+        if (feedback) {
+          feedback.textContent = 'Friend request sent!';
+          feedback.className = 'small text-success';
+        }
+        if (usernameInput) { usernameInput.value = ''; }
+        if (messageInput) { messageInput.value = ''; }
+      } else {
+        return response.json().then(function (err) {
+          if (feedback) {
+            feedback.textContent = err.message || 'Failed to send friend request';
+            feedback.className = 'small text-danger';
+          }
+        });
+      }
+    })
+    .catch(function () {
+      if (feedback) {
+        feedback.textContent = 'Error sending friend request';
+        feedback.className = 'small text-danger';
+      }
+    });
+
+    return false;
+  };
+
   // --- Block user ---
 
   window.blockUser = function (btn) {
@@ -1082,15 +1275,6 @@
   // --- Initialization ---
 
   function init() {
-    // Configure HTMX CSRF
-    var csrfToken = document.querySelector('meta[name="_csrf"]');
-    var csrfHeader = document.querySelector('meta[name="_csrf_header"]');
-    if (csrfToken && csrfHeader) {
-      document.body.addEventListener('htmx:configRequest', function (event) {
-        event.detail.headers[csrfHeader.content] = csrfToken.content;
-      });
-    }
-
     var messageList = document.getElementById('message-list');
     var textarea = document.getElementById('message-textarea');
     var sendBtn = document.getElementById('send-btn');
@@ -1256,7 +1440,9 @@
   window.YAC.app = {
     onNewMessage: onNewMessage,
     onNotification: onNotification,
-    onMessageDeleted: onMessageDeleted
+    onMessageDeleted: onMessageDeleted,
+    onMessageEdited: onMessageEdited,
+    onRoomEvent: onRoomEvent
   };
 
   document.addEventListener('DOMContentLoaded', init);

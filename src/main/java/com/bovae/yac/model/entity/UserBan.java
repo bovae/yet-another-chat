@@ -12,7 +12,6 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -27,14 +26,12 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(exclude = {"blocker", "blocked"})
 @Entity
 @Table(name = "user_bans", uniqueConstraints = @UniqueConstraint(columnNames = {"blocker_id", "blocked_id"}))
 public class UserBan {
 
     @Id
-    @EqualsAndHashCode.Include
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
@@ -49,4 +46,20 @@ public class UserBan {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof UserBan other)) {
+            return false;
+        }
+        return getId() != null && getId().equals(other.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return UserBan.class.hashCode();
+    }
 }

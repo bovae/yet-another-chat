@@ -10,6 +10,7 @@ import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.MessageBroadcastService;
 import com.bovae.yac.service.ModerationService;
 import com.bovae.yac.service.RoomService;
 import jakarta.validation.Valid;
@@ -39,6 +40,7 @@ public class RoomBanApiController {
 
     private final RoomService roomService;
     private final ModerationService moderationService;
+    private final MessageBroadcastService messageBroadcastService;
     private final RoomBanRepository roomBanRepository;
     private final RoomMemberRepository roomMemberRepository;
     private final UserRepository userRepository;
@@ -74,6 +76,7 @@ public class RoomBanApiController {
         User targetUser = resolveUserById(request.userId());
 
         moderationService.banUserFromRoom(room, actingUser, targetUser);
+        messageBroadcastService.broadcastMembership(room, targetUser, "MEMBER_BANNED");
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }

@@ -1,5 +1,6 @@
 package com.bovae.yac.service;
 
+import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -67,6 +68,10 @@ public class AuthService implements UserDetailsService {
     }
 
     private String extractIpAddress(Session session) {
+        String capturedIp = session.getAttribute("CLIENT_IP");
+        if (capturedIp != null) {
+            return capturedIp;
+        }
         SecurityContext securityContext = session.getAttribute("SPRING_SECURITY_CONTEXT");
         if (securityContext == null) {
             return null;
@@ -83,11 +88,17 @@ public class AuthService implements UserDetailsService {
     }
 
     /**
-     * Terminates a specific session by its ID.
+     * Terminates a session, but only if it belongs to the requesting principal (R1-11).
+     *
+     * @throws ResourceNotFoundException if the session is not one of the caller's own
      */
-    public void terminateSession(String sessionId) {
+    public void terminateSession(String sessionId, String principalEmail) {
+        Map<String, ? extends Session> ownSessions = sessionRepository.findByPrincipalName(principalEmail);
+        if (!ownSessions.containsKey(sessionId)) {
+            throw new ResourceNotFoundException("Session not found");
+        }
         sessionRepository.deleteById(sessionId);
-        LOG.info("Terminated session: {}", sessionId);
+        LOG.info("Terminated session {} for principal {}", sessionId, principalEmail);
     }
 
     public record SessionInfo(

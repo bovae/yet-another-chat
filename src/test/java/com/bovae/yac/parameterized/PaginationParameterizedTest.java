@@ -122,7 +122,8 @@ class PaginationParameterizedTest {
             messageService.sendMessage(room, sender, "Msg " + (i + 1), null);
         }
 
-        MessagePage page = messageService.getMessageHistory(room, cursor, pageSize);
+        // Ascending catch-up pagination (watermark > cursor) is now getMessagesSince (R1-22).
+        MessagePage page = messageService.getMessagesSince(room, cursor, pageSize);
 
         assertEquals(expectedCount, page.messages().size(),
                 "Expected %d messages for: %s".formatted(expectedCount, description));
@@ -198,7 +199,7 @@ class PaginationParameterizedTest {
         boolean hasMore = true;
 
         while (hasMore) {
-            MessagePage page = messageService.getMessageHistory(room, cursor, pageSize);
+            MessagePage page = messageService.getMessagesSince(room, cursor, pageSize);
             page.messages().forEach(m -> collectedWatermarks.add(m.watermark()));
             cursor = page.nextCursor();
             hasMore = page.hasMore();

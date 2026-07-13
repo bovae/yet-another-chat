@@ -94,8 +94,8 @@ public class FriendshipService {
             throw new ConflictException("Friend request is not in PENDING status");
         }
 
-        friendship.setStatus(FriendshipStatus.DECLINED);
-        friendship = friendshipRepository.save(friendship);
+        // Delete the row rather than marking it DECLINED so the pair can request again later (R1-30).
+        friendshipRepository.delete(friendship);
 
         LOG.info("Friend request declined: friendshipId={}, declinedBy={}", friendshipId, decliningUser.getId());
 

@@ -188,7 +188,7 @@
 
           // 11.5: DM initiation from contacts
           var nameSpan = document.createElement('span');
-          nameSpan.className = 'text-truncate';
+          nameSpan.className = 'text-truncate flex-grow-1';
           nameSpan.style.cursor = 'pointer';
           nameSpan.textContent = friendUsername;
           nameSpan.setAttribute('data-user-id', friendId);
@@ -196,6 +196,19 @@
             initiateDirectChat(friendId);
           });
           li.appendChild(nameSpan);
+
+          // Remove contact (R1-51)
+          var removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'btn btn-sm btn-link text-danger p-0 ms-2';
+          removeBtn.title = 'Remove contact';
+          removeBtn.textContent = '×';
+          removeBtn.setAttribute('data-friendship-id', friendship.id);
+          removeBtn.addEventListener('click', function (event) {
+            event.stopPropagation();
+            removeFriend(friendship.id);
+          });
+          li.appendChild(removeBtn);
 
           contactList.appendChild(li);
         });
@@ -658,6 +671,115 @@
     });
   }
 
+  // --- Contact removal (R1-51) ---
+
+  function removeFriend(friendshipId) {
+    if (!friendshipId) {
+      return;
+    }
+    if (!window.confirm('Remove this contact?')) {
+      return;
+    }
+    fetch('/api/friends/' + friendshipId, {
+      method: 'DELETE',
+      headers: apiHeaders()
+    })
+    .then(function (response) {
+      if (response.ok || response.status === 204) {
+        refreshSidebar();
+      } else {
+        return response.json().then(function (err) {
+          if (window.showErrorModal) {
+            window.showErrorModal(err.message || 'Failed to remove contact');
+          }
+        });
+      }
+    })
+    .catch(function (err) {
+      console.error('[Sidebar] Remove friend error:', err);
+    });
+  }
+
+  // --- Blocked users management (R1-51) ---
+
+  function populateBlockedUsers() {
+    var listEl = document.getElementById('blocked-users-list');
+    if (!listEl) {
+      return;
+    }
+    listEl.innerHTML = '<p class="text-muted small">Loading...</p>';
+
+    fetch('/api/user-bans', { headers: apiHeaders() })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('Failed to load blocked users');
+        }
+        return response.json();
+      })
+      .then(function (bans) {
+        listEl.innerHTML = '';
+        if (!bans || bans.length === 0) {
+          listEl.innerHTML = '<p class="text-muted small">No blocked users</p>';
+          return;
+        }
+
+        bans.forEach(function (ban) {
+          var entry = document.createElement('div');
+          entry.className = 'd-flex align-items-center justify-content-between py-2 border-bottom';
+
+          var info = document.createElement('div');
+          var nameEl = document.createElement('strong');
+          nameEl.className = 'small';
+          nameEl.textContent = ban.blocked_display_name || ban.blockedDisplayName
+            || ban.blocked_username || ban.blockedUsername || 'User';
+          info.appendChild(nameEl);
+
+          var unameEl = document.createElement('div');
+          unameEl.className = 'text-muted small';
+          unameEl.textContent = '@' + (ban.blocked_username || ban.blockedUsername || '');
+          info.appendChild(unameEl);
+
+          var unbanBtn = document.createElement('button');
+          unbanBtn.type = 'button';
+          unbanBtn.className = 'btn btn-sm btn-outline-warning';
+          unbanBtn.textContent = 'Unblock';
+          unbanBtn.addEventListener('click', function () {
+            unbanBtn.disabled = true;
+            fetch('/api/user-bans/' + ban.id, {
+              method: 'DELETE',
+              headers: apiHeaders()
+            })
+            .then(function (resp) {
+              if (resp.ok || resp.status === 204) {
+                entry.remove();
+                if (!listEl.querySelector('div')) {
+                  listEl.innerHTML = '<p class="text-muted small">No blocked users</p>';
+                }
+              } else {
+                unbanBtn.disabled = false;
+                if (window.showErrorModal) {
+                  window.showErrorModal('Failed to unblock user');
+                }
+              }
+            })
+            .catch(function () {
+              unbanBtn.disabled = false;
+              if (window.showErrorModal) {
+                window.showErrorModal('Error unblocking user');
+              }
+            });
+          });
+
+          entry.appendChild(info);
+          entry.appendChild(unbanBtn);
+          listEl.appendChild(entry);
+        });
+      })
+      .catch(function () {
+        listEl.innerHTML = '<p class="text-danger small">Error loading blocked users</p>';
+      });
+  }
+
   // --- Refresh and init ---
 
   function refreshSidebar() {
@@ -673,6 +795,12 @@
 
   function init() {
     setupSavedMessagesButton();
+
+    var blockedModalEl = document.getElementById('blockedUsersModal');
+    if (blockedModalEl) {
+      blockedModalEl.addEventListener('show.bs.modal', populateBlockedUsers);
+    }
+
     refreshSidebar().then(function () {
       setupSearch();
       handleSectionParam();

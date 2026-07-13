@@ -6,6 +6,7 @@ import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.MessageBroadcastService;
 import com.bovae.yac.service.ModerationService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
@@ -35,14 +36,16 @@ public class RoomMemberApiController {
     private final RoomService roomService;
     private final RoomMemberService roomMemberService;
     private final ModerationService moderationService;
+    private final MessageBroadcastService messageBroadcastService;
     private final UserRepository userRepository;
 
     @GetMapping
     public ResponseEntity<List<RoomMemberDto>> listMembers(
             @PathVariable UUID roomId,
             Principal principal) {
-        resolveUser(principal);
+        User user = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
+        roomMemberService.requireCanRead(room, user); // R1-56
 
         List<RoomMemberDto> members = roomMemberService.listMembers(room);
 
@@ -59,6 +62,7 @@ public class RoomMemberApiController {
         User targetUser = resolveUserById(userId);
 
         moderationService.kickMember(room, actingUser, targetUser);
+        messageBroadcastService.broadcastMembership(room, targetUser, "MEMBER_BANNED");
 
         return ResponseEntity.noContent().build();
     }

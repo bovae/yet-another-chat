@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -112,8 +113,8 @@ class WebSocketIT {
         stompSessions.clear();
         stompClients.clear();
 
-        presenceService.removePresence(userA.getId());
-        presenceService.removePresence(userB.getId());
+        presenceService.removeSession(userA.getId(), "it-session");
+        presenceService.removeSession(userB.getId(), "it-session");
     }
 
     // ---- Requirement 12.1: STOMP message to /app/chat.send persists and broadcasts ----
@@ -164,8 +165,9 @@ class WebSocketIT {
 
         Map<String, Object> payload = Map.of("active", true);
         session.send("/app/presence.heartbeat", payload);
-        Thread.sleep(1000); // allow processing
 
+        // Await the observable side effect instead of a fixed sleep (R1-53).
+        awaitUntil(() -> presenceService.getUserStatus(userA.getId()) == PresenceStatus.ONLINE);
         assertThat(presenceService.getUserStatus(userA.getId())).isEqualTo(PresenceStatus.ONLINE);
     }
 
@@ -276,11 +278,8 @@ class WebSocketIT {
             );
             session.send("/app/chat.send", payload);
 
-            // Give time for the server to process and potentially disconnect
-            Thread.sleep(2000);
-
-            // After sending to a protected destination without auth, the session
-            // should be disconnected by the server's authorization interceptor
+            // Await the server-side disconnect rather than sleeping a fixed interval (R1-53).
+            awaitUntil(() -> !session.isConnected());
             assertThat(session.isConnected()).isFalse();
         } catch (Exception e) {
             // Connection or send was rejected — this is the expected behavior
@@ -323,6 +322,17 @@ class WebSocketIT {
     }
 
     // ---- Helper methods ----
+
+    /** Polls a condition until true or a 5s timeout, so tests react as soon as state changes (R1-53). */
+    private void awaitUntil(BooleanSupplier condition) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            if (condition.getAsBoolean()) {
+                return;
+            }
+            Thread.sleep(50);
+        }
+    }
 
     private WebSocketStompClient createStompClient() {
         StandardWebSocketClient webSocketClient = new StandardWebSocketClient();

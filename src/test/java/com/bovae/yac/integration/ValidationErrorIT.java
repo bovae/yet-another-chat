@@ -218,11 +218,16 @@ class ValidationErrorIT {
         // Send a message first so we have a valid messageId for the attachment upload
         Message message = messageService.sendMessage(room, userA, "attachment test", null);
 
+        // Real PNG magic bytes so content sniffing classifies it as an image regardless of the
+        // declared type; size then exceeds the 3 MB image cap (R1-34).
+        byte[] data = new byte[3 * 1024 * 1024 + 1];
+        byte[] pngMagic = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+        System.arraycopy(pngMagic, 0, data, 0, pngMagic.length);
         MockMultipartFile oversizedImage = new MockMultipartFile(
                 "file",
                 "large-image.png",
                 "image/png",
-                new byte[3 * 1024 * 1024 + 1] // 3 MB + 1 byte exceeds image limit
+                data
         );
 
         mockMvc.perform(multipart("/api/rooms/{roomId}/attachments", room.getId())
