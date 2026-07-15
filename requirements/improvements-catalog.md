@@ -17,6 +17,7 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 | R1 | 2026-07-12 | Whole project (real-time/WS, security, core backend, web layer, tests/build, requirements coverage) | 6 parallel review agents reading full source + live Playwright/curl two-user session against `mvnw spring-boot:run` | R1-01 … R1-81 | 18 High, 38 Medium, 25 Low |
 | R2 | 2026-07-12 | Follow-up: presence display, Saved Messages, friend requests, UUID-in-UI leaks, FE/UX gaps + redesign | FE/UX audit agent + live Playwright two-user session (alice/bob) exercising presence dots, friend-request flow, Saved Messages, DM creation/naming | R2-01 … R2-09 | 2 High, 3 Medium, 4 Low |
 | R3 | 2026-07-12 | Navigation bar + left/right sidebars vs wireframe; UI test-automation feasibility | Navigation-surfaces audit agent + live Playwright walkthrough of navbar/profile/sessions pages | R3-01 … R3-10 | 4 Medium, 6 Low |
+| R4 | 2026-07-15 | Full stack (src/main, src/test incl. e2e, infra: docker-compose/CI/Makefile/README/pom) minus R1–R3 verified-clean areas; baseline `main @ d7ad4be` | 6 parallel area-audit agents (be-core ×2, be-auth, be-test, fe, infra) × 4 dimensions (correctness/security/performance/architecture) + per-finding adversarial verification | R4-01 … R4-16 | 1 High, 11 Medium, 4 Low |
 
 **R1 headline** — the "live updates unreliable" symptom is not one bug but four, all confirmed:
 1. Rooms open on the **oldest** 50 messages, never the newest (R1-01).
@@ -27,6 +28,8 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 **R2 headline** — the "online statuses don't work" complaint is root-caused and *verified live*: a freshly loaded, focused tab shows **AFK**, not ONLINE, and only flips to green after the user physically moves the mouse (R2-01). Friend requests and Saved Messages **do work functionally** (accept persists; Saved Messages sends and labels correctly), but friend requests never arrive live and give no pending-count cue (R2-03). UI labels use real usernames/display names throughout — the *only* raw-UUID leak is the orphaned-DM fallback (R2-06). A silent message-loss path on a dropped socket (R2-02) and mobile panels being fully hidden (R2-05) are the other notable new gaps. Redesign guidance is in **UX Redesign Suggestions** at the end.
 
 **R3 headline** — added an automated-UI-test item (R3-01): Playwright is feasible on this Java/no-Node stack via **Playwright-for-Java** (Maven dep, runs in the JVM), gated behind its own Maven profile so it stays out of the fast build; a manual Playwright workflow already exists at `src/test/e2e/README.md` to seed the scenarios. Navigation findings: the sidebar "Search rooms" box only filters *already-joined* rooms and can't discover catalog rooms (R3-03); per-member "Add friend"/"Block user" is admin-gated so ordinary members can't friend/ban from the user list (R3-02, refines R1-50); rooms/DMs and the member list render unsorted (R3-04, R3-05); and the navbar lacks active-page highlighting and any global unread/request badge (R3-09, R3-10).
+
+**R4 headline** — a whole-stack sweep against `main @ d7ad4be` found several R1 remediations held only partway. The STOMP SUBSCRIBE interceptor added for R1-09/R1-65 still authorizes wildcard destinations, so a single `SUBSCRIBE /topic/**` frame re-opens the whole-system eavesdrop it was meant to close (R4-01, the round's only High); a banned user likewise keeps live read access to a public room via SUBSCRIBE (R4-06), and a cross-room `reply_to_id` leaks a private message's content snippet and sender across room boundaries on both the REST and WS send paths (R4-02, R4-05). The security-critical R1-08/R1-09 guards ship with zero regression coverage (R4-07, R4-08). Rounding out the round: account deletion can cascade-destroy a counterpart's entire DM (R4-04), the R1-44 unread fan-out reload is now unbounded (R4-03), missing SMTP timeouts let an unauthenticated forgot-password exhaust the DB pool (R4-11), and the documented `make run` dev workflow fails to start because `REMEMBER_ME_KEY` has no default (R4-12).
 
 ---
 
@@ -54,6 +57,7 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 - [x] R1-18 — Remove all Property-Based Tests (slow); port uniquely-covered behaviour first *(user request)*
 - [x] R2-01 — Freshly loaded/focused tab shows AFK, not ONLINE, until the mouse moves *(verified)*
 - [x] R2-02 — Message silently lost (and input cleared) when the STOMP socket is down
+- [ ] R4-01 — Fix for R1-09/R1-65 incomplete: wildcard STOMP SUBSCRIBE bypasses room-membership and presence-visibility checks
 
 ### Medium
 
@@ -102,6 +106,17 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 - [x] R3-02 — Per-member "Add friend"/"Block user" is admin-gated; members can't friend/ban from the user list
 - [x] R3-03 — Sidebar "Search rooms" only filters joined rooms; can't discover catalog rooms
 - [x] R3-04 — Sidebar rooms & DMs render unsorted (no recency/alphabetical order)
+- [ ] R4-02 — Reply-to message not scoped to the room on send → cross-room content/username leak
+- [ ] R4-03 — Batch unread fan-out loads an unbounded watermark list on every send/delete (grows with room history when any member lags)
+- [ ] R4-04 — Account deletion cascade-destroys a DM the deleter created, wiping the other participant's entire conversation and messages
+- [ ] R4-05 — Cross-room reply reference leaks a private message's content snippet and sender across room boundaries (read-guard bypass)
+- [ ] R4-06 — Fix for R1-09 incomplete: banned user can eavesdrop on a PUBLIC room's live messages via SUBSCRIBE
+- [ ] R4-07 — R1-08 message-history IDOR guard (requireCanRead) has zero regression coverage — private-room read never asserted 403
+- [ ] R4-08 — SUBSCRIBE authorization (StompAuthChannelInterceptor, R1-09/R1-65) is untested — every WebSocketIT subscribe hits the PUBLIC-room short-circuit
+- [ ] R4-09 — R1-53 fix incomplete: WebSocketIT still has four fixed Thread.sleep(500) sites before subscription-dependent sends
+- [ ] R4-10 — Navbar aggregate unread badge counts the actively-viewed room and is never re-cleared after read-ack
+- [ ] R4-11 — No SMTP timeouts + synchronous mail send inside @Transactional lets unauthenticated forgot-password exhaust the DB connection pool
+- [ ] R4-12 — R1-35 fix regression: documented `make run` dev workflow fails startup — REMEMBER_ME_KEY has no default
 
 ### Low
 
@@ -140,6 +155,10 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 - [x] R3-08 — "Sessions" buried in the Profile dropdown, not a top-level nav item
 - [x] R3-09 — Navbar never highlights the active page
 - [x] R3-10 — No aggregate unread/request badge on the navbar (invisible on non-chat pages)
+- [ ] R4-13 — get-or-create DM endpoint returns 409 under concurrent creation instead of the existing room (R1-68 fix incomplete)
+- [ ] R4-14 — editMessage never verifies the message belongs to the URL room, so its edit broadcast is routed to the wrong /topic/room
+- [ ] R4-15 — WebSocketIT.unauthenticatedConnection_cannotSendToAppDestinations passes via 5s timeout and never exercises the send it names
+- [ ] R4-16 — Image/paste upload: placeholder text message is broadcast before the file, and an upload failure leaves an orphaned '[Image: …]' message with no user feedback
 
 ---
 
@@ -640,3 +659,83 @@ None of the three nav links (`fragments/navbar.html:12-20`) carry a `th:classapp
 **R3-10 · Low · No aggregate unread/request badge on the navbar**
 The navbar (`fragments/navbar.html`, whole fragment) carries no badge for unread messages, pending friend requests, or room invitations; those cues exist only in the sidebar, which is absent on `/rooms/catalog`, `/profile`, and `/profile/sessions`. A user on those pages gets no signal that a DM or friend request arrived (spec 2.7.1).
 *Fix:* add a navbar badge summing sidebar unread + pending-request counts, pushed over the existing user queue.
+
+---
+
+### Round R4 — Whole-codebase audit (2026-07-15)
+
+Full-stack review of `src/main`, `src/test` (including e2e), and infra (docker-compose, CI, Makefile, README, pom) against baseline `main @ d7ad4be`, focused on areas not already verified clean in R1–R3 and on whether the earlier fixes actually held. Conducted by six parallel area-audit agents (be-core ×2, be-auth, be-test, fe, infra) across four dimensions (correctness, security, performance, architecture); every finding below was independently reproduced by a separate adversarial verifier against the code before filing. The recurring theme is incomplete remediation — three R1 security fixes and two R1 test/infra fixes proved partial.
+
+**be-core (R4)**
+
+**R4-03 · Medium · Batch unread fan-out loads an unbounded watermark list on every send/delete**
+`NotificationService.computeUnreadCounts` (`service/NotificationService.java:88`), invoked by `fanOutUnread` on every `broadcastNewMessage` and every delete recompute, takes `minLastRead` across members and calls `messageRepository.findWatermarksByRoomAndWatermarkGreaterThan` (`repository/MessageRepository.java:40-41`), which has no `Pageable`/limit and materializes every watermark above the most-behind member into a `List<Long>`. Because `ensureMarker` sets a joining member's marker at watermark-at-join, one never-reading lurker pins `minLastRead` low, so the fetch grows with the room's entire history since that join and is reloaded on every message — the R1-44 fix swapped N+1 queries for a single but unbounded read on the hot write path. In a 1000-member room with one member 5000 messages behind, every new message transfers ~5000 rows on the `clientInboundChannel` thread before fan-out.
+*Fix:* Use a grouped count query keyed by user (analogous to the existing `MessageRepository.countUnreadPerRoom` used for the sidebar) to get each member's unread count directly, instead of loading all watermarks and filtering per member.
+
+**R4-04 · Medium · Account deletion cascade-destroys a DM the deleter created, wiping the counterpart's conversation**
+`UserService.deleteAccount` (`service/UserService.java:87`) purges every room from `roomRepository.findByOwner(user)` via `deleteRoomCascade`, and `DirectChatService.getOrCreateDirectChat` (`service/DirectChatService.java:59-64`) sets a DM's owner to whoever initiated it. So if alice opens a DM with bob and they exchange 500 messages, alice deleting her account cascade-deletes the whole DM (`RoomService.deleteRoomCascade:238-267`) — bob loses the entire conversation including his own messages — whereas had bob opened it, alice's deletion would leave it intact with her messages preserved as "Deleted user". This bypasses the R1-28 `ON DELETE SET NULL` preservation because the room row is deleted first; the outcome (total loss vs. preserved history) depends only on who initiated the DM (ties R1-28, R1-31).
+*Fix:* Exclude DIRECT rooms from the owned-room purge in `deleteAccount` and let DMs follow the membership-removal path, so the counterpart keeps the conversation with the deleter's messages preserved as "Deleted user".
+
+**R4-05 · Medium · Cross-room reply reference leaks a private message's content snippet and sender across room boundaries**
+`MessageService.sendMessage` (`service/MessageService.java:59`) never checks that `replyTo` belongs to the target `room`; both call sites resolve it by raw UUID with no room scoping (`ws/ChatMessageHandler.java:49`, `controller/api/MessageApiController.java:82`), and `assertCanPost` only verifies membership of the target room. `toResponse` (`service/MessageService.java:239-243`) then puts `replyToSenderUsername` plus a 100-char `replyToContentSnippet` of the referenced message into the broadcast `ChatMessageResponse`. A user kicked/banned from private room B (so R1-08's `requireCanRead` now denies them B's history) who still knows a B message UUID can post to a public room A with that `replyToId` and have B's sender and content echoed to them and all of A — bypassing the membership read guard. This is the shared-service root cause behind R4-02 (ties R1-08, R1-25, R1-27).
+*Fix:* In `MessageService.sendMessage`, after resolving `replyTo`, require `replyTo.getRoom().getId().equals(room.getId())` else throw `ResourceNotFoundException` — one guard in the shared service covers both the WS and REST paths.
+
+**R4-06 · Medium · Fix for R1-09 incomplete: banned user can eavesdrop on a PUBLIC room's live messages via SUBSCRIBE**
+`StompAuthChannelInterceptor.authorizeRoom` (`ws/StompAuthChannelInterceptor.java:86-88`) returns early when `room.getVisibility() == PUBLIC` and never consults `roomBanRepository` (it does not even inject it). Both parallel read guards check the ban *first*, independent of visibility: `RoomMemberService.requireCanRead` (`service/RoomMemberService.java:136`) throws `ForbiddenException` on `roomBanRepository.existsByRoomAndUser` before the visibility branch, and `ChatWebController.roomView:54` does the same. Since `ModerationService.banUserFromRoom` (`service/ModerationService.java:66-69`) deletes the `RoomMember` row and inserts a `RoomBan`, a banned user is a non-member: Alice banned from PUBLIC room X is blocked from `GET /chat/rooms/X` and `GET /api/rooms/X/messages` (both 403), but a STOMP `SUBSCRIBE /topic/room.{X}` hits the PUBLIC early-return, is accepted, and she keeps receiving every broadcast via `MessageBroadcastService`. The gap survives a fresh subscribe/reconnect, so it is a persistent server-side authorization hole, distinct from the stale-UI angle noted under R1-21 (ties R1-09, R1-17).
+*Fix:* Inject `RoomBanRepository` into the interceptor and, in `authorizeRoom`, check `roomBanRepository.existsByRoomAndUser(room, user)` **before** the PUBLIC early-return (reject if banned), mirroring `RoomMemberService.requireCanRead`.
+
+**R4-13 · Low · get-or-create DM endpoint returns 409 under concurrent creation instead of the existing room**
+`DirectChatService.getOrCreateDirectChat` (`service/DirectChatService.java:54-68`) does `findByName` then `roomRepository.save` with no try/catch; `idx_rooms_name_unique` (`migrations/004-schema-hardening.sql:10`) makes the deterministic DM name unique, so the losing concurrent save throws `DataIntegrityViolationException`, mapped to HTTP 409 by `GlobalApiExceptionHandler:64-68`. Since `DirectChatApiController.createOrGetDirectChat:34-43` is a get-or-create endpoint, the loser gets "The request conflicts with existing data" instead of the existing DIRECT room. R1-68's documented fix required both the unique constraint and catching the violation "as already exists"; only the constraint was implemented.
+*Fix:* Catch `DataIntegrityViolationException` around the save and re-run `findByName` (in a fresh transaction, since the failed insert marks the current one rollback-only) to return the winning room, fulfilling the idempotent get-or-create contract.
+
+**R4-14 · Low · editMessage never verifies the message belongs to the URL room → edit broadcast routed to the wrong topic**
+`MessageApiController.editMessage` (`controller/api/MessageApiController.java:104`) loads the room from the URL, calls `messageService.editMessage` which only checks authorship + `assertCanPost(message.getRoom())` (`service/MessageService.java:92-97`) and never verifies `message.getRoom().getId().equals(roomId)`, then broadcasts to `/topic/room.{urlRoomId}` (line 107). `deleteMessage` on the same controller correctly rejects a mismatch (`service/MessageService.java:117-119`). An author of message M in room B who is also a member of A can `PUT /api/rooms/{A}/messages/{M}`: the edit succeeds and is broadcast to room A, so B's real subscribers keep the stale text (reintroducing the R1-04 symptom) while A's subscribers get an event for a message not in their DOM (ties R1-25, R1-04).
+*Fix:* In `editMessage`, verify the message belongs to the URL room (return 404 on mismatch) as `deleteMessage` does, so the edit is broadcast to the message's real room.
+
+**be-auth (R4)**
+
+**R4-01 · High · Fix for R1-09/R1-65 incomplete: wildcard STOMP SUBSCRIBE bypasses room-membership and presence-visibility checks**
+`StompAuthChannelInterceptor.authorizeSubscribe` (`ws/StompAuthChannelInterceptor.java:61`) enforces membership only when the destination matches the exact 36-char-UUID `ROOM_TOPIC` or `PRESENCE_TOPIC` regexes (lines 34-37); any other `/topic/**` or `/queue/**` destination falls through and is authorized with no check, and the only other gate (`MessageSecurityConfig:23`) merely requires login. Because `WebSocketConfig:38` uses `enableSimpleBroker` with the default `AntPathMatcher`, an authenticated non-member who sends `SUBSCRIBE /topic/room.**` (or `/topic/**`, `/queue/**`) has that pattern matched against every outgoing message destination, so they receive all messages, edits, typing and membership events of every private room and DM, all presence, and other users' per-session notifications broadcast by `MessageBroadcastService` — reproducing the exact R1-09/R1-65 eavesdrop the interceptor was added to prevent.
+*Fix:* Make SUBSCRIBE authorization deny-by-default: for any destination under `/topic/**` or `/queue/**`, reject unless it is an exact, authorized room/presence/personal destination (reject wildcards and unrecognized shapes) rather than allowing unmatched destinations through.
+
+**R4-02 · Medium · Reply-to message not scoped to the room on send → cross-room content/username leak**
+`MessageApiController.sendMessage` (`controller/api/MessageApiController.java:82`) loads the reply target with `messageRepository.findByIdWithSender(request.replyToId())` with no check that `replyTo.getRoom()` equals the path room, then `toResponse` builds `replyToContentSnippet` (up to 100 chars) and `replyToSenderUsername` (lines 143-145) and broadcasts them (line 91); `ChatMessageHandler.sendMessage` has the identical gap (load at :50, snippet at :57-61, broadcast at :79). Membership is checked only for the destination room, never the reply target's — contrast R1-25, which added the room-scope check for delete only. A member of room A who knows a message UUID from private room B can send in A with `reply_to_id` = B's message, and the server persists and broadcasts up to 100 chars of B's content plus B's sender username to every member of A. This is the same defect as R4-05, seen at the controller/handler layer.
+*Fix:* In both `MessageApiController.sendMessage` and `ChatMessageHandler.sendMessage`, after loading the reply-to verify `replyTo.getRoom().getId().equals(room.getId())` and reject otherwise, mirroring the room-scope guard already applied to delete (R1-25) — or fix once in the shared service per R4-05.
+
+**be-test (R4)**
+
+**R4-07 · Medium · R1-08 message-history IDOR guard (requireCanRead) has zero regression coverage**
+The R1-08 fix is `roomMemberService.requireCanRead(room, user)` in `MessageApiController.getMessages:61`, and it only bites for non-PUBLIC rooms. A grep across `src/test/java` finds zero references to `requireCanRead` and no PRIVATE room in `MessageApiIT` — every `getMessages_*` test (`integration/MessageApiIT.java:143,158,177,194`) reads as a member of a PUBLIC room, and `AccessControlIT` covers non-member send and attachment download but never `GET /api/rooms/{id}/messages` on a private room as an outsider. A refactor that drops the guard (the exact original R1-08 IDOR: any authenticated user pages any private room/DM by UUID) leaves the entire suite green.
+*Fix:* Add an IT that creates a PRIVATE room owned by userA, then does `GET /api/rooms/{privateId}/messages` as a non-member and asserts `status().isForbidden()` (mirror `AccessControlIT.nonMember_downloadAttachment_returns403`).
+
+**R4-08 · Medium · SUBSCRIBE authorization (R1-09/R1-65) is untested — every WebSocketIT subscribe hits the PUBLIC short-circuit**
+`StompAuthChannelInterceptor.authorizeSubscribe` (`ws/StompAuthChannelInterceptor.java:61-102`) rejects non-member SUBSCRIBE to a private `/topic/room.{uuid}` (R1-09) and enforces presence visibility on `/topic/presence.{uuid}` (R1-65) via non-trivial regex matching, but a grep across `src/test/java` finds zero references to the interceptor or its rejection messages ("Not a member of this room", "Presence not visible"). Every `WebSocketIT` subscribe (`integration/WebSocketIT.java:132,186,306`) is an authenticated member subscribing to their own PUBLIC room, so the membership and presence branches never execute; a regression in the regex or `existsByRoomAndUser` re-opens the R1-09 live-eavesdrop hole with the suite still green.
+*Fix:* Add a `WebSocketIT` test where a non-member connects with a valid cookie and subscribes to `/topic/room.{privateRoomId}`, asserting the frame is rejected (exception fired / session disconnects / no messages delivered), plus a symmetric presence-topic case for R1-65.
+
+**R4-09 · Medium · R1-53 fix incomplete: four fixed Thread.sleep(500) sites remain before subscription-dependent sends**
+`integration/WebSocketIT.java` still has four (not three) fixed sleeps at lines 133, 188, 212, 308, each doing subscribe → `Thread.sleep(500)` → send → poll; only lines 170 and 282 were converted to `awaitUntil`. R1-53 listed all six original sleep sites, but the four subscription-timing ones were left because their pre-send race has no observable post-send state to poll. Under CI load a SUBSCRIBE frame can take >500ms to register on the broker, so the message is broadcast before the subscription is live, the subscriber misses it (no replay), and `received.poll(5,SECONDS)` returns null → `isNotNull()` fails intermittently with no real regression.
+*Fix:* Replace the fixed sleeps with a readiness signal — subscribe to a confirmation/echo or poll until the subscription is active, or round-trip a warm-up message before the assertion, as R1-53 already did for the presence/disconnect tests via `awaitUntil`.
+
+**R4-15 · Low · WebSocketIT.unauthenticatedConnection_cannotSendToAppDestinations passes via 5s timeout and never exercises the send it names**
+The test connects with no session cookie; since R1-62 rejects unauthenticated CONNECT in `StompAuthChannelInterceptor.preSend:49-53`, the CONNECT throws and `afterConnected` never fires, so `sessionFuture.get(5,SECONDS)` (`integration/WebSocketIT.java:271`) times out and control jumps to the `catch (Exception e){ assertThat(e).isNotNull(); }` (lines 284-287), which is always true. The named send/subscribe assertions (lines 279-283) are never reached, so the test only incidentally exercises CONNECT rejection, always via a 5-second timeout, and is structurally incapable of failing for its stated purpose (ties R1-62).
+*Fix:* Split into two explicit tests: (1) assert unauthenticated CONNECT is rejected (await error/transport failure) and (2) with an authenticated-but-non-member session, send to `/app/chat.send` and assert the error queue / disconnect — removing the always-true catch-all.
+
+**fe (R4)**
+
+**R4-10 · Medium · Navbar aggregate unread badge counts the actively-viewed room and is never re-cleared after read-ack**
+On a new message in the room being viewed, `onNotification` (`static/js/app.js:303`) calls `window.YAC.navbar.refresh()` (debounced 500ms, `navbar.js:42-50`), which hits `/api/notifications/summary`; that endpoint sums `unreadCount` across all rooms with no active-room exclusion (`NotificationApiController.java:38-40`). Meanwhile the server-side read marker for the active room is advanced only by `markActiveRoomRead` (`static/js/app.js:343-358`), whose `POST /read` is debounced to 1000ms and so always fires after the 500ms navbar refresh — and it never triggers a follow-up `navbar.refresh()`. So while Alice reads room X the bell shows a phantom "1" that is never cleared until she navigates away or an unrelated notification arrives; this re-surfaces the R1-19 symptom at the R3-10 navbar layer.
+*Fix:* After the `/read` POST resolves in `markActiveRoomRead`, call `window.YAC.navbar.refresh()`, and/or exclude the currently-viewed room from the summary total client-side (mirroring the R1-19 sidebar suppression for the navbar badge).
+
+**R4-16 · Low · Image/paste upload broadcasts the placeholder before the file, and a failed upload orphans an '[Image: …]' message with no feedback**
+`uploadImage` (`static/js/app.js:620-681`) first POSTs a real text message `'[Image: ' + name + ']'` to `/api/rooms/{id}/messages` — which the server now persists and broadcasts to everyone (R1-03) — and only then POSTs the file to `/attachments`. If that second request fails, the handler (`static/js/app.js:673-680`) only does `console.error` — no `showErrorModal`, no retry, no removal of the already-sent placeholder. Pasting an oversized (>3 MB, R1-34) or unsupported image thus delivers the placeholder to every member, then the attachment POST 400s silently, leaving a permanent message referencing an image that never uploaded.
+*Fix:* Surface the failure via `showErrorModal` on a failed upload, and either upload the file first (send the message only once the attachment succeeds) or delete the placeholder message on upload failure.
+
+**infra (R4)**
+
+**R4-11 · Medium · No SMTP timeouts + synchronous mail send inside @Transactional lets unauthenticated forgot-password exhaust the DB pool**
+`application.yml:29-37` configures `spring.mail` host/port/auth/starttls but sets no `mail.smtp.connectiontimeout`/`timeout`/`writetimeout`, and `application-dev.yml` adds none. `PasswordService.requestReset` (`@Transactional`, line 51) runs `userRepository.findByEmail` at line 53, acquiring the DB connection that Hibernate's default release mode holds for the whole transaction, then calls `mailSender.send(message)` synchronously at line 151 inside that same transaction — pinning the connection for the entire (infinite-default) SMTP block. Since `/forgot-password` and `/api/password/reset-request` are `permitAll` (`SecurityConfig:33,36`) and Hikari's pool defaults to 10, ~10 concurrent requests to an unreachable/black-holed SMTP host exhaust the pool and the app can no longer serve any DB-backed request (ties R1-10).
+*Fix:* Set `spring.mail.properties.mail.smtp.connectiontimeout/timeout/writetimeout` (e.g. 5000ms) so `send()` fails fast, and move the mail send outside the `@Transactional` token-creation (send after commit or on an async executor) so a slow SMTP server never holds a DB connection.
+
+**R4-12 · Medium · R1-35 fix regression: documented `make run` dev workflow fails startup — REMEMBER_ME_KEY has no default**
+`application.yml:75` binds `app.security.remember-me-key: ${REMEMBER_ME_KEY}` with no default, and `SecurityProperties.rememberMeKey` is `@NotBlank` under `@Validated @ConfigurationProperties`, so a missing/blank key fails context startup. The README "Development" section (`README.md:30-42`) tells developers to run `make infra` then `make run`, but the Makefile `run` target (`Makefile:7-8`) is just `./mvnw spring-boot:run` with no env var, and neither `application-dev.yml` nor the run target supplies `REMEMBER_ME_KEY` (only surefire/failsafe and docker-compose set it). A developer following the README on a clean machine hits an immediate startup abort — the R1-35 hardening (removing the weak default) regressed the documented local workflow.
+*Fix:* Set a local `REMEMBER_ME_KEY` in the Makefile `run` target (or `spring-boot.run.jvmArguments`), add a dev-only default in `application-dev.yml`, or document exporting it in the README Development section.
