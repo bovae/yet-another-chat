@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.bovae.yac.exception.ConflictException;
 import com.bovae.yac.exception.ForbiddenException;
+import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.dto.UserMapper;
 import com.bovae.yac.model.entity.Friendship;
@@ -32,9 +33,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -253,5 +258,98 @@ class UserServiceTest {
 
         // Verify user deleted
         verify(userRepository).delete(existingUser);
+    }
+
+    // --- updateProfile (display-name update / not found) ---
+
+    /**
+     * Validates CP 3: a null or unchanged username is allowed and the display name is updated.
+     */
+    @ParameterizedTest(name = "username={0}")
+    @MethodSource("unchangedUsernames")
+    void updateProfile_withNullOrUnchangedUsername_updatesDisplayName(String username) {
+        when(userRepository.findById(existingUser.getId())).thenReturn(Optional.of(existingUser));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userMapper.toDto(any(User.class))).thenAnswer(invocation -> {
+            User u = invocation.getArgument(0);
+            return new UserDto(u.getId(), u.getEmail(), u.getUsername(), u.getDisplayName(), u.getCreatedAt());
+        });
+
+        UserDto result = userService.updateProfile(existingUser.getId(), "New Display", username);
+
+        assertThat(result.displayName()).isEqualTo("New Display");
+        assertThat(existingUser.getDisplayName()).isEqualTo("New Display");
+        verify(userRepository).save(existingUser);
+    }
+
+    static Stream<Arguments> unchangedUsernames() {
+        return Stream.of(Arguments.of((String) null), Arguments.of("alice"));
+    }
+
+    @Test
+    void updateProfile_whenUserNotFound_throwsResourceNotFoundException() {
+        UUID missingId = UUID.randomUUID();
+        when(userRepository.findById(missingId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.updateProfile(missingId, "New Display", null))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("User not found");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    // --- deleteAccount (not found) ---
+
+    @Test
+    void deleteAccount_whenUserNotFound_throwsResourceNotFoundException() {
+        UUID missingId = UUID.randomUUID();
+        when(userRepository.findById(missingId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.deleteAccount(missingId))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("User not found");
+
+        verify(userRepository, never()).delete(any());
+    }
+
+    // --- findByUsername ---
+
+    @Test
+    void findByUsername_whenFound_returnsMappedDto() {
+        UserDto dto =
+                new UserDto(existingUser.getId(), existingUser.getEmail(), existingUser.getUsername(), null, null);
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(existingUser));
+        when(userMapper.toDto(existingUser)).thenReturn(dto);
+
+        assertThat(userService.findByUsername("alice")).contains(dto);
+    }
+
+    @Test
+    void findByUsername_whenMissing_returnsEmpty() {
+        when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
+
+        assertThat(userService.findByUsername("ghost")).isEmpty();
+    }
+
+    // --- getById ---
+
+    @Test
+    void getById_whenFound_returnsMappedDto() {
+        UserDto dto =
+                new UserDto(existingUser.getId(), existingUser.getEmail(), existingUser.getUsername(), null, null);
+        when(userRepository.findById(existingUser.getId())).thenReturn(Optional.of(existingUser));
+        when(userMapper.toDto(existingUser)).thenReturn(dto);
+
+        assertThat(userService.getById(existingUser.getId())).isEqualTo(dto);
+    }
+
+    @Test
+    void getById_whenMissing_throwsResourceNotFoundException() {
+        UUID missingId = UUID.randomUUID();
+        when(userRepository.findById(missingId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.getById(missingId))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("User not found");
     }
 }

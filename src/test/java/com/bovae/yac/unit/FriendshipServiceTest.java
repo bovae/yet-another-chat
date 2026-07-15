@@ -10,6 +10,9 @@ import static org.mockito.Mockito.when;
 
 import com.bovae.yac.exception.ConflictException;
 import com.bovae.yac.exception.ForbiddenException;
+import com.bovae.yac.exception.ResourceNotFoundException;
+import com.bovae.yac.model.dto.FriendshipDto;
+import com.bovae.yac.model.dto.FriendshipMapper;
 import com.bovae.yac.model.dto.NotificationEvent;
 import com.bovae.yac.model.entity.Friendship;
 import com.bovae.yac.model.entity.User;
@@ -18,6 +21,7 @@ import com.bovae.yac.repository.FriendshipRepository;
 import com.bovae.yac.repository.UserBanRepository;
 import com.bovae.yac.service.FriendshipService;
 import com.bovae.yac.service.NotificationService;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +50,9 @@ class FriendshipServiceTest {
 
     @Mock
     private NotificationService notificationService;
+
+    @Mock
+    private FriendshipMapper friendshipMapper;
 
     @Captor
     private ArgumentCaptor<NotificationEvent> eventCaptor;
@@ -181,8 +188,11 @@ class FriendshipServiceTest {
         when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.of(pending));
         when(friendshipRepository.save(any(Friendship.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        friendshipService.acceptFriendRequest(friendshipId, userB);
+        Friendship result = friendshipService.acceptFriendRequest(friendshipId, userB);
 
+        // save echoes the argument, so the returned entity is the one the service mutated — its
+        // status must have been flipped to ACCEPTED before persistence.
+        assertThat(result.getStatus()).isEqualTo(FriendshipStatus.ACCEPTED);
         verify(notificationService).broadcastNotification(eq(userA), eventCaptor.capture());
         assertThat(eventCaptor.getValue().type()).isEqualTo("FRIEND_REQUEST_ACCEPTED");
     }
@@ -428,8 +438,182 @@ class FriendshipServiceTest {
     }
 
     // -----------------------------------------------------------------------
+    // Status guards: accept/decline only apply to PENDING requests
+    // -----------------------------------------------------------------------
+
+    /** Validates CP 10: accepting a request that is no longer PENDING throws ConflictException. */
+    @Test
+    void acceptFriendRequest_whenNotPending_throwsConflictException() {
+        UUID friendshipId = UUID.randomUUID();
+        Friendship accepted = Friendship.builder()
+                .id(friendshipId)
+                .requester(userA)
+                .recipient(userB)
+                .status(FriendshipStatus.ACCEPTED)
+                .build();
+        when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.of(accepted));
+
+        assertThatThrownBy(() -> friendshipService.acceptFriendRequest(friendshipId, userB))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("not in PENDING status");
+
+        verify(friendshipRepository, never()).save(any());
+    }
+
+    /** Validates CP 10: declining a request that is no longer PENDING throws ConflictException. */
+    @Test
+    void declineFriendRequest_whenNotPending_throwsConflictException() {
+        UUID friendshipId = UUID.randomUUID();
+        Friendship accepted = Friendship.builder()
+                .id(friendshipId)
+                .requester(userA)
+                .recipient(userB)
+                .status(FriendshipStatus.ACCEPTED)
+                .build();
+        when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.of(accepted));
+
+        assertThatThrownBy(() -> friendshipService.declineFriendRequest(friendshipId, userB))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("not in PENDING status");
+
+        verify(friendshipRepository, never()).delete(any());
+    }
+
+    // -----------------------------------------------------------------------
+    // Missing friendship lookups throw ResourceNotFoundException
+    // -----------------------------------------------------------------------
+
+    /** Validates CP 10: declining a friendship that does not exist throws ResourceNotFoundException. */
+    @Test
+    void declineFriendRequest_whenNotFound_throwsResourceNotFoundException() {
+        UUID friendshipId = UUID.randomUUID();
+        when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> friendshipService.declineFriendRequest(friendshipId, userB))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Friendship not found");
+
+        verify(friendshipRepository, never()).delete(any());
+    }
+
+    /** Validates CP 10: removing a friendship that does not exist throws ResourceNotFoundException. */
+    @Test
+    void removeFriend_whenNotFound_throwsResourceNotFoundException() {
+        UUID friendshipId = UUID.randomUUID();
+        when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> friendshipService.removeFriend(friendshipId, userA))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Friendship not found");
+
+        verify(friendshipRepository, never()).delete(any());
+    }
+
+    // -----------------------------------------------------------------------
+    // areFriends — ACCEPTED either direction is friends; anything else is not
+    // -----------------------------------------------------------------------
+
+    /** An ACCEPTED friendship in the forward direction means the pair are friends. */
+    @Test
+    void areFriends_whenForwardAccepted_returnsTrue() {
+        Friendship forward = Friendship.builder()
+                .requester(userA)
+                .recipient(userB)
+                .status(FriendshipStatus.ACCEPTED)
+                .build();
+        when(friendshipRepository.findByRequesterAndRecipient(userA, userB)).thenReturn(Optional.of(forward));
+
+        assertThat(friendshipService.areFriends(userA, userB)).isTrue();
+    }
+
+    /** An ACCEPTED friendship in the reverse direction still means the pair are friends. */
+    @Test
+    void areFriends_whenReverseAccepted_returnsTrue() {
+        Friendship reverse = Friendship.builder()
+                .requester(userB)
+                .recipient(userA)
+                .status(FriendshipStatus.ACCEPTED)
+                .build();
+        when(friendshipRepository.findByRequesterAndRecipient(userA, userB)).thenReturn(Optional.empty());
+        when(friendshipRepository.findByRequesterAndRecipient(userB, userA)).thenReturn(Optional.of(reverse));
+
+        assertThat(friendshipService.areFriends(userA, userB)).isTrue();
+    }
+
+    /** A PENDING friendship (either direction) is not yet a friendship. */
+    @Test
+    void areFriends_whenBothDirectionsPending_returnsFalse() {
+        Friendship forward = Friendship.builder()
+                .requester(userA)
+                .recipient(userB)
+                .status(FriendshipStatus.PENDING)
+                .build();
+        Friendship reverse = Friendship.builder()
+                .requester(userB)
+                .recipient(userA)
+                .status(FriendshipStatus.PENDING)
+                .build();
+        when(friendshipRepository.findByRequesterAndRecipient(userA, userB)).thenReturn(Optional.of(forward));
+        when(friendshipRepository.findByRequesterAndRecipient(userB, userA)).thenReturn(Optional.of(reverse));
+
+        assertThat(friendshipService.areFriends(userA, userB)).isFalse();
+    }
+
+    // -----------------------------------------------------------------------
+    // Pending request listings delegate to the mapper
+    // -----------------------------------------------------------------------
+
+    /** listPendingIncoming maps the recipient's PENDING requests. */
+    @Test
+    void listPendingIncoming_mapsRecipientPendingRequests() {
+        Friendship pending = Friendship.builder()
+                .id(UUID.randomUUID())
+                .requester(userB)
+                .recipient(userA)
+                .status(FriendshipStatus.PENDING)
+                .build();
+        FriendshipDto dto = pendingDtoFor(pending);
+        when(friendshipRepository.findByRecipientAndStatusWithUsers(userA, FriendshipStatus.PENDING))
+                .thenReturn(List.of(pending));
+        when(friendshipMapper.toDtoList(List.of(pending))).thenReturn(List.of(dto));
+
+        assertThat(friendshipService.listPendingIncoming(userA)).containsExactly(dto);
+    }
+
+    /** listPendingOutgoing maps the requester's PENDING requests. */
+    @Test
+    void listPendingOutgoing_mapsRequesterPendingRequests() {
+        Friendship pending = Friendship.builder()
+                .id(UUID.randomUUID())
+                .requester(userA)
+                .recipient(userB)
+                .status(FriendshipStatus.PENDING)
+                .build();
+        FriendshipDto dto = pendingDtoFor(pending);
+        when(friendshipRepository.findByRequesterAndStatusWithUsers(userA, FriendshipStatus.PENDING))
+                .thenReturn(List.of(pending));
+        when(friendshipMapper.toDtoList(List.of(pending))).thenReturn(List.of(dto));
+
+        assertThat(friendshipService.listPendingOutgoing(userA)).containsExactly(dto);
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
+
+    private FriendshipDto pendingDtoFor(Friendship f) {
+        return new FriendshipDto(
+                f.getId(),
+                f.getRequester().getId(),
+                f.getRequester().getUsername(),
+                f.getRequester().getDisplayName(),
+                f.getRecipient().getId(),
+                f.getRecipient().getUsername(),
+                f.getRecipient().getDisplayName(),
+                f.getStatus(),
+                null,
+                null);
+    }
 
     /**
      * Stubs the happy-path preconditions for a {@code userA → userB} send (no existing

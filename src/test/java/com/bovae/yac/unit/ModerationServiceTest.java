@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bovae.yac.exception.ForbiddenException;
+import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.RoomBan;
@@ -95,21 +96,7 @@ class ModerationServiceTest {
      */
     @Test
     void kickMember_byAdmin_createsBanAndRemovesMember() {
-        RoomMember actorMember = RoomMember.builder()
-                .room(room)
-                .user(adminUser)
-                .role(RoomRole.ADMIN)
-                .build();
-        RoomMember targetMember = RoomMember.builder()
-                .room(room)
-                .user(memberUser)
-                .role(RoomRole.MEMBER)
-                .build();
-
-        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
-                .thenReturn(Optional.of(actorMember));
-        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), memberUser.getId())))
-                .thenReturn(Optional.of(targetMember));
+        RoomMember targetMember = stubAdminActorAndMemberTarget();
 
         moderationService.kickMember(room, adminUser, memberUser);
 
@@ -231,6 +218,235 @@ class ModerationServiceTest {
         moderationService.deleteMessage(room, adminUser, messageId);
 
         verify(messageRepository).delete(message);
+    }
+
+    // --- banUserFromRoom idempotency ---
+
+    /**
+     * Validates CP 16: banUserFromRoom is idempotent — when the target is already banned
+     * it returns without persisting a duplicate ban or removing membership again.
+     */
+    @Test
+    void banUserFromRoom_alreadyBanned_returnsWithoutSavingDuplicate() {
+        RoomMember actorMember = RoomMember.builder()
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
+
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
+                .thenReturn(Optional.of(actorMember));
+        when(roomBanRepository.existsByRoomAndUser(room, memberUser)).thenReturn(true);
+
+        moderationService.banUserFromRoom(room, adminUser, memberUser);
+
+        verify(roomBanRepository, never()).save(any());
+        verify(roomMemberRepository, never()).delete(any(RoomMember.class));
+    }
+
+    // --- deleteMessage guards ---
+
+    /**
+     * Validates CP 16: deleteMessage throws ResourceNotFoundException when the message id
+     * does not resolve to a stored message.
+     */
+    @Test
+    void deleteMessage_messageNotFound_throwsResourceNotFoundException() {
+        UUID messageId = UUID.randomUUID();
+        RoomMember actorMember = RoomMember.builder()
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
+
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
+                .thenReturn(Optional.of(actorMember));
+        when(messageRepository.findById(messageId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> moderationService.deleteMessage(room, adminUser, messageId))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Message not found");
+
+        verify(messageRepository, never()).delete(any(Message.class));
+    }
+
+    /**
+     * Validates CP 16: deleteMessage throws ForbiddenException when the resolved message
+     * belongs to a different room than the one the action is scoped to.
+     */
+    @Test
+    void deleteMessage_messageBelongsToDifferentRoom_throwsForbiddenException() {
+        UUID messageId = UUID.randomUUID();
+        RoomMember actorMember = RoomMember.builder()
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
+        Room otherRoom = Room.builder()
+                .id(UUID.randomUUID())
+                .name("other-room")
+                .visibility(RoomVisibility.PUBLIC)
+                .owner(ownerUser)
+                .nextWatermark(1L)
+                .build();
+        Message message = Message.builder()
+                .id(messageId)
+                .room(otherRoom)
+                .sender(memberUser)
+                .content("elsewhere")
+                .watermark(1L)
+                .build();
+
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
+                .thenReturn(Optional.of(actorMember));
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+
+        assertThatThrownBy(() -> moderationService.deleteMessage(room, adminUser, messageId))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("does not belong to this room");
+
+        verify(messageRepository, never()).delete(any(Message.class));
+    }
+
+    // --- revokeAdminRole role matrix ---
+
+    /**
+     * Validates CP 16: the owner may demote an admin, whose role becomes MEMBER.
+     */
+    @Test
+    void revokeAdminRole_ownerDemotesAdmin_setsRoleToMember() {
+        RoomMember ownerMember = RoomMember.builder()
+                .room(room)
+                .user(ownerUser)
+                .role(RoomRole.OWNER)
+                .build();
+        RoomMember targetMember = RoomMember.builder()
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
+
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), ownerUser.getId())))
+                .thenReturn(Optional.of(ownerMember));
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
+                .thenReturn(Optional.of(targetMember));
+
+        moderationService.revokeAdminRole(room, ownerUser, adminUser);
+
+        assertThat(targetMember.getRole()).isEqualTo(RoomRole.MEMBER);
+        verify(roomMemberRepository).save(targetMember);
+    }
+
+    /**
+     * Validates CP 16: an admin may demote another admin, whose role becomes MEMBER.
+     */
+    @Test
+    void revokeAdminRole_adminDemotesAnotherAdmin_setsRoleToMember() {
+        RoomMember actorMember = RoomMember.builder()
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
+        RoomMember targetMember = RoomMember.builder()
+                .room(room)
+                .user(memberUser)
+                .role(RoomRole.ADMIN)
+                .build();
+
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
+                .thenReturn(Optional.of(actorMember));
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), memberUser.getId())))
+                .thenReturn(Optional.of(targetMember));
+
+        moderationService.revokeAdminRole(room, adminUser, memberUser);
+
+        assertThat(targetMember.getRole()).isEqualTo(RoomRole.MEMBER);
+        verify(roomMemberRepository).save(targetMember);
+    }
+
+    /**
+     * Validates CP 16: an admin cannot demote a plain member — only another admin —
+     * so the attempt throws ForbiddenException and persists nothing.
+     */
+    @Test
+    void revokeAdminRole_adminDemotesNonAdminMember_throwsForbiddenException() {
+        stubAdminActorAndMemberTarget();
+
+        assertThatThrownBy(() -> moderationService.revokeAdminRole(room, adminUser, memberUser))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("Admin can only demote another admin");
+
+        verify(roomMemberRepository, never()).save(any());
+    }
+
+    /**
+     * Validates CP 16: a plain member cannot revoke admin roles at all — the attempt
+     * throws ForbiddenException and persists nothing.
+     */
+    @Test
+    void revokeAdminRole_actorIsPlainMember_throwsForbiddenException() {
+        RoomMember actorMember = RoomMember.builder()
+                .room(room)
+                .user(memberUser)
+                .role(RoomRole.MEMBER)
+                .build();
+        RoomMember targetMember = RoomMember.builder()
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
+
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), memberUser.getId())))
+                .thenReturn(Optional.of(actorMember));
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
+                .thenReturn(Optional.of(targetMember));
+
+        assertThatThrownBy(() -> moderationService.revokeAdminRole(room, memberUser, adminUser))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("Only admins and owners can revoke admin role");
+
+        verify(roomMemberRepository, never()).save(any());
+    }
+
+    // --- membership guard ---
+
+    /**
+     * Validates CP 16: moderation actions reject an acting user who is not a member of
+     * the room with ResourceNotFoundException before any state change.
+     */
+    @Test
+    void kickMember_actorNotAMember_throwsResourceNotFoundException() {
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> moderationService.kickMember(room, adminUser, memberUser))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("not a member of this room");
+
+        verify(roomBanRepository, never()).save(any());
+    }
+
+    /**
+     * Stubs the member lookups for an ADMIN actor acting on a plain MEMBER target,
+     * returning the target member for per-test assertions.
+     */
+    private RoomMember stubAdminActorAndMemberTarget() {
+        RoomMember actorMember = RoomMember.builder()
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
+        RoomMember targetMember = RoomMember.builder()
+                .room(room)
+                .user(memberUser)
+                .role(RoomRole.MEMBER)
+                .build();
+
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
+                .thenReturn(Optional.of(actorMember));
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), memberUser.getId())))
+                .thenReturn(Optional.of(targetMember));
+        return targetMember;
     }
 
     /**

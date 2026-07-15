@@ -39,7 +39,10 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/api/password/reset",
                                 "/api/password/reset-request",
-                                "/ws/**")
+                                "/ws/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html")
                         .permitAll()
                         .anyRequest()
                         .authenticated())

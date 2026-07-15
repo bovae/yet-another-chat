@@ -103,6 +103,7 @@ class RoomMemberServiceTest {
         assertThat(result.getUser()).isEqualTo(userA);
         assertThat(result.getRole()).isEqualTo(RoomRole.MEMBER);
         verify(roomMemberRepository).save(any(RoomMember.class));
+        verify(notificationService).ensureMarker(userA, publicRoom);
     }
 
     /**
@@ -146,6 +147,23 @@ class RoomMemberServiceTest {
         verify(roomMemberRepository, never()).save(any());
     }
 
+    /**
+     * Validates R1-69: a ban applied after the member row is saved is caught by the
+     * in-transaction re-check, throwing ForbiddenException without marking the room read.
+     */
+    @Test
+    void joinPublicRoom_bannedAfterSave_throwsForbiddenException() {
+        when(roomBanRepository.existsByRoomAndUser(publicRoom, userA)).thenReturn(false, true);
+        when(roomMemberRepository.existsByRoomAndUser(publicRoom, userA)).thenReturn(false);
+        when(roomMemberRepository.save(any(RoomMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatThrownBy(() -> roomMemberService.joinPublicRoom(publicRoom, userA))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("banned");
+
+        verify(notificationService, never()).ensureMarker(any(), any());
+    }
+
     // ── joinPrivateRoomViaInvitation ────────────────────────────────────
 
     /**
@@ -171,6 +189,7 @@ class RoomMemberServiceTest {
         assertThat(result.getRole()).isEqualTo(RoomRole.MEMBER);
         verify(roomMemberRepository).save(any(RoomMember.class));
         verify(roomInvitationRepository).delete(invitation);
+        verify(notificationService).ensureMarker(userA, privateRoom);
     }
 
     /**
@@ -207,6 +226,53 @@ class RoomMemberServiceTest {
                 .hasMessageContaining("already a member");
 
         verify(roomMemberRepository, never()).save(any());
+    }
+
+    /**
+     * Validates R1-17: a banned user cannot rejoin a private room even with a valid invitation.
+     */
+    @Test
+    void joinPrivateRoomViaInvitation_bannedUser_throwsForbiddenException() {
+        RoomInvitation invitation = RoomInvitation.builder()
+                .id(UUID.randomUUID())
+                .room(privateRoom)
+                .invitee(userA)
+                .build();
+
+        when(roomInvitationRepository.findByRoomAndInvitee(privateRoom, userA)).thenReturn(Optional.of(invitation));
+        when(roomBanRepository.existsByRoomAndUser(privateRoom, userA)).thenReturn(true);
+
+        assertThatThrownBy(() -> roomMemberService.joinPrivateRoomViaInvitation(privateRoom, userA))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("banned");
+
+        verify(roomMemberRepository, never()).save(any());
+        verify(roomInvitationRepository, never()).delete(any());
+    }
+
+    /**
+     * Validates R1-69: a ban applied after the member row is saved is caught by the
+     * in-transaction re-check; the invitation is not consumed and the room is not marked read.
+     */
+    @Test
+    void joinPrivateRoomViaInvitation_bannedAfterSave_throwsForbiddenException() {
+        RoomInvitation invitation = RoomInvitation.builder()
+                .id(UUID.randomUUID())
+                .room(privateRoom)
+                .invitee(userA)
+                .build();
+
+        when(roomInvitationRepository.findByRoomAndInvitee(privateRoom, userA)).thenReturn(Optional.of(invitation));
+        when(roomBanRepository.existsByRoomAndUser(privateRoom, userA)).thenReturn(false, true);
+        when(roomMemberRepository.existsByRoomAndUser(privateRoom, userA)).thenReturn(false);
+        when(roomMemberRepository.save(any(RoomMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatThrownBy(() -> roomMemberService.joinPrivateRoomViaInvitation(privateRoom, userA))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("banned");
+
+        verify(roomInvitationRepository, never()).delete(any());
+        verify(notificationService, never()).ensureMarker(any(), any());
     }
 
     // ── leaveRoom ───────────────────────────────────────────────────────
@@ -265,5 +331,41 @@ class RoomMemberServiceTest {
                 .hasMessageContaining("not a member");
 
         verify(roomMemberRepository, never()).delete(any(RoomMember.class));
+    }
+
+    /**
+     * Validates CP 15: a DIRECT message room cannot be left — throws ForbiddenException
+     * before any membership lookup.
+     */
+    @Test
+    void leaveRoom_directRoom_throwsForbiddenException() {
+        Room directRoom = Room.builder()
+                .id(UUID.randomUUID())
+                .name("dm")
+                .visibility(RoomVisibility.DIRECT)
+                .owner(User.builder().id(UUID.randomUUID()).build())
+                .nextWatermark(1L)
+                .build();
+
+        assertThatThrownBy(() -> roomMemberService.leaveRoom(directRoom, userA))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("direct message room");
+
+        verify(roomMemberRepository, never()).findById(any());
+        verify(roomMemberRepository, never()).delete(any(RoomMember.class));
+    }
+
+    // ── requireCanRead ──────────────────────────────────────────────────
+
+    /**
+     * Validates R1-08/R1-56: a room-banned user is denied read access regardless of visibility.
+     */
+    @Test
+    void requireCanRead_bannedUser_throwsForbiddenException() {
+        when(roomBanRepository.existsByRoomAndUser(publicRoom, userA)).thenReturn(true);
+
+        assertThatThrownBy(() -> roomMemberService.requireCanRead(publicRoom, userA))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("banned");
     }
 }
