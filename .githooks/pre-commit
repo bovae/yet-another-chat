@@ -1,0 +1,14 @@
+#!/bin/sh
+# Block commits with spotless format violations. Fix with: ./mvnw spotless:apply
+
+# Skip the ~8s maven run when no Java/pom files are staged.
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -qE '\.(java)$|pom\.xml'; then
+    exit 0
+fi
+
+echo "pre-commit: spotless:check..."
+if ! ./mvnw spotless:check -q; then
+    echo ""
+    echo "Format violations. Run: ./mvnw spotless:apply && git add -u"
+    exit 1
+fi
