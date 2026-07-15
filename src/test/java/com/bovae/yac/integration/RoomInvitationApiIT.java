@@ -1,5 +1,11 @@
 package com.bovae.yac.integration;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Room;
@@ -19,12 +25,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Integration tests for RoomInvitationApiController: invite user to private room,
@@ -67,7 +67,9 @@ class RoomInvitationApiIT {
         invitee = userRepository.findById(inviteeDto.id()).orElseThrow();
         UserDto outsiderDto = userService.register("outsider@test.com", "outsider", "testpass123");
         outsider = userRepository.findById(outsiderDto.id()).orElseThrow();
-        privateRoom = roomService.getRoomById(roomService.createRoom("private-room", "A private room", RoomVisibility.PRIVATE, owner).id());
+        privateRoom = roomService.getRoomById(roomService
+                .createRoom("private-room", "A private room", RoomVisibility.PRIVATE, owner)
+                .id());
     }
 
     // ---- Invite user to private room ----
@@ -88,15 +90,13 @@ class RoomInvitationApiIT {
 
     @Test
     void acceptInvitation_byInvitee_returns200() throws Exception {
-        RoomInvitation invitation = roomInvitationRepository.save(
-                RoomInvitation.builder()
-                        .room(privateRoom)
-                        .inviter(owner)
-                        .invitee(invitee)
-                        .build());
+        RoomInvitation invitation = roomInvitationRepository.save(RoomInvitation.builder()
+                .room(privateRoom)
+                .inviter(owner)
+                .invitee(invitee)
+                .build());
 
-        mockMvc.perform(post("/api/rooms/{roomId}/invitations/{id}/accept",
-                        privateRoom.getId(), invitation.getId())
+        mockMvc.perform(post("/api/rooms/{roomId}/invitations/{id}/accept", privateRoom.getId(), invitation.getId())
                         .with(user(invitee.getEmail()).roles("USER"))
                         .with(csrf()))
                 .andExpect(status().isOk());
@@ -104,16 +104,14 @@ class RoomInvitationApiIT {
 
     @Test
     void acceptInvitation_byNonInvitee_returns404() throws Exception {
-        RoomInvitation invitation = roomInvitationRepository.save(
-                RoomInvitation.builder()
-                        .room(privateRoom)
-                        .inviter(owner)
-                        .invitee(invitee)
-                        .build());
+        RoomInvitation invitation = roomInvitationRepository.save(RoomInvitation.builder()
+                .room(privateRoom)
+                .inviter(owner)
+                .invitee(invitee)
+                .build());
 
         // outsider tries to accept invitee's invitation
-        mockMvc.perform(post("/api/rooms/{roomId}/invitations/{id}/accept",
-                        privateRoom.getId(), invitation.getId())
+        mockMvc.perform(post("/api/rooms/{roomId}/invitations/{id}/accept", privateRoom.getId(), invitation.getId())
                         .with(user(outsider.getEmail()).roles("USER"))
                         .with(csrf()))
                 .andExpect(status().isNotFound());
@@ -134,15 +132,13 @@ class RoomInvitationApiIT {
 
     @Test
     void declineInvitation_returns204() throws Exception {
-        RoomInvitation invitation = roomInvitationRepository.save(
-                RoomInvitation.builder()
-                        .room(privateRoom)
-                        .inviter(owner)
-                        .invitee(invitee)
-                        .build());
+        RoomInvitation invitation = roomInvitationRepository.save(RoomInvitation.builder()
+                .room(privateRoom)
+                .inviter(owner)
+                .invitee(invitee)
+                .build());
 
-        mockMvc.perform(delete("/api/rooms/{roomId}/invitations/{id}",
-                        privateRoom.getId(), invitation.getId())
+        mockMvc.perform(delete("/api/rooms/{roomId}/invitations/{id}", privateRoom.getId(), invitation.getId())
                         .with(user(invitee.getEmail()).roles("USER"))
                         .with(csrf()))
                 .andExpect(status().isNoContent());

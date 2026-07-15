@@ -1,5 +1,7 @@
 package com.bovae.yac.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.DirectChatDto;
 import com.bovae.yac.model.dto.FriendshipDto;
@@ -22,16 +24,13 @@ import com.bovae.yac.service.DirectChatService;
 import com.bovae.yac.service.FriendshipService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.UserBanService;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.transaction.support.TransactionTemplate;
-
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration tests verifying that DTO mapping works correctly AFTER the Hibernate
@@ -136,10 +135,8 @@ class SessionAbsentMappingIT {
             assertThat(dto.displayName()).isNotNull();
         }
 
-        assertThat(dtos).extracting(RoomMemberDto::username)
-                .containsExactlyInAnyOrder("owner", "member");
-        assertThat(dtos).extracting(RoomMemberDto::displayName)
-                .containsExactlyInAnyOrder("Owner User", "Member User");
+        assertThat(dtos).extracting(RoomMemberDto::username).containsExactlyInAnyOrder("owner", "member");
+        assertThat(dtos).extracting(RoomMemberDto::displayName).containsExactlyInAnyOrder("Owner User", "Member User");
     }
 
     // ---- 8.2 FriendshipService.listFriends() ----
@@ -168,7 +165,7 @@ class SessionAbsentMappingIT {
                     .requestText("Let's be friends")
                     .build());
 
-            return new User[]{alice, bob};
+            return new User[] {alice, bob};
         });
 
         User alice = users[0];
@@ -226,7 +223,7 @@ class SessionAbsentMappingIT {
                     .role(RoomRole.MEMBER)
                     .build());
 
-            return new User[]{alice, bob};
+            return new User[] {alice, bob};
         });
 
         User alice = users[0];
@@ -263,12 +260,10 @@ class SessionAbsentMappingIT {
                     .passwordHash("hashed")
                     .build());
 
-            userBanRepository.save(UserBan.builder()
-                    .blocker(blocker)
-                    .blocked(blocked)
-                    .build());
+            userBanRepository.save(
+                    UserBan.builder().blocker(blocker).blocked(blocked).build());
 
-            return new User[]{blocker, blocked};
+            return new User[] {blocker, blocked};
         });
 
         User blocker = users[0];

@@ -2,15 +2,14 @@ package com.bovae.yac.service;
 
 import com.bovae.yac.repository.FriendshipRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Presence visibility rule (R1-65): a user may see another user's presence only when they are

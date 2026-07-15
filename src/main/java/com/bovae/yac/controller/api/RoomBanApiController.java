@@ -15,6 +15,10 @@ import com.bovae.yac.service.ModerationService;
 import com.bovae.yac.service.RoomService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import java.security.Principal;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,11 +30,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
 
 @Validated
 @RestController
@@ -46,17 +45,19 @@ public class RoomBanApiController {
     private final UserRepository userRepository;
 
     @GetMapping
-    public ResponseEntity<List<BanResponse>> listBans(
-            @PathVariable UUID roomId,
-            Principal principal) {
+    public ResponseEntity<List<BanResponse>> listBans(@PathVariable UUID roomId, Principal principal) {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
 
         if (!room.getOwner().getId().equals(user.getId())) {
             RoomMemberId memberId = new RoomMemberId(room.getId(), user.getId());
-            roomMemberRepository.findById(memberId)
+            boolean authorized = roomMemberRepository
+                    .findById(memberId)
                     .filter(member -> member.getRole() == RoomRole.ADMIN || member.getRole() == RoomRole.OWNER)
-                    .orElseThrow(() -> new ForbiddenException("Only room owners and admins can view the ban list"));
+                    .isPresent();
+            if (!authorized) {
+                throw new ForbiddenException("Only room owners and admins can view the ban list");
+            }
         }
 
         List<BanResponse> bans = roomBanRepository.findByRoomWithUserAndBannedBy(room).stream()
@@ -68,9 +69,7 @@ public class RoomBanApiController {
 
     @PostMapping
     public ResponseEntity<Void> banUser(
-            @PathVariable UUID roomId,
-            @Valid @RequestBody BanRequest request,
-            Principal principal) {
+            @PathVariable UUID roomId, @Valid @RequestBody BanRequest request, Principal principal) {
         User actingUser = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
         User targetUser = resolveUserById(request.userId());
@@ -82,10 +81,7 @@ public class RoomBanApiController {
     }
 
     @DeleteMapping("/{userId}")
-    public ResponseEntity<Void> unbanUser(
-            @PathVariable UUID roomId,
-            @PathVariable UUID userId,
-            Principal principal) {
+    public ResponseEntity<Void> unbanUser(@PathVariable UUID roomId, @PathVariable UUID userId, Principal principal) {
         User actingUser = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
         User targetUser = resolveUserById(userId);
@@ -96,15 +92,16 @@ public class RoomBanApiController {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found for principal: %s".formatted(principal.getName())));
     }
 
     private User resolveUserById(UUID userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "User not found: %s".formatted(userId)));
+        return userRepository
+                .findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(userId)));
     }
 
     private BanResponse toBanResponse(RoomBan ban) {
@@ -114,20 +111,11 @@ public class RoomBanApiController {
                 ban.getUser().getUsername(),
                 ban.getBannedBy().getId(),
                 ban.getBannedBy().getUsername(),
-                ban.getCreatedAt()
-        );
+                ban.getCreatedAt());
     }
 
     public record BanResponse(
-            UUID id,
-            UUID userId,
-            String username,
-            UUID bannedById,
-            String bannedByUsername,
-            Instant createdAt
-    ) {}
+            UUID id, UUID userId, String username, UUID bannedById, String bannedByUsername, Instant createdAt) {}
 
-    public record BanRequest(
-            @NotNull UUID userId
-    ) {}
+    public record BanRequest(@NotNull UUID userId) {}
 }

@@ -9,14 +9,13 @@ import com.bovae.yac.repository.FriendshipRepository;
 import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.RoomService;
+import java.security.Principal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
 
 @Validated
 @RestController
@@ -37,16 +36,16 @@ public class NotificationApiController {
         int unreadTotal = roomService.listUserRoomsWithUnread(user).stream()
                 .mapToInt(MyRoomEntry::unreadCount)
                 .sum();
-        int pendingFriendRequests = (int) friendshipRepository
-                .countByRecipientAndStatus(user, FriendshipStatus.PENDING);
+        int pendingFriendRequests =
+                (int) friendshipRepository.countByRecipientAndStatus(user, FriendshipStatus.PENDING);
         int pendingInvitations = (int) roomInvitationRepository.countByInvitee(user);
 
-        return ResponseEntity.ok(
-                new NotificationSummary(unreadTotal, pendingFriendRequests, pendingInvitations));
+        return ResponseEntity.ok(new NotificationSummary(unreadTotal, pendingFriendRequests, pendingInvitations));
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found for principal: %s".formatted(principal.getName())));
     }

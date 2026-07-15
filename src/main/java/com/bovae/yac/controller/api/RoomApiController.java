@@ -18,6 +18,9 @@ import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import jakarta.validation.Valid;
+import java.security.Principal;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -33,10 +36,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
-import java.util.List;
-import java.util.UUID;
 
 @Validated
 @RestController
@@ -63,9 +62,7 @@ public class RoomApiController {
     }
 
     @PostMapping
-    public ResponseEntity<RoomDto> createRoom(
-            @Valid @RequestBody CreateRoomRequest request,
-            Principal principal) {
+    public ResponseEntity<RoomDto> createRoom(@Valid @RequestBody CreateRoomRequest request, Principal principal) {
         if (request.visibility() == RoomVisibility.DIRECT) {
             return ResponseEntity.badRequest().build();
         }
@@ -76,9 +73,7 @@ public class RoomApiController {
 
     @PutMapping("/{id}")
     public ResponseEntity<RoomDto> updateRoom(
-            @PathVariable UUID id,
-            @Valid @RequestBody UpdateRoomRequest request,
-            Principal principal) {
+            @PathVariable UUID id, @Valid @RequestBody UpdateRoomRequest request, Principal principal) {
         User user = resolveUser(principal);
         RoomDto updated = roomService.updateRoom(id, user, request.name(), request.description(), request.visibility());
         return ResponseEntity.ok(updated);
@@ -107,18 +102,14 @@ public class RoomApiController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteRoom(
-            @PathVariable UUID id,
-            Principal principal) {
+    public ResponseEntity<Void> deleteRoom(@PathVariable UUID id, Principal principal) {
         User user = resolveUser(principal);
         roomService.deleteRoom(id, user);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/join")
-    public ResponseEntity<Void> joinRoom(
-            @PathVariable UUID id,
-            Principal principal) {
+    public ResponseEntity<Void> joinRoom(@PathVariable UUID id, Principal principal) {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(id);
         roomMemberService.joinPublicRoom(room, user);
@@ -127,9 +118,7 @@ public class RoomApiController {
     }
 
     @PostMapping("/{id}/leave")
-    public ResponseEntity<Void> leaveRoom(
-            @PathVariable UUID id,
-            Principal principal) {
+    public ResponseEntity<Void> leaveRoom(@PathVariable UUID id, Principal principal) {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(id);
         roomMemberService.leaveRoom(room, user);
@@ -138,9 +127,7 @@ public class RoomApiController {
     }
 
     @PostMapping("/{id}/read")
-    public ResponseEntity<Void> markRead(
-            @PathVariable UUID id,
-            Principal principal) {
+    public ResponseEntity<Void> markRead(@PathVariable UUID id, Principal principal) {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(id);
         notificationService.markRoomAsRead(user, room);
@@ -148,7 +135,8 @@ public class RoomApiController {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found for principal: %s".formatted(principal.getName())));
     }

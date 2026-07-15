@@ -14,6 +14,9 @@ import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UnreadMarkerRepository;
 import com.bovae.yac.repository.UserBanRepository;
 import com.bovae.yac.repository.UserRepository;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,10 +24,6 @@ import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -65,7 +64,8 @@ public class UserService {
 
     @Transactional
     public UserDto updateProfile(UUID userId, String displayName, String username) {
-        User user = userRepository.findById(userId)
+        User user = userRepository
+                .findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(userId)));
 
         if (username != null && !username.equals(user.getUsername())) {
@@ -78,7 +78,8 @@ public class UserService {
 
     @Transactional
     public void deleteAccount(UUID userId) {
-        User user = userRepository.findById(userId)
+        User user = userRepository
+                .findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(userId)));
 
         LOG.info("Deleting account for user: username={}, id={}", user.getUsername(), user.getId());
@@ -121,16 +122,16 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public UserDto getById(UUID userId) {
-        User user = userRepository.findById(userId)
+        User user = userRepository
+                .findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(userId)));
         return userMapper.toDto(user);
     }
 
     private void invalidateAllSessions(String principalName) {
-        sessionRepository.findByPrincipalName(principalName)
-                .forEach((sessionId, session) -> {
-                    sessionRepository.deleteById(sessionId);
-                    LOG.debug("Invalidated session: {}", sessionId);
-                });
+        sessionRepository.findByPrincipalName(principalName).forEach((sessionId, session) -> {
+            sessionRepository.deleteById(sessionId);
+            LOG.debug("Invalidated session: {}", sessionId);
+        });
     }
 }

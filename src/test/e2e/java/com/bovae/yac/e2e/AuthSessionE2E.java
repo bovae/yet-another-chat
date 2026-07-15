@@ -1,10 +1,10 @@
 package com.bovae.yac.e2e;
 
+import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
 import org.junit.jupiter.api.Test;
-
-import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 
 /** Register → login → persistent session (guards the auth flow, R3-01). */
 class AuthSessionE2E extends E2ETestBase {

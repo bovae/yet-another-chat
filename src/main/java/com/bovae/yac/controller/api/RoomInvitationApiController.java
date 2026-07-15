@@ -16,9 +16,12 @@ import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import java.security.Principal;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,11 +29,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import org.springframework.transaction.annotation.Transactional;
-
-import java.security.Principal;
-import java.util.UUID;
 
 @Validated
 @RestController
@@ -48,22 +46,20 @@ public class RoomInvitationApiController {
     @PostMapping
     @Transactional
     public ResponseEntity<Void> inviteUser(
-            @PathVariable UUID roomId,
-            @Valid @RequestBody InviteRequest request,
-            Principal principal) {
+            @PathVariable UUID roomId, @Valid @RequestBody InviteRequest request, Principal principal) {
         User inviter = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
         User invitee = resolveUserById(request.userId());
 
         // Only owners/admins of the room may invite (R1-12), matching the UI affordance.
-        RoomMember inviterMember = roomMemberRepository.findById(new RoomMemberId(room.getId(), inviter.getId()))
+        RoomMember inviterMember = roomMemberRepository
+                .findById(new RoomMemberId(room.getId(), inviter.getId()))
                 .orElseThrow(() -> new ForbiddenException("Only room members can invite users"));
         if (inviterMember.getRole() != RoomRole.OWNER && inviterMember.getRole() != RoomRole.ADMIN) {
             throw new ForbiddenException("Only owners and admins can invite users");
         }
 
-        roomInvitationRepository.findByRoomAndInvitee(room, invitee)
-                .ifPresent(roomInvitationRepository::delete);
+        roomInvitationRepository.findByRoomAndInvitee(room, invitee).ifPresent(roomInvitationRepository::delete);
         roomInvitationRepository.flush();
 
         RoomInvitation invitation = RoomInvitation.builder()
@@ -79,24 +75,20 @@ public class RoomInvitationApiController {
 
     @PostMapping("/{id}/accept")
     public ResponseEntity<Void> acceptInvitation(
-            @PathVariable UUID roomId,
-            @PathVariable UUID id,
-            Principal principal) {
+            @PathVariable UUID roomId, @PathVariable UUID id, Principal principal) {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
 
-        RoomInvitation invitation = roomInvitationRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Invitation not found: %s".formatted(id)));
+        RoomInvitation invitation = roomInvitationRepository
+                .findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Invitation not found: %s".formatted(id)));
 
         if (!invitation.getRoom().getId().equals(room.getId())) {
-            throw new ResourceNotFoundException(
-                    "Invitation %s does not belong to room %s".formatted(id, roomId));
+            throw new ResourceNotFoundException("Invitation %s does not belong to room %s".formatted(id, roomId));
         }
 
         if (!invitation.getInvitee().getId().equals(user.getId())) {
-            throw new ResourceNotFoundException(
-                    "Invitation %s is not for user %s".formatted(id, user.getId()));
+            throw new ResourceNotFoundException("Invitation %s is not for user %s".formatted(id, user.getId()));
         }
 
         roomMemberService.joinPrivateRoomViaInvitation(room, user);
@@ -107,25 +99,23 @@ public class RoomInvitationApiController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> declineOrCancelInvitation(
-            @PathVariable UUID roomId,
-            @PathVariable UUID id,
-            Principal principal) {
+            @PathVariable UUID roomId, @PathVariable UUID id, Principal principal) {
         User caller = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
 
-        RoomInvitation invitation = roomInvitationRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Invitation not found: %s".formatted(id)));
+        RoomInvitation invitation = roomInvitationRepository
+                .findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Invitation not found: %s".formatted(id)));
 
         if (!invitation.getRoom().getId().equals(room.getId())) {
-            throw new ResourceNotFoundException(
-                    "Invitation %s does not belong to room %s".formatted(id, roomId));
+            throw new ResourceNotFoundException("Invitation %s does not belong to room %s".formatted(id, roomId));
         }
 
         // Only the invitee, the inviter, or a room admin may decline/cancel (R1-64).
         boolean isInvitee = invitation.getInvitee().getId().equals(caller.getId());
         boolean isInviter = invitation.getInviter().getId().equals(caller.getId());
-        boolean isRoomAdmin = roomMemberRepository.findById(new RoomMemberId(room.getId(), caller.getId()))
+        boolean isRoomAdmin = roomMemberRepository
+                .findById(new RoomMemberId(room.getId(), caller.getId()))
                 .map(m -> m.getRole() == RoomRole.OWNER || m.getRole() == RoomRole.ADMIN)
                 .orElse(false);
         if (!isInvitee && !isInviter && !isRoomAdmin) {
@@ -138,18 +128,17 @@ public class RoomInvitationApiController {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found for principal: %s".formatted(principal.getName())));
     }
 
     private User resolveUserById(UUID userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "User not found: %s".formatted(userId)));
+        return userRepository
+                .findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(userId)));
     }
 
-    public record InviteRequest(
-            @NotNull UUID userId
-    ) {}
+    public record InviteRequest(@NotNull UUID userId) {}
 }

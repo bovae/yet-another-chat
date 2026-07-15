@@ -1,7 +1,16 @@
 package com.bovae.yac.integration;
 
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
-import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Friendship;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.UserRepository;
@@ -16,16 +25,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.is;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Integration tests for FriendshipApiController: send friend request, accept,
@@ -58,12 +57,9 @@ class FriendshipApiIT {
 
     @BeforeEach
     void setUp() {
-        UserDto userADto = userService.register("alice@test.com", "alice", "testpass123");
-        userA = userRepository.findById(userADto.id()).orElseThrow();
-        UserDto userBDto = userService.register("bob@test.com", "bob", "testpass123");
-        userB = userRepository.findById(userBDto.id()).orElseThrow();
-        UserDto userCDto = userService.register("carol@test.com", "carol", "testpass123");
-        userC = userRepository.findById(userCDto.id()).orElseThrow();
+        userA = IntegrationTestSupport.registerUser(userService, userRepository, "alice@test.com", "alice");
+        userB = IntegrationTestSupport.registerUser(userService, userRepository, "bob@test.com", "bob");
+        userC = IntegrationTestSupport.registerUser(userService, userRepository, "carol@test.com", "carol");
     }
 
     // ---- Send friend request ----
@@ -143,8 +139,7 @@ class FriendshipApiIT {
         Friendship friendship = friendshipService.sendFriendRequest(userA, userB, null);
         friendshipService.acceptFriendRequest(friendship.getId(), userB);
 
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].status", is("ACCEPTED")));
@@ -154,16 +149,14 @@ class FriendshipApiIT {
     void listFriends_excludesPendingRequests() throws Exception {
         friendshipService.sendFriendRequest(userA, userB, null);
 
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
     }
 
     @Test
     void listFriends_noFriends_returnsEmptyList() throws Exception {
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
     }
@@ -181,8 +174,7 @@ class FriendshipApiIT {
                 .andExpect(status().isNoContent());
 
         // Verify friend list is now empty
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
     }
@@ -213,8 +205,7 @@ class FriendshipApiIT {
                 .andExpect(status().isCreated());
 
         // Pending request should not appear in friend list
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
 
@@ -223,8 +214,7 @@ class FriendshipApiIT {
         friendshipService.acceptFriendRequest(pending.getId(), userC);
 
         // Verify userB now sees userC in friend list
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userB.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userB.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].status", is("ACCEPTED")));
@@ -236,8 +226,7 @@ class FriendshipApiIT {
                 .andExpect(status().isNoContent());
 
         // Verify friend list is empty again
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userB.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userB.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
     }

@@ -14,12 +14,11 @@ import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -46,11 +45,8 @@ public class RoomMemberService {
             throw new ConflictException("User is already a member of this room");
         }
 
-        RoomMember member = RoomMember.builder()
-                .room(room)
-                .user(user)
-                .role(RoomRole.MEMBER)
-                .build();
+        RoomMember member =
+                RoomMember.builder().room(room).user(user).role(RoomRole.MEMBER).build();
 
         member = roomMemberRepository.save(member);
 
@@ -68,7 +64,8 @@ public class RoomMemberService {
 
     @Transactional
     public RoomMember joinPrivateRoomViaInvitation(Room room, User user) {
-        RoomInvitation invitation = roomInvitationRepository.findByRoomAndInvitee(room, user)
+        RoomInvitation invitation = roomInvitationRepository
+                .findByRoomAndInvitee(room, user)
                 .orElseThrow(() -> new ForbiddenException("No invitation found for this user and room"));
 
         // A banned user cannot rejoin even with an invitation (R1-17).
@@ -80,11 +77,8 @@ public class RoomMemberService {
             throw new ConflictException("User is already a member of this room");
         }
 
-        RoomMember member = RoomMember.builder()
-                .room(room)
-                .user(user)
-                .role(RoomRole.MEMBER)
-                .build();
+        RoomMember member =
+                RoomMember.builder().room(room).user(user).role(RoomRole.MEMBER).build();
 
         member = roomMemberRepository.save(member);
 
@@ -107,7 +101,8 @@ public class RoomMemberService {
             throw new ForbiddenException("Cannot leave a direct message room");
         }
 
-        RoomMember member = roomMemberRepository.findById(new RoomMemberId(room.getId(), user.getId()))
+        RoomMember member = roomMemberRepository
+                .findById(new RoomMemberId(room.getId(), user.getId()))
                 .orElseThrow(() -> new ForbiddenException("User is not a member of this room"));
 
         if (member.getRole() == RoomRole.OWNER) {

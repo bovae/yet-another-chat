@@ -1,9 +1,21 @@
 package com.bovae.yac.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.AuthService;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,19 +26,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
-
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link AuthService}.
@@ -64,16 +63,13 @@ class AuthServiceTest {
      */
     @Test
     void loadUserByUsername_withValidEmail_returnsUserDetailsWithMatchingCredentials() {
-        when(userRepository.findByEmail(existingUser.getEmail()))
-                .thenReturn(Optional.of(existingUser));
+        when(userRepository.findByEmail(existingUser.getEmail())).thenReturn(Optional.of(existingUser));
 
         UserDetails userDetails = authService.loadUserByUsername(existingUser.getEmail());
 
         assertThat(userDetails.getUsername()).isEqualTo(existingUser.getEmail());
         assertThat(userDetails.getPassword()).isEqualTo(existingUser.getPasswordHash());
-        assertThat(userDetails.getAuthorities())
-                .extracting("authority")
-                .containsExactly("ROLE_USER");
+        assertThat(userDetails.getAuthorities()).extracting("authority").containsExactly("ROLE_USER");
     }
 
     /**
@@ -97,8 +93,7 @@ class AuthServiceTest {
     void terminateSession_ownedSession_deletesIt() {
         String sessionId = "session-abc-123";
         Session session = mock(Session.class);
-        doReturn(Map.of(sessionId, session))
-                .when(sessionRepository).findByPrincipalName(existingUser.getEmail());
+        doReturn(Map.of(sessionId, session)).when(sessionRepository).findByPrincipalName(existingUser.getEmail());
 
         authService.terminateSession(sessionId, existingUser.getEmail());
 

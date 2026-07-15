@@ -1,21 +1,20 @@
 package com.bovae.yac.unit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.bovae.yac.model.dto.RoomMemberDto;
 import com.bovae.yac.model.dto.RoomMemberMapper;
 import com.bovae.yac.model.entity.RoomMember;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomRole;
-import org.junit.jupiter.api.Test;
-import org.mapstruct.factory.Mappers;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 class RoomMemberMapperTest {
 
@@ -97,9 +96,16 @@ class RoomMemberMapperTest {
                 .build();
 
         List<RoomMember> members = List.of(
-                RoomMember.builder().user(user1).role(RoomRole.OWNER).joinedAt(Instant.now()).build(),
-                RoomMember.builder().user(user2).role(RoomRole.MEMBER).joinedAt(Instant.now()).build()
-        );
+                RoomMember.builder()
+                        .user(user1)
+                        .role(RoomRole.OWNER)
+                        .joinedAt(Instant.now())
+                        .build(),
+                RoomMember.builder()
+                        .user(user2)
+                        .role(RoomRole.MEMBER)
+                        .joinedAt(Instant.now())
+                        .build());
 
         List<RoomMemberDto> dtos = mapper.toDtoList(members);
 

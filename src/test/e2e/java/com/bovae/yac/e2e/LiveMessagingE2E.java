@@ -1,14 +1,13 @@
 package com.bovae.yac.e2e;
 
+import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.FilePayload;
-import org.junit.jupiter.api.Test;
-
 import java.util.Base64;
-
-import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * Two-browser live messaging: send, edit, delete propagation and live image rendering
@@ -17,8 +16,8 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 class LiveMessagingE2E extends E2ETestBase {
 
     // 1x1 transparent PNG.
-    private static final byte[] PNG = Base64.getDecoder().decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+    private static final byte[] PNG = Base64.getDecoder()
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
 
     @Test
     void messages_edits_deletes_and_images_propagate_live() {
@@ -38,8 +37,7 @@ class LiveMessagingE2E extends E2ETestBase {
 
             // --- edit (propagates in place, not as a new bubble) ---
             String edited = text + "-edited";
-            Locator aliceMsg = alice.locator(".message-item").filter(
-                    new Locator.FilterOptions().setHasText(text));
+            Locator aliceMsg = alice.locator(".message-item").filter(new Locator.FilterOptions().setHasText(text));
             aliceMsg.locator(".edit-btn").click();
             Locator editArea = aliceMsg.locator(".edit-textarea");
             editArea.fill(edited);
@@ -48,14 +46,15 @@ class LiveMessagingE2E extends E2ETestBase {
 
             // --- delete (propagates as removal) ---
             Locator bobEdited = bob.locator("#message-list").getByText(edited);
-            alice.locator(".message-item").filter(new Locator.FilterOptions().setHasText(edited))
-                    .locator(".delete-btn").click();
+            alice.locator(".message-item")
+                    .filter(new Locator.FilterOptions().setHasText(edited))
+                    .locator(".delete-btn")
+                    .click();
             alice.locator("#confirmModalConfirmBtn").click();
             assertThat(bobEdited).hasCount(0);
 
             // --- image upload renders live for the other user ---
-            alice.locator("#image-input").setInputFiles(
-                    new FilePayload("pic.png", "image/png", PNG));
+            alice.locator("#image-input").setInputFiles(new FilePayload("pic.png", "image/png", PNG));
             assertThat(bob.locator("#message-list img").first()).isVisible();
         } finally {
             aliceCtx.close();

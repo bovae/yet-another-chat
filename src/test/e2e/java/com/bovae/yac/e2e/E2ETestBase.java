@@ -31,6 +31,7 @@ public abstract class E2ETestBase {
 
     /** Seeded public room "General" (migration 005). */
     protected static final String GENERAL_ROOM_ID = "33333333-3333-3333-3333-333333333333";
+
     protected static final String ALICE_ID = "11111111-1111-1111-1111-111111111111";
     protected static final String BOB_ID = "22222222-2222-2222-2222-222222222222";
     protected static final String CAROL_ID = "44444444-4444-4444-4444-444444444444";

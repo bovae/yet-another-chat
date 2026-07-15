@@ -11,6 +11,7 @@ import jakarta.persistence.IdClass;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,9 +19,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
-
-import java.time.Instant;
-import java.util.UUID;
 
 @Getter
 @Setter
@@ -59,12 +57,7 @@ public class RoomMember {
         if (!(o instanceof RoomMember other)) {
             return false;
         }
-        UUID roomId = room == null ? null : room.getId();
-        UUID userId = user == null ? null : user.getId();
-        UUID otherRoomId = other.room == null ? null : other.room.getId();
-        UUID otherUserId = other.user == null ? null : other.user.getId();
-        return roomId != null && userId != null
-                && roomId.equals(otherRoomId) && userId.equals(otherUserId);
+        return CompositeKeys.roomUserEquals(room, user, other.room, other.user);
     }
 
     @Override

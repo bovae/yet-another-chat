@@ -19,13 +19,6 @@ import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UnreadMarkerRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,6 +27,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -69,52 +68,56 @@ public class RoomService {
 
         room = roomRepository.save(room);
 
-        RoomMember ownerMember = RoomMember.builder()
-                .room(room)
-                .user(owner)
-                .role(RoomRole.OWNER)
-                .build();
+        RoomMember ownerMember =
+                RoomMember.builder().room(room).user(owner).role(RoomRole.OWNER).build();
 
         roomMemberRepository.save(ownerMember);
         notificationService.ensureMarker(owner, room);
 
-        LOG.info("Created room: name={}, visibility={}, owner={}, id={}",
-                room.getName(), room.getVisibility(), owner.getUsername(), room.getId());
+        LOG.info(
+                "Created room: name={}, visibility={}, owner={}, id={}",
+                room.getName(),
+                room.getVisibility(),
+                owner.getUsername(),
+                room.getId());
 
         return roomMapper.toDto(room);
     }
 
     @Transactional
     public void deleteRoom(UUID roomId, User requestingUser) {
-        Room room = roomRepository.findById(roomId)
+        Room room = roomRepository
+                .findById(roomId)
                 .orElseThrow(() -> new ResourceNotFoundException("Room not found: %s".formatted(roomId)));
 
         if (!room.getOwner().getId().equals(requestingUser.getId())) {
             throw new ForbiddenException("Only the room owner can delete the room");
         }
 
-        LOG.info("Deleting room: name={}, id={}, requestedBy={}",
-                room.getName(), room.getId(), requestingUser.getUsername());
+        LOG.info(
+                "Deleting room: name={}, id={}, requestedBy={}",
+                room.getName(),
+                room.getId(),
+                requestingUser.getUsername());
 
         deleteRoomCascade(room);
     }
 
     @Transactional(readOnly = true)
     public Page<RoomCatalogEntry> searchCatalog(String searchTerm, Pageable pageable) {
-        Page<Room> rooms = roomRepository.findByVisibilityAndNameContainingIgnoreCase(
-                RoomVisibility.PUBLIC, searchTerm, pageable);
+        Page<Room> rooms =
+                roomRepository.findByVisibilityAndNameContainingIgnoreCase(RoomVisibility.PUBLIC, searchTerm, pageable);
 
         return rooms.map(room -> new RoomCatalogEntry(
-                room.getId(),
-                room.getName(),
-                room.getDescription(),
-                (int) roomMemberRepository.countByRoom(room) // count query, no member hydration (R1-45)
-        ));
+                room.getId(), room.getName(), room.getDescription(), (int)
+                        roomMemberRepository.countByRoom(room) // count query, no member hydration (R1-45)
+                ));
     }
 
     @Transactional(readOnly = true)
     public Room getRoomById(UUID roomId) {
-        return roomRepository.findById(roomId)
+        return roomRepository
+                .findById(roomId)
                 .orElseThrow(() -> new ResourceNotFoundException("Room not found: %s".formatted(roomId)));
     }
 
@@ -124,20 +127,23 @@ public class RoomService {
      */
     @Transactional(readOnly = true)
     public Room getRoomByIdWithOwner(UUID roomId) {
-        return roomRepository.findByIdWithOwner(roomId)
+        return roomRepository
+                .findByIdWithOwner(roomId)
                 .orElseThrow(() -> new ResourceNotFoundException("Room not found: %s".formatted(roomId)));
     }
 
     @Transactional(readOnly = true)
     public RoomDto getRoomDtoById(UUID roomId) {
-        return roomRepository.findByIdWithOwner(roomId)
+        return roomRepository
+                .findByIdWithOwner(roomId)
                 .map(roomMapper::toDto)
                 .orElseThrow(() -> new ResourceNotFoundException("Room not found: %s".formatted(roomId)));
     }
 
     @Transactional
     public RoomDto updateRoom(UUID roomId, User owner, String name, String description, RoomVisibility visibility) {
-        Room room = roomRepository.findById(roomId)
+        Room room = roomRepository
+                .findById(roomId)
                 .orElseThrow(() -> new ResourceNotFoundException("Room not found: %s".formatted(roomId)));
 
         if (!room.getOwner().getId().equals(owner.getId())) {
@@ -221,14 +227,19 @@ public class RoomService {
                         }
                         // Self-DM (single member) leaves both null
                     }
-                    return new MyRoomEntry(room.getId(), room.getName(), room.getVisibility(),
-                            unreadByRoom.getOrDefault(room.getId(), 0), otherUsername, otherDisplayName);
+                    return new MyRoomEntry(
+                            room.getId(),
+                            room.getName(),
+                            room.getVisibility(),
+                            unreadByRoom.getOrDefault(room.getId(), 0),
+                            otherUsername,
+                            otherDisplayName);
                 })
                 .collect(Collectors.toCollection(ArrayList::new));
 
         // Most recent conversation first; rooms with no messages fall back to name (R3-04).
-        entries.sort(Comparator
-                .comparing((MyRoomEntry e) -> lastMessageByRoom.get(e.id()),
+        entries.sort(Comparator.comparing(
+                        (MyRoomEntry e) -> lastMessageByRoom.get(e.id()),
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(MyRoomEntry::name, String.CASE_INSENSITIVE_ORDER));
         return entries;

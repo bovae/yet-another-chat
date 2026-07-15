@@ -1,8 +1,12 @@
 package com.bovae.yac.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
-import com.bovae.yac.model.dto.RoomDto;
-import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Friendship;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
@@ -26,12 +30,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Integration tests for account deletion via UserApiController (DELETE /api/users/me).
@@ -88,12 +86,9 @@ class AccountDeletionApiIT {
 
     @BeforeEach
     void setUp() {
-        UserDto userADto = userService.register("alice@test.com", "alice", "testpass123");
-        userA = userRepository.findById(userADto.id()).orElseThrow();
-        UserDto userBDto = userService.register("bob@test.com", "bob", "testpass123");
-        userB = userRepository.findById(userBDto.id()).orElseThrow();
-        UserDto userCDto = userService.register("carol@test.com", "carol", "testpass123");
-        userC = userRepository.findById(userCDto.id()).orElseThrow();
+        userA = IntegrationTestSupport.registerUser(userService, userRepository, "alice@test.com", "alice");
+        userB = IntegrationTestSupport.registerUser(userService, userRepository, "bob@test.com", "bob");
+        userC = IntegrationTestSupport.registerUser(userService, userRepository, "carol@test.com", "carol");
     }
 
     // ---- Basic account deletion ----
@@ -118,16 +113,16 @@ class AccountDeletionApiIT {
 
     @Test
     void deleteAccount_unauthenticated_isRejected() throws Exception {
-        mockMvc.perform(delete("/api/users/me")
-                        .with(csrf()))
-                .andExpect(status().is3xxRedirection());
+        mockMvc.perform(delete("/api/users/me").with(csrf())).andExpect(status().is3xxRedirection());
     }
 
     // ---- Cascade: owned rooms deleted ----
 
     @Test
     void deleteAccount_removesOwnedRooms() throws Exception {
-        Room ownedRoom = roomService.getRoomById(roomService.createRoom("alice-room", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room ownedRoom = roomService.getRoomById(roomService
+                .createRoom("alice-room", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
         roomMemberService.joinPublicRoom(ownedRoom, userB);
 
         mockMvc.perform(delete("/api/users/me")
@@ -142,7 +137,9 @@ class AccountDeletionApiIT {
 
     @Test
     void deleteAccount_removesMembershipsInOtherRooms() throws Exception {
-        Room bobRoom = roomService.getRoomById(roomService.createRoom("bob-room", "desc", RoomVisibility.PUBLIC, userB).id());
+        Room bobRoom = roomService.getRoomById(roomService
+                .createRoom("bob-room", "desc", RoomVisibility.PUBLIC, userB)
+                .id());
         roomMemberService.joinPublicRoom(bobRoom, userA);
 
         assertThat(roomMemberRepository.existsByRoomAndUser(bobRoom, userA)).isTrue();
@@ -170,9 +167,8 @@ class AccountDeletionApiIT {
                 .andExpect(status().isNoContent());
 
         assertThat(friendshipRepository.findByRequesterOrRecipient(userB, userB))
-                .noneMatch(f ->
-                        f.getRequester().getId().equals(userA.getId())
-                                || f.getRecipient().getId().equals(userA.getId()));
+                .noneMatch(f -> f.getRequester().getId().equals(userA.getId())
+                        || f.getRecipient().getId().equals(userA.getId()));
     }
 
     // ---- Cascade: user bans removed ----
@@ -195,7 +191,9 @@ class AccountDeletionApiIT {
 
     @Test
     void deleteAccount_removesOtherUsersMembershipsInOwnedRooms() throws Exception {
-        Room ownedRoom = roomService.getRoomById(roomService.createRoom("alice-room-2", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room ownedRoom = roomService.getRoomById(roomService
+                .createRoom("alice-room-2", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
         roomMemberService.joinPublicRoom(ownedRoom, userB);
         roomMemberService.joinPublicRoom(ownedRoom, userC);
 
@@ -212,7 +210,9 @@ class AccountDeletionApiIT {
 
     @Test
     void deleteAccount_removesMessagesInOwnedRooms() throws Exception {
-        Room ownedRoom = roomService.getRoomById(roomService.createRoom("alice-msg-room", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room ownedRoom = roomService.getRoomById(roomService
+                .createRoom("alice-msg-room", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
         roomMemberService.joinPublicRoom(ownedRoom, userB);
         messageService.sendMessage(ownedRoom, userA, "hello from alice", null);
         messageService.sendMessage(ownedRoom, userB, "hello from bob", null);

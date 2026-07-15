@@ -1,5 +1,7 @@
 package com.bovae.yac.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Room;
@@ -12,6 +14,18 @@ import com.bovae.yac.service.PresenceService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import com.bovae.yac.service.UserService;
+import java.lang.reflect.Type;
+import java.net.HttpCookie;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,7 +34,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
-import org.jspecify.annotations.NonNull;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
@@ -30,20 +43,6 @@ import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
-
-import java.lang.reflect.Type;
-import java.net.HttpCookie;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.function.BooleanSupplier;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * WebSocket integration tests for STOMP handlers: ChatMessageHandler, PresenceHandler, TypingHandler.
@@ -96,7 +95,9 @@ class WebSocketIT {
         userA = userRepository.findById(userADto.id()).orElseThrow();
         UserDto userBDto = userService.register("ws-b-" + suffix + "@test.com", "wsb" + suffix, "testpass123");
         userB = userRepository.findById(userBDto.id()).orElseThrow();
-        room = roomService.getRoomById(roomService.createRoom("ws-room-" + suffix, "test room", RoomVisibility.PUBLIC, userA).id());
+        room = roomService.getRoomById(roomService
+                .createRoom("ws-room-" + suffix, "test room", RoomVisibility.PUBLIC, userA)
+                .id());
         roomMemberService.joinPublicRoom(room, userB);
     }
 
@@ -132,10 +133,7 @@ class WebSocketIT {
         session.subscribe("/topic/room." + room.getId(), new QueueFrameHandler<>(received, Map.class));
         Thread.sleep(500); // allow subscription to register
 
-        Map<String, Object> payload = Map.of(
-                "room_id", room.getId().toString(),
-                "content", "Hello via WebSocket!"
-        );
+        Map<String, Object> payload = Map.of("room_id", room.getId().toString(), "content", "Hello via WebSocket!");
         session.send("/app/chat.send", payload);
 
         Map message = received.poll(5, TimeUnit.SECONDS);
@@ -144,8 +142,7 @@ class WebSocketIT {
         assertThat(message.get("room_id")).isEqualTo(room.getId().toString());
 
         // Verify message persisted in database
-        assertThat(messageRepository.findAll().stream()
-                .anyMatch(m -> "Hello via WebSocket!".equals(m.getContent())))
+        assertThat(messageRepository.findAll().stream().anyMatch(m -> "Hello via WebSocket!".equals(m.getContent())))
                 .isTrue();
     }
 
@@ -183,8 +180,7 @@ class WebSocketIT {
         StompSession session = connectStomp(sessionCookie);
 
         BlockingQueue<Map> received = new LinkedBlockingQueue<>();
-        session.subscribe("/topic/room." + room.getId() + ".events",
-                new QueueFrameHandler<>(received, Map.class));
+        session.subscribe("/topic/room." + room.getId() + ".events", new QueueFrameHandler<>(received, Map.class));
         Thread.sleep(500);
 
         Map<String, Object> payload = Map.of("room_id", room.getId().toString());
@@ -213,10 +209,7 @@ class WebSocketIT {
 
         // Send message to a non-existent room
         UUID fakeRoomId = UUID.randomUUID();
-        Map<String, Object> payload = Map.of(
-                "room_id", fakeRoomId.toString(),
-                "content", "This should fail"
-        );
+        Map<String, Object> payload = Map.of("room_id", fakeRoomId.toString(), "content", "This should fail");
         session.send("/app/chat.send", payload);
 
         Map error = errors.poll(5, TimeUnit.SECONDS);
@@ -239,26 +232,25 @@ class WebSocketIT {
         WebSocketStompClient stompClient = createStompClient();
         String wsUrl = "ws://localhost:" + port + "/ws";
 
-        stompClient.connectAsync(wsUrl, new WebSocketHttpHeaders(), new StompHeaders(),
-                new StompSessionHandlerAdapter() {
+        stompClient.connectAsync(
+                wsUrl, new WebSocketHttpHeaders(), new StompHeaders(), new StompSessionHandlerAdapter() {
                     @Override
-                    public void afterConnected(@NonNull StompSession session,
-                                               @NonNull StompHeaders connectedHeaders) {
+                    public void afterConnected(@NonNull StompSession session, @NonNull StompHeaders connectedHeaders) {
                         sessionFuture.complete(session);
                     }
 
                     @Override
-                    public void handleException(@NonNull StompSession session,
-                                                StompCommand command,
-                                                @NonNull StompHeaders headers,
-                                                @NonNull byte[] payload,
-                                                @NonNull Throwable exception) {
+                    public void handleException(
+                            @NonNull StompSession session,
+                            StompCommand command,
+                            @NonNull StompHeaders headers,
+                            @NonNull byte[] payload,
+                            @NonNull Throwable exception) {
                         errorFuture.complete(headers);
                     }
 
                     @Override
-                    public void handleTransportError(@NonNull StompSession session,
-                                                     @NonNull Throwable exception) {
+                    public void handleTransportError(@NonNull StompSession session, @NonNull Throwable exception) {
                         errorFuture.completeExceptionally(exception);
                     }
                 });
@@ -272,10 +264,7 @@ class WebSocketIT {
             stompSessions.add(session);
 
             // Try to send to an authenticated-only destination
-            Map<String, Object> payload = Map.of(
-                    "room_id", room.getId().toString(),
-                    "content", "Should not work"
-            );
+            Map<String, Object> payload = Map.of("room_id", room.getId().toString(), "content", "Should not work");
             session.send("/app/chat.send", payload);
 
             // Await the server-side disconnect rather than sleeping a fixed interval (R1-53).
@@ -303,15 +292,11 @@ class WebSocketIT {
 
         // User B subscribes to the room topic
         BlockingQueue<Map> receivedByB = new LinkedBlockingQueue<>();
-        sessionB.subscribe("/topic/room." + room.getId(),
-                new QueueFrameHandler<>(receivedByB, Map.class));
+        sessionB.subscribe("/topic/room." + room.getId(), new QueueFrameHandler<>(receivedByB, Map.class));
         Thread.sleep(500);
 
         // User A sends a message
-        Map<String, Object> payload = Map.of(
-                "room_id", room.getId().toString(),
-                "content", "Hello from User A!"
-        );
+        Map<String, Object> payload = Map.of("room_id", room.getId().toString(), "content", "Hello from User A!");
         sessionA.send("/app/chat.send", payload);
 
         // User B should receive the message
@@ -350,20 +335,17 @@ class WebSocketIT {
         headers.add(HttpHeaders.COOKIE, sessionCookie);
 
         CompletableFuture<StompSession> future = new CompletableFuture<>();
-        stompClient.connectAsync(wsUrl, headers, new StompHeaders(),
-                new StompSessionHandlerAdapter() {
-                    @Override
-                    public void afterConnected(@NonNull StompSession session,
-                                               @NonNull StompHeaders connectedHeaders) {
-                        future.complete(session);
-                    }
+        stompClient.connectAsync(wsUrl, headers, new StompHeaders(), new StompSessionHandlerAdapter() {
+            @Override
+            public void afterConnected(@NonNull StompSession session, @NonNull StompHeaders connectedHeaders) {
+                future.complete(session);
+            }
 
-                    @Override
-                    public void handleTransportError(@NonNull StompSession session,
-                                                     @NonNull Throwable exception) {
-                        future.completeExceptionally(exception);
-                    }
-                });
+            @Override
+            public void handleTransportError(@NonNull StompSession session, @NonNull Throwable exception) {
+                future.completeExceptionally(exception);
+            }
+        });
 
         StompSession session = future.get(10, TimeUnit.SECONDS);
         stompSessions.add(session);
@@ -378,24 +360,22 @@ class WebSocketIT {
     private String authenticateViaHttp(String email, String password) {
         try {
             // Step 1: GET /login to obtain CSRF token and initial session cookie
-            java.net.URL loginPageUrl = java.net.URI.create(
-                    "http://localhost:" + port + "/login").toURL();
-            java.net.HttpURLConnection getConn =
-                    (java.net.HttpURLConnection) loginPageUrl.openConnection();
+            java.net.URL loginPageUrl =
+                    java.net.URI.create("http://localhost:" + port + "/login").toURL();
+            java.net.HttpURLConnection getConn = (java.net.HttpURLConnection) loginPageUrl.openConnection();
             getConn.setRequestMethod("GET");
             getConn.setInstanceFollowRedirects(false);
 
             getConn.getResponseCode(); // ensure the request completes
             String initialCookie = extractSessionCookie(getConn.getHeaderFields());
-            String pageBody = new String(getConn.getInputStream().readAllBytes(),
-                    java.nio.charset.StandardCharsets.UTF_8);
+            String pageBody =
+                    new String(getConn.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
 
             // Extract CSRF token from the login page HTML
             String csrfToken = extractCsrfToken(pageBody);
 
             // Step 2: POST /login with credentials, CSRF token, and session cookie
-            java.net.HttpURLConnection postConn =
-                    (java.net.HttpURLConnection) loginPageUrl.openConnection();
+            java.net.HttpURLConnection postConn = (java.net.HttpURLConnection) loginPageUrl.openConnection();
             postConn.setRequestMethod("POST");
             postConn.setInstanceFollowRedirects(false);
             postConn.setDoOutput(true);
@@ -404,8 +384,8 @@ class WebSocketIT {
                 postConn.setRequestProperty("Cookie", initialCookie);
             }
 
-            String body = "email=" + java.net.URLEncoder.encode(email, "UTF-8")
-                    + "&password=" + java.net.URLEncoder.encode(password, "UTF-8");
+            String body = "email=" + java.net.URLEncoder.encode(email, "UTF-8") + "&password="
+                    + java.net.URLEncoder.encode(password, "UTF-8");
             if (csrfToken != null) {
                 body += "&_csrf=" + java.net.URLEncoder.encode(csrfToken, "UTF-8");
             }
@@ -413,8 +393,7 @@ class WebSocketIT {
 
             int postStatus = postConn.getResponseCode();
             if (postStatus != 302 && postStatus != 200) {
-                throw new IllegalStateException(
-                        "Login failed with status %d for %s".formatted(postStatus, email));
+                throw new IllegalStateException("Login failed with status %d for %s".formatted(postStatus, email));
             }
 
             // Extract session cookie from the POST response (may be a new session)
@@ -434,13 +413,11 @@ class WebSocketIT {
     }
 
     private String extractSessionCookie(Map<String, List<String>> headers) {
-        List<String> setCookies = headers.getOrDefault("Set-Cookie",
-                headers.getOrDefault("set-cookie", List.of()));
+        List<String> setCookies = headers.getOrDefault("Set-Cookie", headers.getOrDefault("set-cookie", List.of()));
         for (String cookieHeader : setCookies) {
             List<HttpCookie> cookies = HttpCookie.parse(cookieHeader);
             for (HttpCookie cookie : cookies) {
-                if ("JSESSIONID".equalsIgnoreCase(cookie.getName())
-                        || "SESSION".equalsIgnoreCase(cookie.getName())) {
+                if ("JSESSIONID".equalsIgnoreCase(cookie.getName()) || "SESSION".equalsIgnoreCase(cookie.getName())) {
                     return cookie.getName() + "=" + cookie.getValue();
                 }
             }
@@ -473,8 +450,7 @@ class WebSocketIT {
     /**
      * Generic STOMP frame handler that puts received payloads into a BlockingQueue.
      */
-    private record QueueFrameHandler<T>(BlockingQueue<T> queue,
-                                        Class<T> payloadType) implements StompFrameHandler {
+    private record QueueFrameHandler<T>(BlockingQueue<T> queue, Class<T> payloadType) implements StompFrameHandler {
         @Override
         @NonNull
         public Type getPayloadType(@NonNull StompHeaders headers) {

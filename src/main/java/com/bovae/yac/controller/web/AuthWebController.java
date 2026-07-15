@@ -42,12 +42,13 @@ public class AuthWebController {
     }
 
     @PostMapping("/register")
-    public String registerPost(@RequestParam String email,
-                               @RequestParam String username,
-                               @RequestParam String password,
-                               @RequestParam String confirmPassword,
-                               RedirectAttributes redirectAttributes,
-                               Model model) {
+    public String registerPost(
+            @RequestParam String email,
+            @RequestParam String username,
+            @RequestParam String password,
+            @RequestParam String confirmPassword,
+            RedirectAttributes redirectAttributes,
+            Model model) {
         if (password.length() < 8) {
             model.addAttribute("error", "Password must be at least 8 characters");
             model.addAttribute("email", email);
@@ -75,12 +76,11 @@ public class AuthWebController {
     }
 
     @PostMapping("/forgot-password")
-    public String forgotPasswordPost(@RequestParam String email,
-                                     RedirectAttributes redirectAttributes) {
+    public String forgotPasswordPost(@RequestParam String email, RedirectAttributes redirectAttributes) {
         // Token is created and mailed out-of-band; never rendered in the response (R1-10).
         passwordService.requestReset(email);
-        redirectAttributes.addFlashAttribute("success",
-                "If an account with that email exists, a password reset link has been sent.");
+        redirectAttributes.addFlashAttribute(
+                "success", "If an account with that email exists, a password reset link has been sent.");
         return "redirect:/forgot-password";
     }
 }

@@ -1,11 +1,17 @@
 package com.bovae.yac.parameterized;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.exception.ConflictException;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.UserService;
+import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -14,13 +20,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.stream.Stream;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Parameterized boundary tests for user registration.
@@ -67,13 +66,13 @@ class RegistrationParameterizedTest {
 
     static Stream<Arguments> uniqueRegistrationCombinations() {
         return Stream.of(
-                Arguments.of("a@example.com", "a"),                                     // min-length username (1 char)
-                Arguments.of("boundary@example.com", "a".repeat(50)),                   // max-length username (50 chars)
-                Arguments.of("user+tag@example.com", "user_with_tag"),                  // email with plus addressing
-                Arguments.of("UPPER@CASE.COM", "mixedCase"),                            // uppercase email
-                Arguments.of("dots.in.local@sub.domain.com", "dotuser"),                // dots in email local part
-                Arguments.of("numeric123@test.io", "user42")                            // numeric characters
-        );
+                Arguments.of("a@example.com", "a"), // min-length username (1 char)
+                Arguments.of("boundary@example.com", "a".repeat(50)), // max-length username (50 chars)
+                Arguments.of("user+tag@example.com", "user_with_tag"), // email with plus addressing
+                Arguments.of("UPPER@CASE.COM", "mixedCase"), // uppercase email
+                Arguments.of("dots.in.local@sub.domain.com", "dotuser"), // dots in email local part
+                Arguments.of("numeric123@test.io", "user42") // numeric characters
+                );
     }
 
     /**
@@ -87,8 +86,8 @@ class RegistrationParameterizedTest {
     void register_duplicateEmail_throwsConflict(String email, String firstUsername, String secondUsername) {
         userService.register(email, firstUsername, "password123");
 
-        ConflictException ex = assertThrows(ConflictException.class,
-                () -> userService.register(email, secondUsername, "password456"));
+        ConflictException ex =
+                assertThrows(ConflictException.class, () -> userService.register(email, secondUsername, "password456"));
         assertTrue(ex.getMessage().contains("Email"));
     }
 
@@ -98,8 +97,7 @@ class RegistrationParameterizedTest {
                 Arguments.of("short@x.co", "first2", "second2"),
                 Arguments.of("long.email.address@very-long-domain.example.com", "first3", "second3"),
                 Arguments.of("special+chars@test.org", "first4", "second4"),
-                Arguments.of("CASE@test.com", "first5", "second5")
-        );
+                Arguments.of("CASE@test.com", "first5", "second5"));
     }
 
     /**
@@ -113,19 +111,18 @@ class RegistrationParameterizedTest {
     void register_duplicateUsername_throwsConflict(String username, String firstEmail, String secondEmail) {
         userService.register(firstEmail, username, "password123");
 
-        ConflictException ex = assertThrows(ConflictException.class,
-                () -> userService.register(secondEmail, username, "password456"));
+        ConflictException ex =
+                assertThrows(ConflictException.class, () -> userService.register(secondEmail, username, "password456"));
         assertTrue(ex.getMessage().contains("Username"));
     }
 
     static Stream<Arguments> duplicateUsernameCombinations() {
         return Stream.of(
                 Arguments.of("dupuser", "first1@test.com", "second1@test.com"),
-                Arguments.of("x", "first2@test.com", "second2@test.com"),                // min-length username
-                Arguments.of("a".repeat(50), "first3@test.com", "second3@test.com"),     // max-length username
+                Arguments.of("x", "first2@test.com", "second2@test.com"), // min-length username
+                Arguments.of("a".repeat(50), "first3@test.com", "second3@test.com"), // max-length username
                 Arguments.of("user_underscore", "first4@test.com", "second4@test.com"),
-                Arguments.of("user123", "first5@test.com", "second5@test.com")
-        );
+                Arguments.of("user123", "first5@test.com", "second5@test.com"));
     }
 
     // ---- CP 2: Password hash round-trip with varied character sets ----
@@ -140,14 +137,12 @@ class RegistrationParameterizedTest {
     @MethodSource("passwordVariations")
     void register_passwordHashRoundTrip_verifies(String password, String description) {
         UserDto userDto = userService.register(
-                description.replaceAll("\\s+", "") + "@test.com",
-                description.replaceAll("\\s+", ""),
-                password
-        );
+                description.replaceAll("\\s+", "") + "@test.com", description.replaceAll("\\s+", ""), password);
         User user = userRepository.findById(userDto.id()).orElseThrow();
 
         assertNotNull(user.getPasswordHash());
-        assertTrue(passwordEncoder.matches(password, user.getPasswordHash()),
+        assertTrue(
+                passwordEncoder.matches(password, user.getPasswordHash()),
                 "Password hash should verify for: " + description);
     }
 
@@ -157,9 +152,8 @@ class RegistrationParameterizedTest {
                 Arguments.of("p@$$w0rd!#%^&*()", "specialchars"),
                 Arguments.of("пароль密码パスワード", "unicode"),
                 Arguments.of("a", "singlechar"),
-                Arguments.of("a".repeat(72), "maxbcrypt72"),                             // BCrypt processes up to 72 bytes
+                Arguments.of("a".repeat(72), "maxbcrypt72"), // BCrypt processes up to 72 bytes
                 Arguments.of("emoji🔑🛡️🔒pass", "emojipwd"),
-                Arguments.of("   spaces   around   ", "spacepwd")
-        );
+                Arguments.of("   spaces   around   ", "spacepwd"));
     }
 }

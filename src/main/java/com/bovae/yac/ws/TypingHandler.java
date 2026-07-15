@@ -7,15 +7,14 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UserRepository;
+import java.security.Principal;
+import java.util.Map;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
-
-import java.security.Principal;
-import java.util.Map;
-import java.util.UUID;
 
 @Slf4j
 @Controller
@@ -62,8 +61,8 @@ public class TypingHandler {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "User not found: %s".formatted(principal.getName())));
+        return userRepository
+                .findByEmail(principal.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(principal.getName())));
     }
 }

@@ -1,11 +1,19 @@
 package com.bovae.yac.integration;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
+import com.bovae.yac.model.dto.RoomDto;
+import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Attachment;
 import com.bovae.yac.model.entity.Friendship;
 import com.bovae.yac.model.entity.Message;
-import com.bovae.yac.model.dto.RoomDto;
-import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
@@ -29,14 +37,6 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Integration tests for access control and authorization enforcement across all API controllers.
@@ -97,7 +97,8 @@ class AccessControlIT {
         member = userRepository.findById(memberDto.id()).orElseThrow();
         UserDto outsiderDto = userService.register("outsider-ac@test.com", "outsiderac", "testpass123");
         outsider = userRepository.findById(outsiderDto.id()).orElseThrow();
-        RoomDto roomDto = roomService.createRoom("ac-test-room", "Access control test room", RoomVisibility.PUBLIC, owner);
+        RoomDto roomDto =
+                roomService.createRoom("ac-test-room", "Access control test room", RoomVisibility.PUBLIC, owner);
         room = roomService.getRoomById(roomDto.id());
         roomMemberService.joinPublicRoom(room, member);
     }
@@ -121,11 +122,11 @@ class AccessControlIT {
     @Test
     void nonMember_downloadAttachment_returns403() throws Exception {
         // Public rooms are readable by non-members, so an IDOR test needs a PRIVATE room (R1-15).
-        Room privateRoom = roomService.getRoomById(
-                roomService.createRoom("ac-private", "private", RoomVisibility.PRIVATE, owner).id());
+        Room privateRoom = roomService.getRoomById(roomService
+                .createRoom("ac-private", "private", RoomVisibility.PRIVATE, owner)
+                .id());
         Message msg = messageService.sendMessage(privateRoom, owner, "file msg", null);
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "test.txt", "text/plain", "test content".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "test.txt", "text/plain", "test content".getBytes());
         Attachment attachment = fileStorageService.uploadFile(file, msg, privateRoom, owner, null);
 
         // Outsider (non-member of the private room) tries to download
@@ -263,8 +264,7 @@ class AccessControlIT {
     @Test
     void unauthenticated_apiRequest_isRejected() throws Exception {
         // Spring Security with form login redirects unauthenticated requests to /login
-        mockMvc.perform(get("/api/rooms"))
-                .andExpect(status().is3xxRedirection());
+        mockMvc.perform(get("/api/rooms")).andExpect(status().is3xxRedirection());
     }
 
     @Test
@@ -282,7 +282,8 @@ class AccessControlIT {
 
     @Test
     void nonInvitedUser_joinPrivateRoom_returns403() throws Exception {
-        RoomDto privateRoomDto = roomService.createRoom("private-ac-room", "Private room", RoomVisibility.PRIVATE, owner);
+        RoomDto privateRoomDto =
+                roomService.createRoom("private-ac-room", "Private room", RoomVisibility.PRIVATE, owner);
         Room privateRoom = roomService.getRoomById(privateRoomDto.id());
 
         // Outsider tries to join the private room without an invitation

@@ -1,5 +1,13 @@
 package com.bovae.yac.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.bovae.yac.exception.ConflictException;
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.model.dto.NotificationEvent;
@@ -10,6 +18,8 @@ import com.bovae.yac.repository.FriendshipRepository;
 import com.bovae.yac.repository.UserBanRepository;
 import com.bovae.yac.service.FriendshipService;
 import com.bovae.yac.service.NotificationService;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,17 +28,6 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link FriendshipService}.
@@ -95,18 +94,7 @@ class FriendshipServiceTest {
         UUID friendshipId = UUID.randomUUID();
 
         // --- send ---
-        when(friendshipRepository.findByRequesterAndRecipient(userA, userB)).thenReturn(Optional.empty());
-        when(friendshipRepository.findByRequesterAndRecipient(userB, userA)).thenReturn(Optional.empty());
-        when(userBanRepository.existsByBlockerAndBlocked(userA, userB)).thenReturn(false);
-        when(userBanRepository.existsByBlockerAndBlocked(userB, userA)).thenReturn(false);
-
-        Friendship pending = Friendship.builder()
-                .id(friendshipId)
-                .requester(userA)
-                .recipient(userB)
-                .status(FriendshipStatus.PENDING)
-                .build();
-        when(friendshipRepository.save(any(Friendship.class))).thenReturn(pending);
+        Friendship pending = stubSendReturnsPending(friendshipId);
 
         Friendship sent = friendshipService.sendFriendRequest(userA, userB, "Hi!");
         assertThat(sent.getStatus()).isEqualTo(FriendshipStatus.PENDING);
@@ -147,18 +135,7 @@ class FriendshipServiceTest {
         UUID friendshipId = UUID.randomUUID();
 
         // --- send ---
-        when(friendshipRepository.findByRequesterAndRecipient(userA, userB)).thenReturn(Optional.empty());
-        when(friendshipRepository.findByRequesterAndRecipient(userB, userA)).thenReturn(Optional.empty());
-        when(userBanRepository.existsByBlockerAndBlocked(userA, userB)).thenReturn(false);
-        when(userBanRepository.existsByBlockerAndBlocked(userB, userA)).thenReturn(false);
-
-        Friendship pending = Friendship.builder()
-                .id(friendshipId)
-                .requester(userA)
-                .recipient(userB)
-                .status(FriendshipStatus.PENDING)
-                .build();
-        when(friendshipRepository.save(any(Friendship.class))).thenReturn(pending);
+        Friendship pending = stubSendReturnsPending(friendshipId);
 
         Friendship sent = friendshipService.sendFriendRequest(userA, userB, null);
         assertThat(sent.getStatus()).isEqualTo(FriendshipStatus.PENDING);
@@ -183,8 +160,7 @@ class FriendshipServiceTest {
         when(friendshipRepository.findByRequesterAndRecipient(userB, userA)).thenReturn(Optional.empty());
         when(userBanRepository.existsByBlockerAndBlocked(userA, userB)).thenReturn(false);
         when(userBanRepository.existsByBlockerAndBlocked(userB, userA)).thenReturn(false);
-        when(friendshipRepository.save(any(Friendship.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(friendshipRepository.save(any(Friendship.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         friendshipService.sendFriendRequest(userA, userB, "Hi!");
 
@@ -203,8 +179,7 @@ class FriendshipServiceTest {
                 .status(FriendshipStatus.PENDING)
                 .build();
         when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.of(pending));
-        when(friendshipRepository.save(any(Friendship.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(friendshipRepository.save(any(Friendship.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         friendshipService.acceptFriendRequest(friendshipId, userB);
 
@@ -450,5 +425,32 @@ class FriendshipServiceTest {
         friendshipService.removeFriend(friendshipId, userB);
 
         verify(friendshipRepository).delete(accepted);
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Stubs the happy-path preconditions for a {@code userA → userB} send (no existing
+     * friendship either direction, no user ban either direction) and a {@code save} that
+     * returns a PENDING friendship with the given id.
+     *
+     * @return the stubbed PENDING friendship, for reuse in later lifecycle steps
+     */
+    private Friendship stubSendReturnsPending(UUID friendshipId) {
+        when(friendshipRepository.findByRequesterAndRecipient(userA, userB)).thenReturn(Optional.empty());
+        when(friendshipRepository.findByRequesterAndRecipient(userB, userA)).thenReturn(Optional.empty());
+        when(userBanRepository.existsByBlockerAndBlocked(userA, userB)).thenReturn(false);
+        when(userBanRepository.existsByBlockerAndBlocked(userB, userA)).thenReturn(false);
+
+        Friendship pending = Friendship.builder()
+                .id(friendshipId)
+                .requester(userA)
+                .recipient(userB)
+                .status(FriendshipStatus.PENDING)
+                .build();
+        when(friendshipRepository.save(any(Friendship.class))).thenReturn(pending);
+        return pending;
     }
 }

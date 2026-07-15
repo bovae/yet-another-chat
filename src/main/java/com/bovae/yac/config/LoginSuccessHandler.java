@@ -4,11 +4,10 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import java.io.IOException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
-
-import java.io.IOException;
 
 /**
  * Captures the User-Agent and client IP into the HTTP session at login so the sessions screen
@@ -24,8 +23,9 @@ public class LoginSuccessHandler extends SavedRequestAwareAuthenticationSuccessH
     }
 
     @Override
-    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
-                                        Authentication authentication) throws IOException, ServletException {
+    public void onAuthenticationSuccess(
+            HttpServletRequest request, HttpServletResponse response, Authentication authentication)
+            throws IOException, ServletException {
         HttpSession session = request.getSession();
         session.setAttribute("USER_AGENT", request.getHeader("User-Agent"));
         session.setAttribute("CLIENT_IP", request.getRemoteAddr());

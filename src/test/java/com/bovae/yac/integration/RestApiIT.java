@@ -1,28 +1,5 @@
 package com.bovae.yac.integration;
 
-import com.bovae.yac.config.TestcontainersConfig;
-import com.bovae.yac.model.dto.UserDto;
-import com.bovae.yac.model.entity.Room;
-import com.bovae.yac.model.entity.User;
-import com.bovae.yac.model.enums.RoomVisibility;
-import com.bovae.yac.repository.FriendshipRepository;
-import com.bovae.yac.repository.RoomRepository;
-import com.bovae.yac.repository.UserRepository;
-import com.bovae.yac.service.RoomService;
-import com.bovae.yac.service.UserService;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
-
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
@@ -35,6 +12,28 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.bovae.yac.config.TestcontainersConfig;
+import com.bovae.yac.model.dto.UserDto;
+import com.bovae.yac.model.entity.Room;
+import com.bovae.yac.model.entity.User;
+import com.bovae.yac.model.enums.RoomVisibility;
+import com.bovae.yac.repository.FriendshipRepository;
+import com.bovae.yac.repository.RoomRepository;
+import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.RoomService;
+import com.bovae.yac.service.UserService;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Integration tests for REST API flows: message CRUD, room CRUD, and friendship lifecycle.
@@ -79,7 +78,9 @@ class RestApiIT {
 
     @Test
     void messageCrudFlow() throws Exception {
-        Room room = roomService.getRoomById(roomService.createRoom("msg-test-room", "test", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("msg-test-room", "test", RoomVisibility.PUBLIC, userA)
+                .id());
 
         // Send a message
         MvcResult sendResult = mockMvc.perform(post("/api/rooms/{roomId}/messages", room.getId())
@@ -197,8 +198,7 @@ class RestApiIT {
                 .andExpect(status().isOk());
 
         // Alice lists friends — should see Bob
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
 
@@ -209,8 +209,7 @@ class RestApiIT {
                 .andExpect(status().isNoContent());
 
         // Verify friend list is empty
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", empty()));
     }
@@ -219,7 +218,9 @@ class RestApiIT {
 
     @Test
     void paginatedHistoryWithCursor() throws Exception {
-        Room room = roomService.getRoomById(roomService.createRoom("pagination-room", "test", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("pagination-room", "test", RoomVisibility.PUBLIC, userA)
+                .id());
 
         // Send 5 messages
         for (int i = 1; i <= 5; i++) {
@@ -243,8 +244,7 @@ class RestApiIT {
                 .andExpect(jsonPath("$.next_cursor", notNullValue()))
                 .andReturn();
 
-        Integer before1 = com.jayway.jsonpath.JsonPath.read(
-                page1.getResponse().getContentAsString(), "$.next_cursor");
+        Integer before1 = com.jayway.jsonpath.JsonPath.read(page1.getResponse().getContentAsString(), "$.next_cursor");
 
         // Load older via the before cursor (R1-02).
         MvcResult page2 = mockMvc.perform(get("/api/rooms/{roomId}/messages", room.getId())
@@ -256,8 +256,7 @@ class RestApiIT {
                 .andExpect(jsonPath("$.has_more", is(true)))
                 .andReturn();
 
-        Integer before2 = com.jayway.jsonpath.JsonPath.read(
-                page2.getResponse().getContentAsString(), "$.next_cursor");
+        Integer before2 = com.jayway.jsonpath.JsonPath.read(page2.getResponse().getContentAsString(), "$.next_cursor");
 
         // Oldest page — 1 message remaining, nothing older.
         mockMvc.perform(get("/api/rooms/{roomId}/messages", room.getId())

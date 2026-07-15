@@ -10,6 +10,5 @@ import org.springframework.context.annotation.Import;
 class YacApplicationTest {
 
     @Test
-    void contextLoads() {
-    }
+    void contextLoads() {}
 }

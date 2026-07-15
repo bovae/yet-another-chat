@@ -1,8 +1,15 @@
 package com.bovae.yac.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.bovae.yac.exception.ConflictException;
 import com.bovae.yac.exception.ForbiddenException;
-import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.dto.RoomCatalogEntry;
 import com.bovae.yac.model.dto.RoomDto;
 import com.bovae.yac.model.dto.RoomMapper;
@@ -25,6 +32,11 @@ import com.bovae.yac.repository.UnreadMarkerRepository;
 import com.bovae.yac.service.FileStorageService;
 import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomService;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,20 +48,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-
-import java.time.Instant;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link RoomService}.
@@ -129,17 +127,16 @@ class RoomServiceTest {
      */
     @Test
     void listUserRoomsWithUnread_ordersByLastMessageRecencyThenName() {
-        RoomMember alpha = membershipOf("alpha");   // oldest message
-        RoomMember beta = membershipOf("beta");      // newest message
-        RoomMember gamma = membershipOf("gamma");    // no messages
+        RoomMember alpha = membershipOf("alpha"); // oldest message
+        RoomMember beta = membershipOf("beta"); // newest message
+        RoomMember gamma = membershipOf("gamma"); // no messages
 
-        when(roomMemberRepository.findByUserWithRoomAndOwner(owner))
-                .thenReturn(List.of(alpha, beta, gamma));
-        when(messageRepository.countUnreadPerRoom(eq(owner.getId()), any()))
-                .thenReturn(Collections.emptyList());
-        when(messageRepository.findLastMessageInstantByRoomIds(any())).thenReturn(List.of(
-                new Object[]{alpha.getRoom().getId(), Instant.parse("2026-07-01T00:00:00Z")},
-                new Object[]{beta.getRoom().getId(), Instant.parse("2026-07-10T00:00:00Z")}));
+        when(roomMemberRepository.findByUserWithRoomAndOwner(owner)).thenReturn(List.of(alpha, beta, gamma));
+        when(messageRepository.countUnreadPerRoom(eq(owner.getId()), any())).thenReturn(Collections.emptyList());
+        when(messageRepository.findLastMessageInstantByRoomIds(any()))
+                .thenReturn(List.of(
+                        new Object[] {alpha.getRoom().getId(), Instant.parse("2026-07-01T00:00:00Z")},
+                        new Object[] {beta.getRoom().getId(), Instant.parse("2026-07-10T00:00:00Z")}));
 
         List<String> names = roomService.listUserRoomsWithUnread(owner).stream()
                 .map(entry -> entry.name())
@@ -177,8 +174,15 @@ class RoomServiceTest {
         when(roomMemberRepository.save(any(RoomMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(roomMapper.toDto(any(Room.class))).thenAnswer(invocation -> {
             Room r = invocation.getArgument(0);
-            return new RoomDto(r.getId(), r.getName(), r.getDescription(), r.getVisibility(),
-                    r.getOwner().getId(), r.getOwner().getUsername(), r.getNextWatermark(), r.getCreatedAt());
+            return new RoomDto(
+                    r.getId(),
+                    r.getName(),
+                    r.getDescription(),
+                    r.getVisibility(),
+                    r.getOwner().getId(),
+                    r.getOwner().getUsername(),
+                    r.getNextWatermark(),
+                    r.getCreatedAt());
         });
 
         RoomDto result = roomService.createRoom(roomName, description, RoomVisibility.PUBLIC, owner);
@@ -224,16 +228,22 @@ class RoomServiceTest {
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(existingRoom));
 
         // Set up cascade data
-        UnreadMarker marker = UnreadMarker.builder().user(owner).room(existingRoom).build();
+        UnreadMarker marker =
+                UnreadMarker.builder().user(owner).room(existingRoom).build();
         when(unreadMarkerRepository.findByRoom(existingRoom)).thenReturn(List.of(marker));
 
-        RoomInvitation invitation = RoomInvitation.builder().id(UUID.randomUUID()).build();
+        RoomInvitation invitation =
+                RoomInvitation.builder().id(UUID.randomUUID()).build();
         when(roomInvitationRepository.findByRoom(existingRoom)).thenReturn(List.of(invitation));
 
         RoomBan ban = RoomBan.builder().id(UUID.randomUUID()).build();
         when(roomBanRepository.findByRoom(existingRoom)).thenReturn(List.of(ban));
 
-        RoomMember member = RoomMember.builder().room(existingRoom).user(owner).role(RoomRole.OWNER).build();
+        RoomMember member = RoomMember.builder()
+                .room(existingRoom)
+                .user(owner)
+                .role(RoomRole.OWNER)
+                .build();
         when(roomMemberRepository.findByRoom(existingRoom)).thenReturn(List.of(member));
 
         Attachment attachment = Attachment.builder().id(UUID.randomUUID()).build();
@@ -287,7 +297,7 @@ class RoomServiceTest {
         Page<Room> roomPage = new PageImpl<>(List.of(publicRoom), pageable, 1);
 
         when(roomRepository.findByVisibilityAndNameContainingIgnoreCase(
-                eq(RoomVisibility.PUBLIC), eq("chat"), eq(pageable)))
+                        eq(RoomVisibility.PUBLIC), eq("chat"), eq(pageable)))
                 .thenReturn(roomPage);
         when(roomMemberRepository.countByRoom(publicRoom)).thenReturn(2L);
 
@@ -300,8 +310,7 @@ class RoomServiceTest {
         assertThat(entry.description()).isEqualTo("A public room");
         assertThat(entry.memberCount()).isEqualTo(2);
 
-        verify(roomRepository).findByVisibilityAndNameContainingIgnoreCase(
-                RoomVisibility.PUBLIC, "chat", pageable);
+        verify(roomRepository).findByVisibilityAndNameContainingIgnoreCase(RoomVisibility.PUBLIC, "chat", pageable);
     }
 
     /**
@@ -313,7 +322,7 @@ class RoomServiceTest {
         Page<Room> emptyPage = new PageImpl<>(Collections.emptyList(), pageable, 0);
 
         when(roomRepository.findByVisibilityAndNameContainingIgnoreCase(
-                eq(RoomVisibility.PUBLIC), eq("nonexistent"), eq(pageable)))
+                        eq(RoomVisibility.PUBLIC), eq("nonexistent"), eq(pageable)))
                 .thenReturn(emptyPage);
 
         Page<RoomCatalogEntry> result = roomService.searchCatalog("nonexistent", pageable);

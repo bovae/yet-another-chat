@@ -9,6 +9,9 @@ import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.UserBanService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import java.security.Principal;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,10 +23,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
-import java.util.List;
-import java.util.UUID;
 
 @Validated
 @RestController
@@ -42,9 +41,7 @@ public class UserBanApiController {
     }
 
     @PostMapping
-    public ResponseEntity<Void> banUser(
-            @Valid @RequestBody BanUserRequest request,
-            Principal principal) {
+    public ResponseEntity<Void> banUser(@Valid @RequestBody BanUserRequest request, Principal principal) {
         User blocker = resolveUser(principal);
         User blocked = resolveUserById(request.userId());
 
@@ -54,14 +51,12 @@ public class UserBanApiController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> unbanUser(
-            @PathVariable UUID id,
-            Principal principal) {
+    public ResponseEntity<Void> unbanUser(@PathVariable UUID id, Principal principal) {
         User blocker = resolveUser(principal);
 
-        UserBan userBan = userBanRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "UserBan not found: %s".formatted(id)));
+        UserBan userBan = userBanRepository
+                .findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("UserBan not found: %s".formatted(id)));
 
         userBanService.unbanUser(blocker, userBan.getBlocked());
 
@@ -69,18 +64,17 @@ public class UserBanApiController {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found for principal: %s".formatted(principal.getName())));
     }
 
     private User resolveUserById(UUID userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "User not found: %s".formatted(userId)));
+        return userRepository
+                .findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(userId)));
     }
 
-    public record BanUserRequest(
-            @NotNull UUID userId
-    ) {}
+    public record BanUserRequest(@NotNull UUID userId) {}
 }

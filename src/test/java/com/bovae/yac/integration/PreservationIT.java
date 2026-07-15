@@ -1,32 +1,5 @@
 package com.bovae.yac.integration;
 
-import com.bovae.yac.config.TestcontainersConfig;
-import com.bovae.yac.model.dto.RoomDto;
-import com.bovae.yac.model.dto.UserDto;
-import com.bovae.yac.model.entity.Friendship;
-import com.bovae.yac.model.entity.Room;
-import com.bovae.yac.model.entity.RoomInvitation;
-import com.bovae.yac.model.entity.User;
-import com.bovae.yac.model.enums.RoomVisibility;
-import com.bovae.yac.repository.RoomInvitationRepository;
-import com.bovae.yac.repository.UserRepository;
-import com.bovae.yac.service.FriendshipService;
-import com.bovae.yac.service.RoomService;
-import com.bovae.yac.service.UserService;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -40,6 +13,32 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.bovae.yac.config.TestcontainersConfig;
+import com.bovae.yac.model.dto.RoomDto;
+import com.bovae.yac.model.dto.UserDto;
+import com.bovae.yac.model.entity.Friendship;
+import com.bovae.yac.model.entity.Room;
+import com.bovae.yac.model.entity.RoomInvitation;
+import com.bovae.yac.model.entity.User;
+import com.bovae.yac.model.enums.RoomVisibility;
+import com.bovae.yac.repository.RoomInvitationRepository;
+import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.FriendshipService;
+import com.bovae.yac.service.RoomService;
+import com.bovae.yac.service.UserService;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Preservation Tests — verifies existing correct behavior BEFORE implementing fixes.
@@ -82,9 +81,11 @@ class PreservationIT {
     @BeforeEach
     void setUp() {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
-        UserDto userADto = userService.register("preserve-a-" + suffix + "@test.com", "preservea" + suffix, "testpass123");
+        UserDto userADto =
+                userService.register("preserve-a-" + suffix + "@test.com", "preservea" + suffix, "testpass123");
         userA = userRepository.findById(userADto.id()).orElseThrow();
-        UserDto userBDto = userService.register("preserve-b-" + suffix + "@test.com", "preserveb" + suffix, "testpass123");
+        UserDto userBDto =
+                userService.register("preserve-b-" + suffix + "@test.com", "preserveb" + suffix, "testpass123");
         userB = userRepository.findById(userBDto.id()).orElseThrow();
     }
 
@@ -101,8 +102,7 @@ class PreservationIT {
     @DisplayName("Preservation: REST POST message with full ChatMessageRequest (roomId + content) succeeds")
     void preservation_restPostMessage_withFullChatMessageRequest_succeeds() throws Exception {
         RoomDto roomDto = roomService.createRoom(
-                "preserve-msg-" + UUID.randomUUID().toString().substring(0, 8),
-                "test", RoomVisibility.PUBLIC, userA);
+                "preserve-msg-" + UUID.randomUUID().toString().substring(0, 8), "test", RoomVisibility.PUBLIC, userA);
         Room room = roomService.getRoomById(roomDto.id());
 
         mockMvc.perform(post("/api/rooms/{roomId}/messages", room.getId())
@@ -130,7 +130,9 @@ class PreservationIT {
     void preservation_restPostMessage_validatesAndCreatesCorrectly() throws Exception {
         RoomDto roomDto = roomService.createRoom(
                 "preserve-validate-" + UUID.randomUUID().toString().substring(0, 8),
-                "test", RoomVisibility.PUBLIC, userA);
+                "test",
+                RoomVisibility.PUBLIC,
+                userA);
         Room room = roomService.getRoomById(roomDto.id());
 
         // Valid message creation
@@ -178,8 +180,10 @@ class PreservationIT {
 
         // Verify the new password is persisted
         User updatedUser = userRepository.findById(userA.getId()).orElseThrow();
-        assertThat(passwordEncoder.matches("newpass456", updatedUser.getPasswordHash())).isTrue();
-        assertThat(passwordEncoder.matches("testpass123", updatedUser.getPasswordHash())).isFalse();
+        assertThat(passwordEncoder.matches("newpass456", updatedUser.getPasswordHash()))
+                .isTrue();
+        assertThat(passwordEncoder.matches("testpass123", updatedUser.getPasswordHash()))
+                .isFalse();
     }
 
     // ---- Preservation: Non-DIRECT rooms display their actual stored name ----
@@ -220,14 +224,12 @@ class PreservationIT {
     @DisplayName("Preservation: Profile and rooms catalog templates render without errors")
     void preservation_otherTemplates_renderWithoutErrors() throws Exception {
         // Profile page
-        mockMvc.perform(get("/profile")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/profile").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Profile")));
 
         // Rooms catalog page
-        mockMvc.perform(get("/rooms/catalog")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/rooms/catalog").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Public Room Catalog")));
     }
@@ -251,7 +253,9 @@ class PreservationIT {
         // Create a private room owned by userA
         RoomDto roomDto = roomService.createRoom(
                 "preserve-invite-" + UUID.randomUUID().toString().substring(0, 8),
-                "private room", RoomVisibility.PRIVATE, userA);
+                "private room",
+                RoomVisibility.PRIVATE,
+                userA);
         Room room = roomService.getRoomById(roomDto.id());
 
         // userA invites userB (who is a friend)

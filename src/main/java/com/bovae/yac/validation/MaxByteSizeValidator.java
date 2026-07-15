@@ -2,7 +2,6 @@ package com.bovae.yac.validation;
 
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
-
 import java.nio.charset.StandardCharsets;
 
 public class MaxByteSizeValidator implements ConstraintValidator<MaxByteSize, String> {

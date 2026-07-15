@@ -1,5 +1,10 @@
 package com.bovae.yac.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.bovae.yac.controller.api.MessageApiController;
 import com.bovae.yac.model.dto.MessageDeletedEvent;
 import com.bovae.yac.model.entity.Room;
@@ -11,6 +16,9 @@ import com.bovae.yac.service.MessageBroadcastService;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
+import java.security.Principal;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,15 +29,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-
-import java.security.Principal;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link MessageApiController}.

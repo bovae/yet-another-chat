@@ -1,5 +1,12 @@
 package com.bovae.yac.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.bovae.yac.exception.ConflictException;
 import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.entity.Friendship;
@@ -9,6 +16,8 @@ import com.bovae.yac.model.enums.FriendshipStatus;
 import com.bovae.yac.repository.FriendshipRepository;
 import com.bovae.yac.repository.UserBanRepository;
 import com.bovae.yac.service.UserBanService;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,16 +25,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link UserBanService}.
@@ -83,10 +82,8 @@ class UserBanServiceTest {
                 .recipient(userB)
                 .status(FriendshipStatus.ACCEPTED)
                 .build();
-        when(friendshipRepository.findByRequesterAndRecipient(userA, userB))
-                .thenReturn(Optional.of(forwardFriendship));
-        when(friendshipRepository.findByRequesterAndRecipient(userB, userA))
-                .thenReturn(Optional.empty());
+        when(friendshipRepository.findByRequesterAndRecipient(userA, userB)).thenReturn(Optional.of(forwardFriendship));
+        when(friendshipRepository.findByRequesterAndRecipient(userB, userA)).thenReturn(Optional.empty());
 
         UserBan savedBan = UserBan.builder()
                 .id(UUID.randomUUID())
@@ -124,10 +121,8 @@ class UserBanServiceTest {
                 .recipient(userA)
                 .status(FriendshipStatus.ACCEPTED)
                 .build();
-        when(friendshipRepository.findByRequesterAndRecipient(userA, userB))
-                .thenReturn(Optional.empty());
-        when(friendshipRepository.findByRequesterAndRecipient(userB, userA))
-                .thenReturn(Optional.of(reverseFriendship));
+        when(friendshipRepository.findByRequesterAndRecipient(userA, userB)).thenReturn(Optional.empty());
+        when(friendshipRepository.findByRequesterAndRecipient(userB, userA)).thenReturn(Optional.of(reverseFriendship));
 
         UserBan savedBan = UserBan.builder()
                 .id(UUID.randomUUID())
@@ -147,10 +142,8 @@ class UserBanServiceTest {
     @Test
     void banUser_noExistingFriendship_succeeds() {
         when(userBanRepository.existsByBlockerAndBlocked(userA, userB)).thenReturn(false);
-        when(friendshipRepository.findByRequesterAndRecipient(userA, userB))
-                .thenReturn(Optional.empty());
-        when(friendshipRepository.findByRequesterAndRecipient(userB, userA))
-                .thenReturn(Optional.empty());
+        when(friendshipRepository.findByRequesterAndRecipient(userA, userB)).thenReturn(Optional.empty());
+        when(friendshipRepository.findByRequesterAndRecipient(userB, userA)).thenReturn(Optional.empty());
 
         UserBan savedBan = UserBan.builder()
                 .id(UUID.randomUUID())
@@ -179,8 +172,7 @@ class UserBanServiceTest {
                 .blocker(userA)
                 .blocked(userB)
                 .build();
-        when(userBanRepository.findByBlockerAndBlocked(userA, userB))
-                .thenReturn(Optional.of(existingBan));
+        when(userBanRepository.findByBlockerAndBlocked(userA, userB)).thenReturn(Optional.of(existingBan));
 
         userBanService.unbanUser(userA, userB);
 
@@ -192,8 +184,7 @@ class UserBanServiceTest {
      */
     @Test
     void unbanUser_noBanExists_throwsResourceNotFoundException() {
-        when(userBanRepository.findByBlockerAndBlocked(userA, userB))
-                .thenReturn(Optional.empty());
+        when(userBanRepository.findByBlockerAndBlocked(userA, userB)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> userBanService.unbanUser(userA, userB))
                 .isInstanceOf(ResourceNotFoundException.class)

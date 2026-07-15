@@ -1,5 +1,12 @@
 package com.bovae.yac.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.bovae.yac.exception.ConflictException;
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.model.entity.Room;
@@ -14,22 +21,14 @@ import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomMemberService;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link RoomMemberService}.
@@ -161,8 +160,7 @@ class RoomMemberServiceTest {
                 .invitee(userA)
                 .build();
 
-        when(roomInvitationRepository.findByRoomAndInvitee(privateRoom, userA))
-                .thenReturn(Optional.of(invitation));
+        when(roomInvitationRepository.findByRoomAndInvitee(privateRoom, userA)).thenReturn(Optional.of(invitation));
         when(roomMemberRepository.existsByRoomAndUser(privateRoom, userA)).thenReturn(false);
         when(roomMemberRepository.save(any(RoomMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -180,8 +178,7 @@ class RoomMemberServiceTest {
      */
     @Test
     void joinPrivateRoomViaInvitation_noInvitation_throwsForbiddenException() {
-        when(roomInvitationRepository.findByRoomAndInvitee(privateRoom, userA))
-                .thenReturn(Optional.empty());
+        when(roomInvitationRepository.findByRoomAndInvitee(privateRoom, userA)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> roomMemberService.joinPrivateRoomViaInvitation(privateRoom, userA))
                 .isInstanceOf(ForbiddenException.class)
@@ -202,8 +199,7 @@ class RoomMemberServiceTest {
                 .invitee(userA)
                 .build();
 
-        when(roomInvitationRepository.findByRoomAndInvitee(privateRoom, userA))
-                .thenReturn(Optional.of(invitation));
+        when(roomInvitationRepository.findByRoomAndInvitee(privateRoom, userA)).thenReturn(Optional.of(invitation));
         when(roomMemberRepository.existsByRoomAndUser(privateRoom, userA)).thenReturn(true);
 
         assertThatThrownBy(() -> roomMemberService.joinPrivateRoomViaInvitation(privateRoom, userA))

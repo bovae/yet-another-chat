@@ -1,11 +1,11 @@
 package com.bovae.yac.e2e;
 
+import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.assertions.LocatorAssertions;
 import org.junit.jupiter.api.Test;
-
-import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 
 /**
  * Presence-on-load / idle→AFK (guards R2-01) and live friend-request delivery + accept

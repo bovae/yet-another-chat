@@ -1,20 +1,19 @@
 package com.bovae.yac.unit;
 
-import com.bovae.yac.model.dto.UserDto;
-import com.bovae.yac.model.dto.UserMapper;
-import com.bovae.yac.model.entity.User;
-import org.junit.jupiter.api.Test;
-import org.mapstruct.factory.Mappers;
-
-import java.lang.reflect.RecordComponent;
-import java.time.Instant;
-import java.util.Arrays;
-import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.bovae.yac.model.dto.UserDto;
+import com.bovae.yac.model.dto.UserMapper;
+import com.bovae.yac.model.entity.User;
+import java.lang.reflect.RecordComponent;
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 class UserMapperTest {
 
@@ -68,8 +67,7 @@ class UserMapperTest {
     @Test
     void userDto_doesNotContainPasswordHash() {
         RecordComponent[] components = UserDto.class.getRecordComponents();
-        boolean hasPasswordHash = Arrays.stream(components)
-                .anyMatch(c -> "passwordHash".equals(c.getName()));
+        boolean hasPasswordHash = Arrays.stream(components).anyMatch(c -> "passwordHash".equals(c.getName()));
 
         assertTrue(!hasPasswordHash, "UserDto must NOT contain a passwordHash field");
     }

@@ -7,6 +7,10 @@ import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.PresenceVisibilityService;
+import java.security.Principal;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
@@ -17,11 +21,6 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.stereotype.Component;
 
-import java.security.Principal;
-import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 /**
  * Inbound STOMP authorization (design D4): rejects unauthenticated CONNECT (R1-62) and
  * authorizes SUBSCRIBE frames against room membership (R1-09) and presence visibility (R1-65).
@@ -31,10 +30,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
-    private static final Pattern ROOM_TOPIC =
-            Pattern.compile("^/topic/room\\.([0-9a-fA-F-]{36})(?:\\.events)?$");
-    private static final Pattern PRESENCE_TOPIC =
-            Pattern.compile("^/topic/presence\\.([0-9a-fA-F-]{36})$");
+    private static final Pattern ROOM_TOPIC = Pattern.compile("^/topic/room\\.([0-9a-fA-F-]{36})(?:\\.events)?$");
+    private static final Pattern PRESENCE_TOPIC = Pattern.compile("^/topic/presence\\.([0-9a-fA-F-]{36})$");
 
     private final UserRepository userRepository;
     private final RoomRepository roomRepository;
@@ -81,8 +78,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     }
 
     private void authorizeRoom(Principal principal, UUID roomId) {
-        Room room = roomRepository.findById(roomId)
-                .orElseThrow(() -> new MessageDeliveryException("Room not found"));
+        Room room = roomRepository.findById(roomId).orElseThrow(() -> new MessageDeliveryException("Room not found"));
         if (room.getVisibility() == RoomVisibility.PUBLIC) {
             return; // public rooms follow the same visibility rule as history reads
         }
@@ -102,7 +98,8 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new MessageDeliveryException("Unknown user"));
     }
 }

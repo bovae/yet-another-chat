@@ -1,5 +1,12 @@
 package com.bovae.yac.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.RoomDto;
 import com.bovae.yac.model.dto.UserDto;
@@ -12,6 +19,7 @@ import com.bovae.yac.service.DirectChatService;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.RoomService;
 import com.bovae.yac.service.UserService;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,15 +30,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Behavioural regression tests for two previously-reported bugs. The source-text-asserting
@@ -72,9 +71,13 @@ class BugConditionExplorationIT {
     @Test
     @DisplayName("Bug 1: Edit message with content-only body succeeds")
     void bug1_editMessageWithContentOnlyBody_returns200() throws Exception {
-        Room room = roomService.getRoomById(
-                roomService.createRoom("bug1-room-" + UUID.randomUUID().toString().substring(0, 8),
-                        "test", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom(
+                        "bug1-room-" + UUID.randomUUID().toString().substring(0, 8),
+                        "test",
+                        RoomVisibility.PUBLIC,
+                        userA)
+                .id());
 
         Message message = messageService.sendMessage(room, userA, "Original content", null);
 

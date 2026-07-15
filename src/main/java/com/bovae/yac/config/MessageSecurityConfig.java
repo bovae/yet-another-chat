@@ -17,11 +17,14 @@ public class MessageSecurityConfig {
                         SimpMessageType.CONNECT,
                         SimpMessageType.DISCONNECT,
                         SimpMessageType.UNSUBSCRIBE,
-                        SimpMessageType.HEARTBEAT
-                ).permitAll()
-                .simpDestMatchers("/app/**").authenticated()
-                .simpSubscribeDestMatchers("/topic/**", "/queue/**", "/user/**").authenticated()
-                .anyMessage().denyAll()
+                        SimpMessageType.HEARTBEAT)
+                .permitAll()
+                .simpDestMatchers("/app/**")
+                .authenticated()
+                .simpSubscribeDestMatchers("/topic/**", "/queue/**", "/user/**")
+                .authenticated()
+                .anyMessage()
+                .denyAll()
                 .build();
     }
 }

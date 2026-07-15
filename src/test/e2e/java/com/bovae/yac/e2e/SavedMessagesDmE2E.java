@@ -1,11 +1,11 @@
 package com.bovae.yac.e2e;
 
+import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.assertions.LocatorAssertions;
 import org.junit.jupiter.api.Test;
-
-import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 
 /** Saved Messages self-DM and friendly DM naming (guards R2-06). */
 class SavedMessagesDmE2E extends E2ETestBase {

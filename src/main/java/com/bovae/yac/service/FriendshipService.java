@@ -11,14 +11,13 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.FriendshipStatus;
 import com.bovae.yac.repository.FriendshipRepository;
 import com.bovae.yac.repository.UserBanRepository;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -36,8 +35,12 @@ public class FriendshipService {
             throw new ConflictException("Cannot send a friend request to yourself");
         }
 
-        boolean existsForward = friendshipRepository.findByRequesterAndRecipient(requester, recipient).isPresent();
-        boolean existsReverse = friendshipRepository.findByRequesterAndRecipient(recipient, requester).isPresent();
+        boolean existsForward = friendshipRepository
+                .findByRequesterAndRecipient(requester, recipient)
+                .isPresent();
+        boolean existsReverse = friendshipRepository
+                .findByRequesterAndRecipient(recipient, requester)
+                .isPresent();
 
         if (existsForward || existsReverse) {
             throw new ConflictException("A friendship already exists between these users");
@@ -60,15 +63,16 @@ public class FriendshipService {
         LOG.info("Friend request sent: requesterId={}, recipientId={}", requester.getId(), recipient.getId());
 
         // Live arrival in the recipient's Friend Requests panel and navbar badge (R2-03).
-        notificationService.broadcastNotification(recipient,
-                new NotificationEvent("FRIEND_REQUEST_CREATED", null, null, 0));
+        notificationService.broadcastNotification(
+                recipient, new NotificationEvent("FRIEND_REQUEST_CREATED", null, null, 0));
 
         return friendship;
     }
 
     @Transactional
     public Friendship acceptFriendRequest(UUID friendshipId, User acceptingUser) {
-        Friendship friendship = friendshipRepository.findById(friendshipId)
+        Friendship friendship = friendshipRepository
+                .findById(friendshipId)
                 .orElseThrow(() -> new ResourceNotFoundException("Friendship not found: %s".formatted(friendshipId)));
 
         if (!friendship.getRecipient().getId().equals(acceptingUser.getId())) {
@@ -85,15 +89,16 @@ public class FriendshipService {
         LOG.info("Friend request accepted: friendshipId={}, acceptedBy={}", friendshipId, acceptingUser.getId());
 
         // Tell the original requester their request was accepted so their contacts refresh (R2-03).
-        notificationService.broadcastNotification(friendship.getRequester(),
-                new NotificationEvent("FRIEND_REQUEST_ACCEPTED", null, null, 0));
+        notificationService.broadcastNotification(
+                friendship.getRequester(), new NotificationEvent("FRIEND_REQUEST_ACCEPTED", null, null, 0));
 
         return friendship;
     }
 
     @Transactional
     public Friendship declineFriendRequest(UUID friendshipId, User decliningUser) {
-        Friendship friendship = friendshipRepository.findById(friendshipId)
+        Friendship friendship = friendshipRepository
+                .findById(friendshipId)
                 .orElseThrow(() -> new ResourceNotFoundException("Friendship not found: %s".formatted(friendshipId)));
 
         if (!friendship.getRecipient().getId().equals(decliningUser.getId())) {
@@ -114,7 +119,8 @@ public class FriendshipService {
 
     @Transactional
     public void removeFriend(UUID friendshipId, User user) {
-        Friendship friendship = friendshipRepository.findById(friendshipId)
+        Friendship friendship = friendshipRepository
+                .findById(friendshipId)
                 .orElseThrow(() -> new ResourceNotFoundException("Friendship not found: %s".formatted(friendshipId)));
 
         boolean isRequester = friendship.getRequester().getId().equals(user.getId());
@@ -130,17 +136,21 @@ public class FriendshipService {
     }
 
     public boolean areFriends(User userA, User userB) {
-        return friendshipRepository.findByRequesterAndRecipient(userA, userB)
-                .filter(f -> f.getStatus() == FriendshipStatus.ACCEPTED)
-                .isPresent()
-                || friendshipRepository.findByRequesterAndRecipient(userB, userA)
-                .filter(f -> f.getStatus() == FriendshipStatus.ACCEPTED)
-                .isPresent();
+        return friendshipRepository
+                        .findByRequesterAndRecipient(userA, userB)
+                        .filter(f -> f.getStatus() == FriendshipStatus.ACCEPTED)
+                        .isPresent()
+                || friendshipRepository
+                        .findByRequesterAndRecipient(userB, userA)
+                        .filter(f -> f.getStatus() == FriendshipStatus.ACCEPTED)
+                        .isPresent();
     }
 
     public List<FriendshipDto> listFriends(User user) {
-        List<Friendship> asRequester = friendshipRepository.findByRequesterAndStatusWithUsers(user, FriendshipStatus.ACCEPTED);
-        List<Friendship> asRecipient = friendshipRepository.findByRecipientAndStatusWithUsers(user, FriendshipStatus.ACCEPTED);
+        List<Friendship> asRequester =
+                friendshipRepository.findByRequesterAndStatusWithUsers(user, FriendshipStatus.ACCEPTED);
+        List<Friendship> asRecipient =
+                friendshipRepository.findByRecipientAndStatusWithUsers(user, FriendshipStatus.ACCEPTED);
 
         List<Friendship> friends = new ArrayList<>(asRequester.size() + asRecipient.size());
         friends.addAll(asRequester);

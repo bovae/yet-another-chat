@@ -11,15 +11,14 @@ import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -47,9 +46,7 @@ public class DirectChatService {
             }
         }
 
-        String roomName = selfDm
-                ? savedMessagesName(userA.getId())
-                : dmName(userA.getId(), userB.getId());
+        String roomName = selfDm ? savedMessagesName(userA.getId()) : dmName(userA.getId(), userB.getId());
 
         Optional<Room> existing = roomRepository.findByName(roomName);
         if (existing.isPresent()) {
@@ -85,8 +82,12 @@ public class DirectChatService {
             notificationService.ensureMarker(userB, room);
         }
 
-        LOG.info("Direct chat created: roomId={}, userA={}, userB={}, selfDm={}",
-                room.getId(), userA.getId(), userB.getId(), selfDm);
+        LOG.info(
+                "Direct chat created: roomId={}, userA={}, userB={}, selfDm={}",
+                room.getId(),
+                userA.getId(),
+                userB.getId(),
+                selfDm);
 
         return roomMapper.toDto(room);
     }
@@ -120,8 +121,7 @@ public class DirectChatService {
                         other.getId(),
                         other.getUsername(),
                         other.getDisplayName(),
-                        room.getCreatedAt()
-                ));
+                        room.getCreatedAt()));
             } else {
                 // Self-DM (Saved Messages) — single-member DIRECT room
                 result.add(new DirectChatDto(
@@ -130,8 +130,7 @@ public class DirectChatService {
                         user.getId(),
                         user.getUsername(),
                         user.getDisplayName(),
-                        room.getCreatedAt()
-                ));
+                        room.getCreatedAt()));
             }
         }
 

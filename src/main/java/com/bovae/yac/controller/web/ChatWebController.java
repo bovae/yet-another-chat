@@ -13,15 +13,14 @@ import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
+import java.security.Principal;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-
-import java.security.Principal;
-import java.util.List;
-import java.util.UUID;
 
 @Controller
 @RequiredArgsConstructor
@@ -38,8 +37,7 @@ public class ChatWebController {
 
     @GetMapping("/chat")
     public String chat(Model model, Principal principal) {
-        User user = userRepository.findByEmail(principal.getName())
-                .orElseThrow();
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
         model.addAttribute("currentUser", user);
         return "chat/index";
     }
@@ -48,8 +46,7 @@ public class ChatWebController {
     public String roomView(@PathVariable UUID id, Model model, Principal principal) {
         // Owner fetched eagerly — the Room info panel renders owner details and open-in-view is off.
         Room room = roomService.getRoomByIdWithOwner(id);
-        User user = userRepository.findByEmail(principal.getName())
-                .orElseThrow();
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
 
         if (roomBanRepository.existsByRoomAndUser(room, user)) {
             throw new ForbiddenException("You are banned from this room");
@@ -79,7 +76,8 @@ public class ChatWebController {
 
         if (room.getVisibility() == RoomVisibility.DIRECT && room.getName().startsWith("saved-messages-")) {
             model.addAttribute("displayName", "Saved Messages");
-        } else if (room.getVisibility() == RoomVisibility.DIRECT && room.getName().startsWith("dm-")) {
+        } else if (room.getVisibility() == RoomVisibility.DIRECT
+                && room.getName().startsWith("dm-")) {
             String dmDisplayName = members.stream()
                     .filter(m -> !m.userId().equals(user.getId()))
                     .findFirst()

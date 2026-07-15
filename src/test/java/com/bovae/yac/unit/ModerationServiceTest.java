@@ -1,5 +1,12 @@
 package com.bovae.yac.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
@@ -13,6 +20,8 @@ import com.bovae.yac.repository.MessageRepository;
 import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.service.ModerationService;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,16 +29,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link ModerationService}.
@@ -97,9 +96,15 @@ class ModerationServiceTest {
     @Test
     void kickMember_byAdmin_createsBanAndRemovesMember() {
         RoomMember actorMember = RoomMember.builder()
-                .room(room).user(adminUser).role(RoomRole.ADMIN).build();
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
         RoomMember targetMember = RoomMember.builder()
-                .room(room).user(memberUser).role(RoomRole.MEMBER).build();
+                .room(room)
+                .user(memberUser)
+                .role(RoomRole.MEMBER)
+                .build();
 
         when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
                 .thenReturn(Optional.of(actorMember));
@@ -124,15 +129,7 @@ class ModerationServiceTest {
      */
     @Test
     void kickMember_targetIsOwner_throwsForbiddenException() {
-        RoomMember actorMember = RoomMember.builder()
-                .room(room).user(adminUser).role(RoomRole.ADMIN).build();
-        RoomMember ownerMember = RoomMember.builder()
-                .room(room).user(ownerUser).role(RoomRole.OWNER).build();
-
-        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
-                .thenReturn(Optional.of(actorMember));
-        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), ownerUser.getId())))
-                .thenReturn(Optional.of(ownerMember));
+        stubAdminActorAndOwnerTarget();
 
         assertThatThrownBy(() -> moderationService.kickMember(room, adminUser, ownerUser))
                 .isInstanceOf(ForbiddenException.class)
@@ -149,9 +146,15 @@ class ModerationServiceTest {
     @Test
     void grantAdminRole_byOwner_updatesTargetRoleToAdmin() {
         RoomMember ownerMember = RoomMember.builder()
-                .room(room).user(ownerUser).role(RoomRole.OWNER).build();
+                .room(room)
+                .user(ownerUser)
+                .role(RoomRole.OWNER)
+                .build();
         RoomMember targetMember = RoomMember.builder()
-                .room(room).user(memberUser).role(RoomRole.MEMBER).build();
+                .room(room)
+                .user(memberUser)
+                .role(RoomRole.MEMBER)
+                .build();
 
         when(roomMemberRepository.findById(new RoomMemberId(room.getId(), ownerUser.getId())))
                 .thenReturn(Optional.of(ownerMember));
@@ -171,7 +174,10 @@ class ModerationServiceTest {
     @Test
     void grantAdminRole_byNonOwner_throwsForbiddenException() {
         RoomMember actorMember = RoomMember.builder()
-                .room(room).user(adminUser).role(RoomRole.ADMIN).build();
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
 
         when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
                 .thenReturn(Optional.of(actorMember));
@@ -189,15 +195,7 @@ class ModerationServiceTest {
      */
     @Test
     void revokeAdminRole_targetIsOwner_throwsForbiddenException() {
-        RoomMember actorMember = RoomMember.builder()
-                .room(room).user(adminUser).role(RoomRole.ADMIN).build();
-        RoomMember ownerMember = RoomMember.builder()
-                .room(room).user(ownerUser).role(RoomRole.OWNER).build();
-
-        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
-                .thenReturn(Optional.of(actorMember));
-        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), ownerUser.getId())))
-                .thenReturn(Optional.of(ownerMember));
+        stubAdminActorAndOwnerTarget();
 
         assertThatThrownBy(() -> moderationService.revokeAdminRole(room, adminUser, ownerUser))
                 .isInstanceOf(ForbiddenException.class)
@@ -214,7 +212,10 @@ class ModerationServiceTest {
     void deleteMessage_byAdmin_removesMessage() {
         UUID messageId = UUID.randomUUID();
         RoomMember actorMember = RoomMember.builder()
-                .room(room).user(adminUser).role(RoomRole.ADMIN).build();
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
         Message message = Message.builder()
                 .id(messageId)
                 .room(room)
@@ -230,5 +231,27 @@ class ModerationServiceTest {
         moderationService.deleteMessage(room, adminUser, messageId);
 
         verify(messageRepository).delete(message);
+    }
+
+    /**
+     * Stubs the member lookups for an ADMIN actor acting on the room OWNER as target,
+     * the shared arrangement for owner-protection guard tests.
+     */
+    private void stubAdminActorAndOwnerTarget() {
+        RoomMember actorMember = RoomMember.builder()
+                .room(room)
+                .user(adminUser)
+                .role(RoomRole.ADMIN)
+                .build();
+        RoomMember ownerMember = RoomMember.builder()
+                .room(room)
+                .user(ownerUser)
+                .role(RoomRole.OWNER)
+                .build();
+
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), adminUser.getId())))
+                .thenReturn(Optional.of(actorMember));
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), ownerUser.getId())))
+                .thenReturn(Optional.of(ownerMember));
     }
 }

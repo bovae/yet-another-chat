@@ -1,5 +1,11 @@
 package com.bovae.yac.integration;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.service.UserService;
@@ -11,12 +17,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 /**
  * Integration tests for web controllers: page rendering for authenticated users,
@@ -51,40 +51,35 @@ class WebControllerIT {
 
     @Test
     void loginPage_authenticated_returns200() throws Exception {
-        mockMvc.perform(get("/login")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/login").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("auth/login"));
     }
 
     @Test
     void registerPage_authenticated_returns200() throws Exception {
-        mockMvc.perform(get("/register")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/register").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("auth/register"));
     }
 
     @Test
     void chatPage_authenticated_returns200() throws Exception {
-        mockMvc.perform(get("/chat")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/chat").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("chat/index"));
     }
 
     @Test
     void roomsCatalog_authenticated_returns200() throws Exception {
-        mockMvc.perform(get("/rooms/catalog")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/rooms/catalog").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("rooms/catalog"));
     }
 
     @Test
     void profilePage_authenticated_returns200() throws Exception {
-        mockMvc.perform(get("/profile")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/profile").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(view().name("profile/index"));
     }
@@ -93,30 +88,23 @@ class WebControllerIT {
 
     @Test
     void chatPage_unauthenticated_redirectsToLogin() throws Exception {
-        mockMvc.perform(get("/chat"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/login"));
+        mockMvc.perform(get("/chat")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/login"));
     }
 
     // ---- Public paths accessible without authentication ----
 
     @Test
     void loginPage_unauthenticated_returns200() throws Exception {
-        mockMvc.perform(get("/login"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("auth/login"));
+        mockMvc.perform(get("/login")).andExpect(status().isOk()).andExpect(view().name("auth/login"));
     }
 
     @Test
     void registerPage_unauthenticated_returns200() throws Exception {
-        mockMvc.perform(get("/register"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("auth/register"));
+        mockMvc.perform(get("/register")).andExpect(status().isOk()).andExpect(view().name("auth/register"));
     }
 
     @Test
     void healthEndpoint_unauthenticated_returns200() throws Exception {
-        mockMvc.perform(get("/api/health"))
-                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/health")).andExpect(status().isOk());
     }
 }

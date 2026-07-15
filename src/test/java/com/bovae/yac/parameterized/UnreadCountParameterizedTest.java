@@ -1,5 +1,7 @@
 package com.bovae.yac.parameterized;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Room;
@@ -19,8 +21,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Parameterized tests for unread count computation. Unread now equals the number of undeleted
@@ -59,18 +59,13 @@ class UnreadCountParameterizedTest {
     void setUp() {
         UserDto userDto = userService.register("unread@test.com", "unreaduser", "password123");
         user = userRepository.findById(userDto.id()).orElseThrow();
-        room = roomService.getRoomById(
-                roomService.createRoom("unread-room", "test room", RoomVisibility.PUBLIC, user).id());
+        room = roomService.getRoomById(roomService
+                .createRoom("unread-room", "test room", RoomVisibility.PUBLIC, user)
+                .id());
     }
 
     @ParameterizedTest(name = "[{index}] {0} messages, read up to watermark {1} → unread {2}")
-    @CsvSource({
-            "0, 0, 0",
-            "3, 0, 3",
-            "3, 1, 2",
-            "5, 5, 0",
-            "4, 2, 2"
-    })
+    @CsvSource({"0, 0, 0", "3, 0, 3", "3, 1, 2", "5, 5, 0", "4, 2, 2"})
     void computeUnreadCount_reflectsUndeletedRows(int messageCount, long lastRead, int expectedUnread) {
         for (int i = 0; i < messageCount; i++) {
             Room fresh = roomService.getRoomById(room.getId());
@@ -87,7 +82,9 @@ class UnreadCountParameterizedTest {
         Room fresh = roomService.getRoomById(room.getId());
         int actual = notificationService.computeUnreadCount(user, fresh);
 
-        assertEquals(expectedUnread, actual,
+        assertEquals(
+                expectedUnread,
+                actual,
                 "Unread for %d messages read-up-to %d should be %d".formatted(messageCount, lastRead, expectedUnread));
     }
 }

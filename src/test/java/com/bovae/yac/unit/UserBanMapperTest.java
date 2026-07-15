@@ -1,20 +1,19 @@
 package com.bovae.yac.unit;
 
-import com.bovae.yac.model.dto.UserBanDto;
-import com.bovae.yac.model.dto.UserBanMapper;
-import com.bovae.yac.model.entity.User;
-import com.bovae.yac.model.entity.UserBan;
-import org.junit.jupiter.api.Test;
-import org.mapstruct.factory.Mappers;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.bovae.yac.model.dto.UserBanDto;
+import com.bovae.yac.model.dto.UserBanMapper;
+import com.bovae.yac.model.entity.User;
+import com.bovae.yac.model.entity.UserBan;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 class UserBanMapperTest {
 
@@ -71,7 +70,12 @@ class UserBanMapperTest {
 
         UserBan ban = UserBan.builder()
                 .id(UUID.randomUUID())
-                .blocker(User.builder().id(UUID.randomUUID()).username("x").email("x@e.com").passwordHash("h").build())
+                .blocker(User.builder()
+                        .id(UUID.randomUUID())
+                        .username("x")
+                        .email("x@e.com")
+                        .passwordHash("h")
+                        .build())
                 .blocked(blocked)
                 .createdAt(Instant.now())
                 .build();
@@ -90,16 +94,40 @@ class UserBanMapperTest {
 
     @Test
     void toDtoList_mapsAllBans() {
-        User blocker = User.builder().id(UUID.randomUUID()).username("alice").email("a@e.com").passwordHash("h").build();
-        User blocked1 = User.builder().id(UUID.randomUUID()).username("troll1").displayName("Troll 1")
-                .email("t1@e.com").passwordHash("h").build();
-        User blocked2 = User.builder().id(UUID.randomUUID()).username("troll2").displayName("Troll 2")
-                .email("t2@e.com").passwordHash("h").build();
+        User blocker = User.builder()
+                .id(UUID.randomUUID())
+                .username("alice")
+                .email("a@e.com")
+                .passwordHash("h")
+                .build();
+        User blocked1 = User.builder()
+                .id(UUID.randomUUID())
+                .username("troll1")
+                .displayName("Troll 1")
+                .email("t1@e.com")
+                .passwordHash("h")
+                .build();
+        User blocked2 = User.builder()
+                .id(UUID.randomUUID())
+                .username("troll2")
+                .displayName("Troll 2")
+                .email("t2@e.com")
+                .passwordHash("h")
+                .build();
 
         List<UserBan> bans = List.of(
-                UserBan.builder().id(UUID.randomUUID()).blocker(blocker).blocked(blocked1).createdAt(Instant.now()).build(),
-                UserBan.builder().id(UUID.randomUUID()).blocker(blocker).blocked(blocked2).createdAt(Instant.now()).build()
-        );
+                UserBan.builder()
+                        .id(UUID.randomUUID())
+                        .blocker(blocker)
+                        .blocked(blocked1)
+                        .createdAt(Instant.now())
+                        .build(),
+                UserBan.builder()
+                        .id(UUID.randomUUID())
+                        .blocker(blocker)
+                        .blocked(blocked2)
+                        .createdAt(Instant.now())
+                        .build());
 
         List<UserBanDto> dtos = mapper.toDtoList(bans);
 

@@ -8,6 +8,4 @@ import org.springframework.util.unit.DataSize;
 public record FileStorageProperties(
         @DefaultValue("./file-storage") String basePath,
         @DefaultValue("20MB") DataSize maxFileSize,
-        @DefaultValue("3MB") DataSize maxImageSize
-) {
-}
+        @DefaultValue("3MB") DataSize maxImageSize) {}

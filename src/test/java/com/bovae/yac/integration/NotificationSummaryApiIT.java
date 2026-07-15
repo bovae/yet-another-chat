@@ -1,5 +1,11 @@
 package com.bovae.yac.integration;
 
+import static org.hamcrest.Matchers.is;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Room;
@@ -21,12 +27,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.hamcrest.Matchers.is;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Integration tests for the navbar aggregate summary endpoint (R3-10):
@@ -76,8 +76,9 @@ class NotificationSummaryApiIT {
     @Test
     void summary_reportsUnreadFriendRequestAndInvitationCounts() throws Exception {
         // One unread message for bob: he joins a public room, then alice posts.
-        Room room = roomService.getRoomById(
-                roomService.createRoom("summary-room", "desc", RoomVisibility.PUBLIC, alice).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("summary-room", "desc", RoomVisibility.PUBLIC, alice)
+                .id());
         roomMemberService.joinPublicRoom(room, bob);
         messageService.sendMessage(room, alice, "hello bob", null);
 
@@ -85,8 +86,9 @@ class NotificationSummaryApiIT {
         friendshipService.sendFriendRequest(alice, bob, null);
 
         // One pending room invitation for bob.
-        Room privateRoom = roomService.getRoomById(
-                roomService.createRoom("secret-room", "desc", RoomVisibility.PRIVATE, alice).id());
+        Room privateRoom = roomService.getRoomById(roomService
+                .createRoom("secret-room", "desc", RoomVisibility.PRIVATE, alice)
+                .id());
         roomInvitationRepository.save(RoomInvitation.builder()
                 .room(privateRoom)
                 .inviter(alice)
