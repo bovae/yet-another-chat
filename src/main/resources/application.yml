@@ -55,6 +55,9 @@ spring:
   thymeleaf:
     cache: true
 
+springdoc:
+  packages-to-scan: com.bovae.yac.controller.api
+
 server:
   port: 8080
 

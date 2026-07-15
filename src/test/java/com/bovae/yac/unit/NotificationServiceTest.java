@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bovae.yac.model.entity.Room;
+import com.bovae.yac.model.entity.RoomMember;
 import com.bovae.yac.model.entity.UnreadMarker;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
@@ -12,11 +13,17 @@ import com.bovae.yac.repository.MessageRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UnreadMarkerRepository;
 import com.bovae.yac.service.NotificationService;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -129,5 +136,106 @@ class NotificationServiceTest {
         when(unreadMarkerRepository.findByUserAndRoom(user, room)).thenReturn(Optional.of(marker));
 
         assertThat(notificationService.computeUnreadCount(user, room)).isZero();
+    }
+
+    // --- markRoomAsRead keeps any cached marker consistent with the upserted watermark ---
+
+    /**
+     * The native upsert bypasses the persistence context, so a same-transaction cached marker is
+     * advanced in-memory only when it lags the new watermark (null or below), never regressed.
+     */
+    @ParameterizedTest(name = "existing={0} → cached={1}")
+    @MethodSource("cachedMarkerCases")
+    void markRoomAsRead_advancesCachedMarkerOnlyWhenStale(Long existing, long expectedCached) {
+        when(roomRepository.nextWatermarkOf(roomId)).thenReturn(10L);
+        UnreadMarker marker = UnreadMarker.builder()
+                .user(user)
+                .room(room)
+                .lastReadWatermark(existing)
+                .build();
+        when(unreadMarkerRepository.findByUserAndRoom(user, room)).thenReturn(Optional.of(marker));
+
+        notificationService.markRoomAsRead(user, room);
+
+        verify(unreadMarkerRepository).upsertLastRead(user.getId(), roomId, 9L);
+        assertThat(marker.getLastReadWatermark()).isEqualTo(expectedCached);
+    }
+
+    static Stream<Arguments> cachedMarkerCases() {
+        return Stream.of(Arguments.of(null, 9L), Arguments.of(5L, 9L), Arguments.of(20L, 20L));
+    }
+
+    // --- computeUnreadCounts (batch) ---
+
+    /**
+     * Batch counts derive from undeleted watermarks past each member's marker; a member whose
+     * marker has a null watermark and a member with no marker at all both count zero.
+     */
+    @Test
+    void computeUnreadCounts_countsUndeletedMessagesPastEachMemberMarker() {
+        User other = otherUser();
+        RoomMember memberUser = RoomMember.builder().room(room).user(user).build();
+        RoomMember memberOther = RoomMember.builder().room(room).user(other).build();
+
+        when(unreadMarkerRepository.findByRoom(room)).thenReturn(List.of(markerOf(user, 5L), markerOf(other, null)));
+        when(messageRepository.findWatermarksByRoomAndWatermarkGreaterThan(room, 5L))
+                .thenReturn(List.of(6L, 7L, 8L));
+
+        Map<UUID, Integer> counts = notificationService.computeUnreadCounts(room, List.of(memberUser, memberOther));
+
+        assertThat(counts.get(user.getId())).isEqualTo(3);
+        assertThat(counts.get(other.getId())).isZero();
+    }
+
+    /** With no markers at all, every member's batch count is zero and no watermark query runs. */
+    @Test
+    void computeUnreadCounts_allZero_whenNoMarkersExist() {
+        RoomMember memberUser = RoomMember.builder().room(room).user(user).build();
+        when(unreadMarkerRepository.findByRoom(room)).thenReturn(List.of());
+
+        Map<UUID, Integer> counts = notificationService.computeUnreadCounts(room, List.of(memberUser));
+
+        assertThat(counts.get(user.getId())).isZero();
+    }
+
+    /**
+     * A watermark strictly greater than the member's marker counts; one equal to (boundary) or
+     * below the marker does not. The member with lastRead=7 against watermarks [6,7,8,9] pins the
+     * strict comparison: equal (7) and below (6) are excluded, so only 8 and 9 count.
+     */
+    @Test
+    void computeUnreadCounts_countsOnlyWatermarksStrictlyAboveEachMemberMarker() {
+        User other = otherUser();
+        RoomMember memberUser = RoomMember.builder().room(room).user(user).build();
+        RoomMember memberOther = RoomMember.builder().room(room).user(other).build();
+
+        when(unreadMarkerRepository.findByRoom(room)).thenReturn(List.of(markerOf(user, 5L), markerOf(other, 7L)));
+        // minLastRead = 5; the watermark list includes 7 (== other's marker) and 6 (< other's marker).
+        when(messageRepository.findWatermarksByRoomAndWatermarkGreaterThan(room, 5L))
+                .thenReturn(List.of(6L, 7L, 8L, 9L));
+
+        Map<UUID, Integer> counts = notificationService.computeUnreadCounts(room, List.of(memberUser, memberOther));
+
+        assertThat(counts.get(user.getId())).isEqualTo(4);
+        assertThat(counts.get(other.getId())).isEqualTo(2);
+    }
+
+    // --- helpers ---
+
+    private static User otherUser() {
+        return User.builder()
+                .id(UUID.randomUUID())
+                .email("other@test.com")
+                .username("other")
+                .passwordHash("$2a$10$hash")
+                .build();
+    }
+
+    private UnreadMarker markerOf(User markerUser, Long lastReadWatermark) {
+        return UnreadMarker.builder()
+                .user(markerUser)
+                .room(room)
+                .lastReadWatermark(lastReadWatermark)
+                .build();
     }
 }

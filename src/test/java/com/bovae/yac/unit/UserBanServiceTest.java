@@ -21,6 +21,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -223,5 +225,24 @@ class UserBanServiceTest {
                 .hasMessageContaining("yourself");
 
         verify(userBanRepository, never()).save(any());
+    }
+
+    // -----------------------------------------------------------------------
+    // isBannedBy passes through the (blocker, blocked) existence check
+    // -----------------------------------------------------------------------
+
+    /**
+     * Validates isBannedBy returns exactly the repository's existence result for the
+     * (blocker, blocked) pair, confirming the argument order is preserved: isBannedBy
+     * asks whether {@code blocked} is banned by {@code blocker}.
+     */
+    @ParameterizedTest(name = "existsByBlockerAndBlocked={0} -> isBannedBy={0}")
+    @ValueSource(booleans = {true, false})
+    void isBannedBy_returnsRepositoryExistenceResult(boolean banned) {
+        when(userBanRepository.existsByBlockerAndBlocked(userA, userB)).thenReturn(banned);
+
+        boolean result = userBanService.isBannedBy(userB, userA);
+
+        assertThat(result).isEqualTo(banned);
     }
 }

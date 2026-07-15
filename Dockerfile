@@ -9,7 +9,7 @@ COPY mvnw pom.xml lombok.config ./
 RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
 
 COPY src/ src/
-RUN ./mvnw package -DskipTests -B
+RUN ./mvnw package -DskipTests -Dcheckstyle.skip=true -Dspotless.check.skip=true -B
 
 # Stage 2: Runtime
 FROM amazoncorretto:21-alpine

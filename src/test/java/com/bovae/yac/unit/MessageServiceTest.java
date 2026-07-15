@@ -9,21 +9,30 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bovae.yac.exception.ForbiddenException;
+import com.bovae.yac.exception.ResourceNotFoundException;
+import com.bovae.yac.model.dto.ChatMessageResponse;
 import com.bovae.yac.model.dto.MessagePage;
+import com.bovae.yac.model.dto.RoomMemberDto;
+import com.bovae.yac.model.entity.Attachment;
 import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
+import com.bovae.yac.model.entity.RoomMember;
+import com.bovae.yac.model.entity.RoomMemberId;
 import com.bovae.yac.model.entity.User;
+import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.AttachmentRepository;
 import com.bovae.yac.repository.MessageRepository;
 import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
+import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.FileStorageService;
 import com.bovae.yac.service.FriendshipService;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.UserBanService;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +40,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -72,6 +83,9 @@ class MessageServiceTest {
 
     @Mock
     private FileStorageService fileStorageService;
+
+    @Mock
+    private UserRepository userRepository;
 
     @InjectMocks
     private MessageService messageService;
@@ -156,6 +170,25 @@ class MessageServiceTest {
                 .hasMessageContaining("exceeds maximum size");
 
         verify(messageRepository, never()).save(any());
+    }
+
+    /**
+     * Validates CP 17 boundary: content of exactly {@code MAX_CONTENT_BYTES} (3072) bytes is
+     * accepted — the size limit is inclusive, so the check rejects only strictly larger content.
+     */
+    @Test
+    void sendMessage_withContentExactlyAt3072Bytes_persistsMessage() {
+        when(roomMemberService.isMember(room, sender)).thenReturn(true);
+        when(roomRepository.nextWatermarkOf(room.getId())).thenReturn(6L);
+        when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Exactly 3072 ASCII bytes — the inclusive boundary that must NOT be rejected.
+        String maxContent = "a".repeat(3072);
+
+        Message result = messageService.sendMessage(room, sender, maxContent, null);
+
+        assertThat(result.getContent()).isEqualTo(maxContent);
+        verify(messageRepository).save(any(Message.class));
     }
 
     /**
@@ -301,5 +334,500 @@ class MessageServiceTest {
         // Rendered oldest-first.
         assertThat(page.messages().get(0).watermark()).isEqualTo(2L);
         assertThat(page.messages().get(1).watermark()).isEqualTo(3L);
+
+        // One extra row (size + 1) is requested so the surplus row can flag hasMore.
+        ArgumentCaptor<PageRequest> pageRequestCaptor = ArgumentCaptor.forClass(PageRequest.class);
+        verify(messageRepository)
+                .findByRoomAndWatermarkLessThanWithFetches(eq(room), eq(Long.MAX_VALUE), pageRequestCaptor.capture());
+        assertThat(pageRequestCaptor.getValue().getPageSize()).isEqualTo(pageSize + 1);
+    }
+
+    /**
+     * Validates CP 23 boundary: when exactly {@code size} rows come back (no surplus row),
+     * hasMore is false and all rows are returned — the strict {@code >} comparison must not
+     * treat a full-but-not-overflowing page as "more available".
+     */
+    @Test
+    void getMessageHistory_hasMoreIsFalse_whenExactlySizeMessagesReturned() {
+        int pageSize = 2;
+
+        Message msg1 = Message.builder()
+                .id(UUID.randomUUID())
+                .room(room)
+                .sender(sender)
+                .content("First")
+                .watermark(1L)
+                .build();
+        Message msg2 = Message.builder()
+                .id(UUID.randomUUID())
+                .room(room)
+                .sender(sender)
+                .content("Second")
+                .watermark(2L)
+                .build();
+
+        // Exactly `size` rows, no surplus row, so no older messages remain.
+        when(messageRepository.findByRoomAndWatermarkLessThanWithFetches(
+                        eq(room), eq(Long.MAX_VALUE), any(PageRequest.class)))
+                .thenReturn(List.of(msg2, msg1));
+
+        MessagePage page = messageService.getMessageHistory(room, null, pageSize);
+
+        assertThat(page.hasMore()).isFalse();
+        assertThat(page.messages()).hasSize(pageSize);
+    }
+
+    // --- sendMessage: reply, content, and access guards ---
+
+    @Test
+    void sendMessage_withReplyTo_preservesOriginalReplyToId() {
+        when(roomMemberService.isMember(room, sender)).thenReturn(true);
+        when(roomRepository.nextWatermarkOf(room.getId())).thenReturn(6L);
+        when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message replyTo = Message.builder()
+                .id(UUID.randomUUID())
+                .room(room)
+                .sender(sender)
+                .content("Parent")
+                .watermark(1L)
+                .build();
+
+        Message result = messageService.sendMessage(room, sender, "Reply", replyTo);
+
+        assertThat(result.getReplyTo()).isEqualTo(replyTo);
+        assertThat(result.getOriginalReplyToId()).isEqualTo(replyTo.getId());
+    }
+
+    @ParameterizedTest(name = "content=[{0}]")
+    @NullAndEmptySource
+    void sendMessage_withNullOrEmptyContent_throwsIllegalArgumentException(String content) {
+        when(roomMemberService.isMember(room, sender)).thenReturn(true);
+
+        assertThatThrownBy(() -> messageService.sendMessage(room, sender, content, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be empty");
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void sendMessage_whenRoomBanned_throwsForbiddenException() {
+        when(roomMemberService.isMember(room, sender)).thenReturn(true);
+        when(roomBanRepository.existsByRoomAndUser(room, sender)).thenReturn(true);
+
+        assertThatThrownBy(() -> messageService.sendMessage(room, sender, "Hello", null))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("banned from this room");
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    // --- sendMessage in a DIRECT room: friendship / ban checks ---
+
+    @Test
+    void sendMessage_inSelfDirectRoom_skipsFriendAndBanChecks() {
+        Room directRoom = Room.builder()
+                .id(UUID.randomUUID())
+                .name("saved-messages")
+                .visibility(RoomVisibility.DIRECT)
+                .owner(sender)
+                .nextWatermark(1L)
+                .build();
+
+        when(roomMemberService.isMember(directRoom, sender)).thenReturn(true);
+        // Self-DM: only one distinct participant, so friend/ban checks are skipped entirely.
+        when(roomMemberService.listMembers(directRoom))
+                .thenReturn(List.of(new RoomMemberDto(sender.getId(), "sender", null, RoomRole.OWNER, Instant.now())));
+        when(roomRepository.nextWatermarkOf(directRoom.getId())).thenReturn(2L);
+        when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message result = messageService.sendMessage(directRoom, sender, "Note to self", null);
+
+        assertThat(result.getContent()).isEqualTo("Note to self");
+        verify(messageRepository).save(any(Message.class));
+        verify(userRepository, never()).findById(any());
+        verify(userBanService, never()).isBanExistsBetween(any(), any());
+        verify(friendshipService, never()).areFriends(any(), any());
+    }
+
+    @Test
+    void sendMessage_inDirectRoom_whenOtherParticipantMissing_throwsResourceNotFoundException() {
+        Room directRoom = directRoomWithSenderAndOther();
+
+        when(roomMemberService.isMember(directRoom, sender)).thenReturn(true);
+        when(roomMemberService.listMembers(directRoom)).thenReturn(directMembers());
+        when(userRepository.findById(otherUser.getId())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messageService.sendMessage(directRoom, sender, "Hi", null))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("User not found");
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void sendMessage_inDirectRoom_whenNotFriends_throwsForbiddenException() {
+        Room directRoom = directRoomWithSenderAndOther();
+
+        when(roomMemberService.isMember(directRoom, sender)).thenReturn(true);
+        when(roomMemberService.listMembers(directRoom)).thenReturn(directMembers());
+        when(userRepository.findById(otherUser.getId())).thenReturn(Optional.of(otherUser));
+        when(userBanService.isBanExistsBetween(sender, otherUser)).thenReturn(false);
+        when(friendshipService.areFriends(sender, otherUser)).thenReturn(false);
+
+        assertThatThrownBy(() -> messageService.sendMessage(directRoom, sender, "Hi", null))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("must be friends");
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    // --- editMessage: not-found and null-sender guards ---
+
+    @Test
+    void editMessage_whenMessageNotFound_throwsResourceNotFoundException() {
+        UUID messageId = UUID.randomUUID();
+        when(messageRepository.findByIdWithSenderAndReplyTo(messageId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messageService.editMessage(messageId, sender, "New content"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Message not found");
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void editMessage_whenSenderIsNull_throwsForbiddenException() {
+        UUID messageId = UUID.randomUUID();
+        Message orphanMessage = Message.builder()
+                .id(messageId)
+                .room(room)
+                .sender(null)
+                .content("Original")
+                .watermark(3L)
+                .build();
+
+        when(messageRepository.findByIdWithSenderAndReplyTo(messageId)).thenReturn(Optional.of(orphanMessage));
+
+        assertThatThrownBy(() -> messageService.editMessage(messageId, sender, "New content"))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("Only the author");
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    /**
+     * Validates CP 17/R1-27: editing enforces the same content-size guard as sending, so
+     * oversized new content is rejected and the message is never persisted.
+     */
+    @Test
+    void editMessage_withContentExceeding3072Bytes_throwsIllegalArgumentException() {
+        UUID messageId = UUID.randomUUID();
+        Message existingMessage = Message.builder()
+                .id(messageId)
+                .room(room)
+                .sender(sender)
+                .content("Original content")
+                .edited(false)
+                .watermark(3L)
+                .build();
+
+        when(messageRepository.findByIdWithSenderAndReplyTo(messageId)).thenReturn(Optional.of(existingMessage));
+        when(roomMemberService.isMember(room, sender)).thenReturn(true);
+
+        String oversizedContent = "a".repeat(3073);
+
+        assertThatThrownBy(() -> messageService.editMessage(messageId, sender, oversizedContent))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("exceeds maximum size");
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    // --- deleteMessage: room mismatch, membership, role, and attachment cleanup ---
+
+    @Test
+    void deleteMessage_whenMessageBelongsToDifferentRoom_throwsResourceNotFoundException() {
+        UUID messageId = UUID.randomUUID();
+        Room otherRoom = Room.builder()
+                .id(UUID.randomUUID())
+                .name("other-room")
+                .visibility(RoomVisibility.PUBLIC)
+                .owner(sender)
+                .nextWatermark(1L)
+                .build();
+        Message message = Message.builder()
+                .id(messageId)
+                .room(otherRoom)
+                .sender(sender)
+                .content("Elsewhere")
+                .watermark(1L)
+                .build();
+
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+
+        assertThatThrownBy(() -> messageService.deleteMessage(messageId, sender, room))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("not found in this room");
+
+        verify(messageRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteMessage_byNonMember_throwsForbiddenException() {
+        UUID messageId = UUID.randomUUID();
+        Message message = Message.builder()
+                .id(messageId)
+                .room(room)
+                .sender(sender)
+                .content("Someone else's")
+                .watermark(1L)
+                .build();
+
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), otherUser.getId())))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messageService.deleteMessage(messageId, otherUser, room))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("not a member");
+
+        verify(messageRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteMessage_byNonAuthorMemberWithoutModeratorRole_throwsForbiddenException() {
+        UUID messageId = UUID.randomUUID();
+        Message message = Message.builder()
+                .id(messageId)
+                .room(room)
+                .sender(sender)
+                .content("Someone else's")
+                .watermark(1L)
+                .build();
+        RoomMember plainMember = RoomMember.builder()
+                .room(room)
+                .user(otherUser)
+                .role(RoomRole.MEMBER)
+                .build();
+
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), otherUser.getId())))
+                .thenReturn(Optional.of(plainMember));
+
+        assertThatThrownBy(() -> messageService.deleteMessage(messageId, otherUser, room))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("author or an admin");
+
+        verify(messageRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteMessage_byNonAuthorAdmin_removesMessage() {
+        UUID messageId = UUID.randomUUID();
+        // Orphaned message (sender == null) so the author short-circuit is skipped and
+        // membership/role is checked instead.
+        Message message = Message.builder()
+                .id(messageId)
+                .room(room)
+                .sender(null)
+                .content("Orphaned")
+                .watermark(1L)
+                .build();
+        RoomMember admin = RoomMember.builder()
+                .room(room)
+                .user(otherUser)
+                .role(RoomRole.ADMIN)
+                .build();
+
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(roomMemberRepository.findById(new RoomMemberId(room.getId(), otherUser.getId())))
+                .thenReturn(Optional.of(admin));
+
+        messageService.deleteMessage(messageId, otherUser, room);
+
+        verify(messageRepository).delete(message);
+    }
+
+    @Test
+    void deleteMessage_withAttachments_schedulesFileDeletionAfterCommit() {
+        UUID messageId = UUID.randomUUID();
+        Message message = Message.builder()
+                .id(messageId)
+                .room(room)
+                .sender(sender)
+                .content("Has attachment")
+                .watermark(1L)
+                .build();
+        Attachment attachment = Attachment.builder()
+                .id(UUID.randomUUID())
+                .message(message)
+                .originalFileName("photo.png")
+                .storagePath("uploads/photo.png")
+                .fileSize(1024L)
+                .contentType("image/png")
+                .build();
+
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(attachmentRepository.findByMessageId(messageId)).thenReturn(List.of(attachment));
+
+        messageService.deleteMessage(messageId, sender, room);
+
+        verify(messageRepository).delete(message);
+        verify(fileStorageService).deleteFilesAfterCommit(List.of(Paths.get("uploads/photo.png")));
+    }
+
+    // --- getMessageHistory: batch attachment loading ---
+
+    @Test
+    void getMessageHistory_attachesBatchLoadedAttachmentsToResponses() {
+        Message message = Message.builder()
+                .id(UUID.randomUUID())
+                .room(room)
+                .sender(sender)
+                .content("With file")
+                .watermark(1L)
+                .build();
+        message.setCreatedAt(Instant.now());
+        Attachment attachment = Attachment.builder()
+                .id(UUID.randomUUID())
+                .message(message)
+                .originalFileName("doc.pdf")
+                .storagePath("uploads/doc.pdf")
+                .fileSize(2048L)
+                .contentType("application/pdf")
+                .build();
+
+        when(messageRepository.findByRoomAndWatermarkLessThanWithFetches(
+                        eq(room), eq(Long.MAX_VALUE), any(PageRequest.class)))
+                .thenReturn(List.of(message));
+        when(attachmentRepository.findByMessageIdIn(List.of(message.getId()))).thenReturn(List.of(attachment));
+
+        MessagePage page = messageService.getMessageHistory(room, null, 10);
+
+        assertThat(page.hasMore()).isFalse();
+        assertThat(page.messages()).hasSize(1);
+        assertThat(page.messages().get(0).attachments()).hasSize(1);
+        assertThat(page.messages().get(0).attachments().get(0).originalFileName())
+                .isEqualTo("doc.pdf");
+    }
+
+    // --- getMessageResponse: reply metadata and deleted-user rendering ---
+
+    @Test
+    void getMessageResponse_whenMessageNotFound_throwsResourceNotFoundException() {
+        UUID messageId = UUID.randomUUID();
+        when(messageRepository.findByIdWithSenderAndReplyTo(messageId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messageService.getMessageResponse(messageId))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Message not found");
+    }
+
+    @Test
+    void getMessageResponse_withReplyTo_includesReplySenderAndSnippet() {
+        Message replyTo = Message.builder()
+                .id(UUID.randomUUID())
+                .room(room)
+                .sender(sender)
+                .content("Short parent")
+                .watermark(1L)
+                .build();
+        Message message = messageWithReplyTo(replyTo, null);
+
+        when(messageRepository.findByIdWithSenderAndReplyTo(message.getId())).thenReturn(Optional.of(message));
+
+        ChatMessageResponse response = messageService.getMessageResponse(message.getId());
+
+        assertThat(response.replyToId()).isEqualTo(replyTo.getId());
+        assertThat(response.replyToSenderUsername()).isEqualTo("sender");
+        assertThat(response.replyToContentSnippet()).isEqualTo("Short parent");
+    }
+
+    @Test
+    void getMessageResponse_withDeletedReplySenderAndLongContent_usesDeletedUserAndTruncatesSnippet() {
+        String longContent = "x".repeat(150);
+        Message replyTo = Message.builder()
+                .id(UUID.randomUUID())
+                .room(room)
+                .sender(null)
+                .content(longContent)
+                .watermark(1L)
+                .build();
+        Message message = messageWithReplyTo(replyTo, null);
+
+        when(messageRepository.findByIdWithSenderAndReplyTo(message.getId())).thenReturn(Optional.of(message));
+
+        ChatMessageResponse response = messageService.getMessageResponse(message.getId());
+
+        assertThat(response.replyToSenderUsername()).isEqualTo("Deleted user");
+        assertThat(response.replyToContentSnippet()).hasSize(100);
+    }
+
+    @Test
+    void getMessageResponse_withDeletedReplyTarget_fallsBackToOriginalReplyToId() {
+        UUID originalReplyToId = UUID.randomUUID();
+        Message message = messageWithReplyTo(null, originalReplyToId);
+
+        when(messageRepository.findByIdWithSenderAndReplyTo(message.getId())).thenReturn(Optional.of(message));
+
+        ChatMessageResponse response = messageService.getMessageResponse(message.getId());
+
+        assertThat(response.replyToId()).isEqualTo(originalReplyToId);
+        assertThat(response.replyToSenderUsername()).isNull();
+        assertThat(response.replyToContentSnippet()).isNull();
+    }
+
+    @Test
+    void getMessageResponse_withNullSender_rendersDeletedUser() {
+        Message message = Message.builder()
+                .id(UUID.randomUUID())
+                .room(room)
+                .sender(null)
+                .content("Orphaned message")
+                .watermark(1L)
+                .build();
+        message.setCreatedAt(Instant.now());
+
+        when(messageRepository.findByIdWithSenderAndReplyTo(message.getId())).thenReturn(Optional.of(message));
+
+        ChatMessageResponse response = messageService.getMessageResponse(message.getId());
+
+        assertThat(response.senderId()).isNull();
+        assertThat(response.senderUsername()).isEqualTo("Deleted user");
+        assertThat(response.senderDisplayName()).isNull();
+    }
+
+    // --- helpers ---
+
+    private Room directRoomWithSenderAndOther() {
+        return Room.builder()
+                .id(UUID.randomUUID())
+                .name("dm")
+                .visibility(RoomVisibility.DIRECT)
+                .owner(sender)
+                .nextWatermark(1L)
+                .build();
+    }
+
+    private List<RoomMemberDto> directMembers() {
+        return List.of(
+                new RoomMemberDto(sender.getId(), "sender", null, RoomRole.MEMBER, Instant.now()),
+                new RoomMemberDto(otherUser.getId(), "other", null, RoomRole.MEMBER, Instant.now()));
+    }
+
+    private Message messageWithReplyTo(Message replyTo, UUID originalReplyToId) {
+        Message message = Message.builder()
+                .id(UUID.randomUUID())
+                .room(room)
+                .sender(sender)
+                .content("Child message")
+                .replyTo(replyTo)
+                .originalReplyToId(originalReplyToId)
+                .watermark(2L)
+                .build();
+        message.setCreatedAt(Instant.now());
+        return message;
     }
 }

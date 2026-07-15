@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.bovae.yac.exception.ConflictException;
 import com.bovae.yac.exception.ForbiddenException;
+import com.bovae.yac.exception.ResourceNotFoundException;
+import com.bovae.yac.model.dto.MyRoomEntry;
 import com.bovae.yac.model.dto.RoomCatalogEntry;
 import com.bovae.yac.model.dto.RoomDto;
 import com.bovae.yac.model.dto.RoomMapper;
@@ -143,6 +145,18 @@ class RoomServiceTest {
                 .toList();
 
         assertThat(names).containsExactly("beta", "alpha", "gamma");
+
+        // The grouped unread query receives the actual room ids (not nulls) for every membership.
+        ArgumentCaptor<List<UUID>> roomIdsCaptor = ArgumentCaptor.captor();
+        verify(messageRepository).countUnreadPerRoom(eq(owner.getId()), roomIdsCaptor.capture());
+        assertThat(roomIdsCaptor.getValue())
+                .containsExactly(
+                        alpha.getRoom().getId(),
+                        beta.getRoom().getId(),
+                        gamma.getRoom().getId());
+
+        // No DIRECT rooms here, so the counterpart lookup must be skipped entirely.
+        verify(roomMemberRepository, never()).findByRoomIdInWithUsers(any());
     }
 
     private RoomMember membershipOf(String roomName) {
@@ -200,6 +214,9 @@ class RoomServiceTest {
         RoomMember savedMember = memberCaptor.getValue();
         assertThat(savedMember.getUser()).isEqualTo(owner);
         assertThat(savedMember.getRole()).isEqualTo(RoomRole.OWNER);
+
+        // The owner's unread marker is seeded so the new room starts read for its creator.
+        verify(notificationService).ensureMarker(eq(owner), any(Room.class));
     }
 
     /**
@@ -260,6 +277,7 @@ class RoomServiceTest {
         verify(messageRepository).nullifyReplyToByRoom(existingRoom);
         verify(messageRepository).deleteByRoom(existingRoom);
         verify(roomRepository).delete(existingRoom);
+        verify(fileStorageService).deleteRoomDirectoryAfterCommit(existingRoom.getId());
     }
 
     /**
@@ -329,5 +347,266 @@ class RoomServiceTest {
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getTotalElements()).isZero();
+    }
+
+    // --- deleteRoom (not found) ---
+
+    /**
+     * Validates Requirement 3.4: deleting a room that does not exist throws ResourceNotFoundException.
+     */
+    @Test
+    void deleteRoom_roomNotFound_throwsResourceNotFoundException() {
+        UUID roomId = UUID.randomUUID();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> roomService.deleteRoom(roomId, owner))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Room not found");
+
+        verify(roomRepository, never()).delete(any());
+    }
+
+    // --- getRoomByIdWithOwner / getRoomDtoById ---
+
+    @Test
+    void getRoomByIdWithOwner_returnsRoom_whenFound() {
+        UUID roomId = existingRoom.getId();
+        when(roomRepository.findByIdWithOwner(roomId)).thenReturn(Optional.of(existingRoom));
+
+        Room result = roomService.getRoomByIdWithOwner(roomId);
+
+        assertThat(result).isSameAs(existingRoom);
+    }
+
+    @Test
+    void getRoomByIdWithOwner_throwsResourceNotFound_whenRoomMissing() {
+        UUID roomId = UUID.randomUUID();
+        when(roomRepository.findByIdWithOwner(roomId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> roomService.getRoomByIdWithOwner(roomId))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Room not found");
+    }
+
+    @Test
+    void getRoomDtoById_returnsDto_whenFound() {
+        UUID roomId = existingRoom.getId();
+        when(roomRepository.findByIdWithOwner(roomId)).thenReturn(Optional.of(existingRoom));
+        when(roomMapper.toDto(existingRoom)).thenReturn(toDto(existingRoom));
+
+        RoomDto result = roomService.getRoomDtoById(roomId);
+
+        assertThat(result.id()).isEqualTo(existingRoom.getId());
+        assertThat(result.name()).isEqualTo(existingRoom.getName());
+    }
+
+    @Test
+    void getRoomDtoById_throwsResourceNotFound_whenRoomMissing() {
+        UUID roomId = UUID.randomUUID();
+        when(roomRepository.findByIdWithOwner(roomId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> roomService.getRoomDtoById(roomId))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Room not found");
+    }
+
+    // --- updateRoom ---
+
+    @Test
+    void updateRoom_roomNotFound_throwsResourceNotFoundException() {
+        UUID roomId = UUID.randomUUID();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> roomService.updateRoom(roomId, owner, "new-name", "desc", RoomVisibility.PUBLIC))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Room not found");
+
+        verify(roomRepository, never()).save(any());
+    }
+
+    @Test
+    void updateRoom_byNonOwner_throwsForbiddenException() {
+        UUID roomId = existingRoom.getId();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(existingRoom));
+
+        assertThatThrownBy(() -> roomService.updateRoom(roomId, otherUser, "new-name", "desc", RoomVisibility.PUBLIC))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("Only the room owner");
+
+        verify(roomRepository, never()).save(any());
+    }
+
+    @Test
+    void updateRoom_directRoom_throwsForbiddenException() {
+        Room directRoom = Room.builder()
+                .id(UUID.randomUUID())
+                .name("dm")
+                .visibility(RoomVisibility.DIRECT)
+                .owner(owner)
+                .nextWatermark(1L)
+                .build();
+        UUID roomId = directRoom.getId();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(directRoom));
+
+        assertThatThrownBy(() -> roomService.updateRoom(roomId, owner, "new-name", "desc", RoomVisibility.PUBLIC))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("DIRECT rooms cannot be modified");
+
+        verify(roomRepository, never()).save(any());
+    }
+
+    @Test
+    void updateRoom_convertToDirect_throwsForbiddenException() {
+        UUID roomId = existingRoom.getId();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(existingRoom));
+
+        assertThatThrownBy(() -> roomService.updateRoom(roomId, owner, "new-name", "desc", RoomVisibility.DIRECT))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("converted to DIRECT");
+
+        verify(roomRepository, never()).save(any());
+    }
+
+    @Test
+    void updateRoom_duplicateName_throwsConflictException() {
+        UUID roomId = existingRoom.getId();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(existingRoom));
+        when(roomRepository.existsByName("taken-name")).thenReturn(true);
+
+        assertThatThrownBy(() -> roomService.updateRoom(roomId, owner, "taken-name", "desc", RoomVisibility.PUBLIC))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already taken");
+
+        verify(roomRepository, never()).save(any());
+    }
+
+    @Test
+    void updateRoom_allFieldsProvided_updatesNameDescriptionAndVisibility() {
+        UUID roomId = existingRoom.getId();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(existingRoom));
+        when(roomRepository.existsByName("renamed")).thenReturn(false);
+        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(roomMapper.toDto(any(Room.class))).thenAnswer(invocation -> toDto(invocation.getArgument(0)));
+
+        RoomDto result = roomService.updateRoom(roomId, owner, "renamed", "new description", RoomVisibility.PRIVATE);
+
+        assertThat(result.name()).isEqualTo("renamed");
+        assertThat(result.description()).isEqualTo("new description");
+        assertThat(result.visibility()).isEqualTo(RoomVisibility.PRIVATE);
+        assertThat(existingRoom.getName()).isEqualTo("renamed");
+        assertThat(existingRoom.getVisibility()).isEqualTo(RoomVisibility.PRIVATE);
+    }
+
+    @Test
+    void updateRoom_nullFields_leavesExistingValuesUnchanged() {
+        UUID roomId = existingRoom.getId();
+        String originalName = existingRoom.getName();
+        String originalDescription = existingRoom.getDescription();
+        RoomVisibility originalVisibility = existingRoom.getVisibility();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(existingRoom));
+        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(roomMapper.toDto(any(Room.class))).thenAnswer(invocation -> toDto(invocation.getArgument(0)));
+
+        RoomDto result = roomService.updateRoom(roomId, owner, null, null, null);
+
+        assertThat(result.name()).isEqualTo(originalName);
+        assertThat(result.description()).isEqualTo(originalDescription);
+        assertThat(result.visibility()).isEqualTo(originalVisibility);
+        assertThat(existingRoom.getName()).isEqualTo(originalName);
+    }
+
+    @Test
+    void updateRoom_unchangedName_skipsUniquenessCheck() {
+        UUID roomId = existingRoom.getId();
+        String sameName = existingRoom.getName();
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(existingRoom));
+        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(roomMapper.toDto(any(Room.class))).thenAnswer(invocation -> toDto(invocation.getArgument(0)));
+
+        RoomDto result = roomService.updateRoom(roomId, owner, sameName, "changed description", null);
+
+        assertThat(result.description()).isEqualTo("changed description");
+        verify(roomRepository, never()).existsByName(any());
+    }
+
+    // --- listUserRoomsWithUnread (DIRECT rooms) ---
+
+    /**
+     * DIRECT rooms resolve the DM counterpart for display; a self-DM (only the user as
+     * member) leaves both counterpart fields null.
+     */
+    @Test
+    void listUserRoomsWithUnread_directRooms_resolvesCounterpartAndLeavesSelfDmNull() {
+        User bob = User.builder()
+                .id(UUID.randomUUID())
+                .email("bob@test.com")
+                .username("bob")
+                .displayName("Bob Builder")
+                .passwordHash("$2a$10$hashedpassword")
+                .build();
+
+        Room dmWithBob = Room.builder()
+                .id(UUID.randomUUID())
+                .name("dm-bob")
+                .visibility(RoomVisibility.DIRECT)
+                .owner(owner)
+                .nextWatermark(1L)
+                .build();
+        Room selfDm = Room.builder()
+                .id(UUID.randomUUID())
+                .name("self-dm")
+                .visibility(RoomVisibility.DIRECT)
+                .owner(owner)
+                .nextWatermark(1L)
+                .build();
+
+        RoomMember ownerInDm = RoomMember.builder()
+                .room(dmWithBob)
+                .user(owner)
+                .role(RoomRole.MEMBER)
+                .build();
+        RoomMember bobInDm = RoomMember.builder()
+                .room(dmWithBob)
+                .user(bob)
+                .role(RoomRole.MEMBER)
+                .build();
+        RoomMember ownerInSelf = RoomMember.builder()
+                .room(selfDm)
+                .user(owner)
+                .role(RoomRole.MEMBER)
+                .build();
+
+        when(roomMemberRepository.findByUserWithRoomAndOwner(owner)).thenReturn(List.of(ownerInDm, ownerInSelf));
+        when(messageRepository.countUnreadPerRoom(eq(owner.getId()), any())).thenReturn(Collections.emptyList());
+        when(messageRepository.findLastMessageInstantByRoomIds(any())).thenReturn(Collections.emptyList());
+        when(roomMemberRepository.findByRoomIdInWithUsers(any())).thenReturn(List.of(ownerInDm, bobInDm, ownerInSelf));
+
+        List<MyRoomEntry> entries = roomService.listUserRoomsWithUnread(owner);
+
+        MyRoomEntry bobEntry = entries.stream()
+                .filter(e -> e.id().equals(dmWithBob.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(bobEntry.otherUsername()).isEqualTo("bob");
+        assertThat(bobEntry.otherDisplayName()).isEqualTo("Bob Builder");
+
+        MyRoomEntry selfEntry = entries.stream()
+                .filter(e -> e.id().equals(selfDm.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(selfEntry.otherUsername()).isNull();
+        assertThat(selfEntry.otherDisplayName()).isNull();
+    }
+
+    private static RoomDto toDto(Room r) {
+        return new RoomDto(
+                r.getId(),
+                r.getName(),
+                r.getDescription(),
+                r.getVisibility(),
+                r.getOwner().getId(),
+                r.getOwner().getUsername(),
+                r.getNextWatermark(),
+                r.getCreatedAt());
     }
 }
