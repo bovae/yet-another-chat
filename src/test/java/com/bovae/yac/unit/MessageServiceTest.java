@@ -1,5 +1,13 @@
 package com.bovae.yac.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.model.dto.MessagePage;
 import com.bovae.yac.model.entity.Message;
@@ -16,6 +24,10 @@ import com.bovae.yac.service.FriendshipService;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.UserBanService;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,19 +36,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
-
-import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link MessageService}.
@@ -290,7 +289,7 @@ class MessageServiceTest {
 
         // Backward query returns newest-first; size+1 rows signal that older messages remain.
         when(messageRepository.findByRoomAndWatermarkLessThanWithFetches(
-                eq(room), eq(Long.MAX_VALUE), any(PageRequest.class)))
+                        eq(room), eq(Long.MAX_VALUE), any(PageRequest.class)))
                 .thenReturn(List.of(msg3, msg2, msg1));
 
         MessagePage page = messageService.getMessageHistory(room, null, pageSize);

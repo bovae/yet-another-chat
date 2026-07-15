@@ -7,6 +7,9 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.FriendshipService;
 import jakarta.validation.Valid;
+import java.security.Principal;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,10 +21,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
-import java.util.List;
-import java.util.UUID;
 
 @Validated
 @RestController
@@ -40,13 +39,11 @@ public class FriendshipApiController {
     }
 
     @PostMapping("/request")
-    public ResponseEntity<Void> sendFriendRequest(
-            @Valid @RequestBody SendFriendRequest request,
-            Principal principal) {
+    public ResponseEntity<Void> sendFriendRequest(@Valid @RequestBody SendFriendRequest request, Principal principal) {
         User requester = resolveUser(principal);
-        User recipient = userRepository.findByUsername(request.username())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "User not found: %s".formatted(request.username())));
+        User recipient = userRepository
+                .findByUsername(request.username())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(request.username())));
 
         friendshipService.sendFriendRequest(requester, recipient, request.requestText());
 
@@ -54,27 +51,21 @@ public class FriendshipApiController {
     }
 
     @PostMapping("/{id}/accept")
-    public ResponseEntity<Void> acceptFriendRequest(
-            @PathVariable UUID id,
-            Principal principal) {
+    public ResponseEntity<Void> acceptFriendRequest(@PathVariable UUID id, Principal principal) {
         User user = resolveUser(principal);
         friendshipService.acceptFriendRequest(id, user);
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/{id}/decline")
-    public ResponseEntity<Void> declineFriendRequest(
-            @PathVariable UUID id,
-            Principal principal) {
+    public ResponseEntity<Void> declineFriendRequest(@PathVariable UUID id, Principal principal) {
         User user = resolveUser(principal);
         friendshipService.declineFriendRequest(id, user);
         return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> removeFriend(
-            @PathVariable UUID id,
-            Principal principal) {
+    public ResponseEntity<Void> removeFriend(@PathVariable UUID id, Principal principal) {
         User user = resolveUser(principal);
         friendshipService.removeFriend(id, user);
         return ResponseEntity.noContent().build();
@@ -95,7 +86,8 @@ public class FriendshipApiController {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found for principal: %s".formatted(principal.getName())));
     }

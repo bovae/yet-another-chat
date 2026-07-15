@@ -3,13 +3,12 @@ package com.bovae.yac.repository;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.RoomInvitation;
 import com.bovae.yac.model.entity.User;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface RoomInvitationRepository extends JpaRepository<RoomInvitation, UUID> {
 

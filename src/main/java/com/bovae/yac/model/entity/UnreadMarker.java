@@ -15,8 +15,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
-import java.util.UUID;
-
 @Getter
 @Setter
 @Builder
@@ -49,12 +47,7 @@ public class UnreadMarker {
         if (!(o instanceof UnreadMarker other)) {
             return false;
         }
-        UUID roomId = room == null ? null : room.getId();
-        UUID userId = user == null ? null : user.getId();
-        UUID otherRoomId = other.room == null ? null : other.room.getId();
-        UUID otherUserId = other.user == null ? null : other.user.getId();
-        return roomId != null && userId != null
-                && roomId.equals(otherRoomId) && userId.equals(otherUserId);
+        return CompositeKeys.roomUserEquals(room, user, other.room, other.user);
     }
 
     @Override

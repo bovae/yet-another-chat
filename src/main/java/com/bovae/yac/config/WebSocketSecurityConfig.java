@@ -1,6 +1,7 @@
 package com.bovae.yac.config;
 
 import com.bovae.yac.ws.StompAuthChannelInterceptor;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Configuration;
@@ -13,8 +14,6 @@ import org.springframework.security.messaging.access.intercept.AuthorizationChan
 import org.springframework.security.messaging.context.AuthenticationPrincipalArgumentResolver;
 import org.springframework.security.messaging.context.SecurityContextChannelInterceptor;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
-
-import java.util.List;
 
 /**
  * Manual WebSocket security config — replaces @EnableWebSocketSecurity to disable

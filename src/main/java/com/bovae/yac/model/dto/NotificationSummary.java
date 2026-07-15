@@ -5,9 +5,4 @@ package com.bovae.yac.model.dto;
  * ({@code unread_total}, {@code pending_friend_requests}, {@code pending_invitations})
  * by the global naming strategy.
  */
-public record NotificationSummary(
-        int unreadTotal,
-        int pendingFriendRequests,
-        int pendingInvitations
-) {
-}
+public record NotificationSummary(int unreadTotal, int pendingFriendRequests, int pendingInvitations) {}

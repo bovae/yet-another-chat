@@ -14,6 +14,9 @@ import com.bovae.yac.service.MessageBroadcastService;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
+import java.nio.charset.StandardCharsets;
+import java.security.Principal;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -29,10 +32,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.nio.charset.StandardCharsets;
-import java.security.Principal;
-import java.util.UUID;
 
 @Validated
 @RestController
@@ -62,9 +61,9 @@ public class AttachmentApiController {
         // Same send-time guards as posting a message (R1-27).
         messageService.assertCanPost(room, user);
 
-        Message message = messageRepository.findByIdWithSender(messageId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Message not found: %s".formatted(messageId)));
+        Message message = messageRepository
+                .findByIdWithSender(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found: %s".formatted(messageId)));
 
         fileStorageService.uploadFile(file, message, room, user, comment);
 
@@ -77,16 +76,14 @@ public class AttachmentApiController {
 
     @GetMapping("/{id}/download")
     public ResponseEntity<Resource> downloadFile(
-            @PathVariable UUID roomId,
-            @PathVariable UUID id,
-            Principal principal) {
+            @PathVariable UUID roomId, @PathVariable UUID id, Principal principal) {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
         roomMemberService.requireCanRead(room, user); // R1-15
 
-        Attachment attachment = attachmentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Attachment not found: %s".formatted(id)));
+        Attachment attachment = attachmentRepository
+                .findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found: %s".formatted(id)));
 
         Resource resource = fileStorageService.downloadFile(id, room, user);
 
@@ -108,7 +105,8 @@ public class AttachmentApiController {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found for principal: %s".formatted(principal.getName())));
     }

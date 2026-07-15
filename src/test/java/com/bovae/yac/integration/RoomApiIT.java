@@ -1,5 +1,16 @@
 package com.bovae.yac.integration;
 
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Room;
@@ -19,17 +30,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.is;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Integration tests for RoomApiController: room creation, catalog search, join, leave, delete,
@@ -74,7 +74,8 @@ class RoomApiIT {
     }
 
     private User register(String email, String username) {
-        return userRepository.findById(userService.register(email, username, "testpass123").id())
+        return userRepository
+                .findById(userService.register(email, username, "testpass123").id())
                 .orElseThrow();
     }
 
@@ -82,22 +83,23 @@ class RoomApiIT {
 
     @Test
     void listMembers_orderedByRoleThenUsername() throws Exception {
-        Room room = roomService.getRoomById(
-                roomService.createRoom("ordering-room", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("ordering-room", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
         User zoe = register("zoe@test.com", "zoe");
         User carol = register("carol@test.com", "carol");
-        roomMemberService.joinPublicRoom(room, userB);   // bob → MEMBER
-        roomMemberService.joinPublicRoom(room, zoe);      // zoe → MEMBER, promoted below
-        roomMemberService.joinPublicRoom(room, carol);    // carol → MEMBER
+        roomMemberService.joinPublicRoom(room, userB); // bob → MEMBER
+        roomMemberService.joinPublicRoom(room, zoe); // zoe → MEMBER, promoted below
+        roomMemberService.joinPublicRoom(room, carol); // carol → MEMBER
         moderationService.grantAdminRole(room, userA, zoe);
 
         mockMvc.perform(get("/api/rooms/{id}/members", room.getId())
                         .with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(4)))
-                .andExpect(jsonPath("$[0].username", is("alice")))  // OWNER first
-                .andExpect(jsonPath("$[1].username", is("zoe")))    // ADMIN before members despite name
-                .andExpect(jsonPath("$[2].username", is("bob")))    // MEMBER, alphabetical
+                .andExpect(jsonPath("$[0].username", is("alice"))) // OWNER first
+                .andExpect(jsonPath("$[1].username", is("zoe"))) // ADMIN before members despite name
+                .andExpect(jsonPath("$[2].username", is("bob"))) // MEMBER, alphabetical
                 .andExpect(jsonPath("$[3].username", is("carol")));
     }
 
@@ -146,7 +148,9 @@ class RoomApiIT {
 
     @Test
     void joinPublicRoom_succeeds() throws Exception {
-        Room room = roomService.getRoomById(roomService.createRoom("join-room", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("join-room", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
 
         mockMvc.perform(post("/api/rooms/{id}/join", room.getId())
                         .with(user(userB.getEmail()).roles("USER"))
@@ -156,7 +160,9 @@ class RoomApiIT {
 
     @Test
     void leaveRoom_succeeds() throws Exception {
-        Room room = roomService.getRoomById(roomService.createRoom("leave-room", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("leave-room", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
         roomMemberService.joinPublicRoom(room, userB);
 
         mockMvc.perform(post("/api/rooms/{id}/leave", room.getId())
@@ -167,7 +173,9 @@ class RoomApiIT {
 
     @Test
     void deleteRoom_byOwner_succeeds() throws Exception {
-        Room room = roomService.getRoomById(roomService.createRoom("delete-room", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("delete-room", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
 
         mockMvc.perform(delete("/api/rooms/{id}", room.getId())
                         .with(user(userA.getEmail()).roles("USER"))

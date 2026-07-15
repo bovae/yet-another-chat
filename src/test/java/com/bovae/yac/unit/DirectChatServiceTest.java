@@ -1,5 +1,14 @@
 package com.bovae.yac.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.model.dto.RoomDto;
 import com.bovae.yac.model.dto.RoomMapper;
@@ -13,24 +22,14 @@ import com.bovae.yac.service.DirectChatService;
 import com.bovae.yac.service.FriendshipService;
 import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.UserBanService;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link DirectChatService} — existing rooms are now resolved structurally by the
@@ -84,14 +83,7 @@ class DirectChatServiceTest {
     void getOrCreateDirectChat_whenFriendsAndNoBan_createsDirectChat() {
         when(friendshipService.areFriends(userA, userB)).thenReturn(true);
         when(userBanService.isBanExistsBetween(userA, userB)).thenReturn(false);
-        when(roomRepository.findByName(anyString())).thenReturn(Optional.empty());
-        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> {
-            Room r = invocation.getArgument(0);
-            r.setId(UUID.randomUUID());
-            return r;
-        });
-        when(roomMemberRepository.save(any(RoomMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(roomMapper.toDto(any(Room.class))).thenAnswer(invocation -> toDto(invocation.getArgument(0)));
+        stubNewRoomCreation();
 
         RoomDto result = directChatService.getOrCreateDirectChat(userA, userB);
 
@@ -147,14 +139,7 @@ class DirectChatServiceTest {
 
     @Test
     void getOrCreateDirectChat_withSelf_createsSelfDm() {
-        when(roomRepository.findByName(anyString())).thenReturn(Optional.empty());
-        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> {
-            Room r = invocation.getArgument(0);
-            r.setId(UUID.randomUUID());
-            return r;
-        });
-        when(roomMemberRepository.save(any(RoomMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(roomMapper.toDto(any(Room.class))).thenAnswer(invocation -> toDto(invocation.getArgument(0)));
+        stubNewRoomCreation();
 
         RoomDto result = directChatService.getOrCreateDirectChat(userA, userA);
 
@@ -194,8 +179,27 @@ class DirectChatServiceTest {
         verify(roomRepository, times(1)).save(any(Room.class));
     }
 
+    /** Stubs the create-new-room path: no existing room, save assigns an id, mapper delegates to {@link #toDto}. */
+    private void stubNewRoomCreation() {
+        when(roomRepository.findByName(anyString())).thenReturn(Optional.empty());
+        when(roomRepository.save(any(Room.class))).thenAnswer(invocation -> {
+            Room r = invocation.getArgument(0);
+            r.setId(UUID.randomUUID());
+            return r;
+        });
+        when(roomMemberRepository.save(any(RoomMember.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(roomMapper.toDto(any(Room.class))).thenAnswer(invocation -> toDto(invocation.getArgument(0)));
+    }
+
     private RoomDto toDto(Room r) {
-        return new RoomDto(r.getId(), r.getName(), r.getDescription(), r.getVisibility(),
-                r.getOwner().getId(), r.getOwner().getUsername(), r.getNextWatermark(), r.getCreatedAt());
+        return new RoomDto(
+                r.getId(),
+                r.getName(),
+                r.getDescription(),
+                r.getVisibility(),
+                r.getOwner().getId(),
+                r.getOwner().getUsername(),
+                r.getNextWatermark(),
+                r.getCreatedAt());
     }
 }

@@ -1,5 +1,8 @@
 package com.bovae.yac.e2e;
 
+import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import com.microsoft.playwright.APIResponse;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
@@ -7,12 +10,8 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.assertions.LocatorAssertions;
 import com.microsoft.playwright.options.FilePayload;
 import com.microsoft.playwright.options.LoadState;
-import org.junit.jupiter.api.Test;
-
 import java.util.Base64;
-
-import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
 
 /**
  * Admin ban/unban through the consolidated Manage Room modal (guards R2-08) and attachment
@@ -20,8 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class RoomAdminAclE2E extends E2ETestBase {
 
-    private static final byte[] PNG = Base64.getDecoder().decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+    private static final byte[] PNG = Base64.getDecoder()
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
 
     private String createRoom(Page page, String name, String visibility) {
         page.navigate("/rooms/create");
@@ -72,8 +71,7 @@ class RoomAdminAclE2E extends E2ETestBase {
             alice.locator("[data-bs-target='#manageRoomModal']").click();
             alice.locator("#banned-tab").click();
             Locator bannedList = alice.locator("#banned-users-list");
-            assertThat(bannedList).containsText(zUser,
-                    new LocatorAssertions.ContainsTextOptions().setTimeout(15000));
+            assertThat(bannedList).containsText(zUser, new LocatorAssertions.ContainsTextOptions().setTimeout(15000));
 
             bannedList.getByText("Unban").first().click();
             assertThat(bannedList).not().containsText(zUser);

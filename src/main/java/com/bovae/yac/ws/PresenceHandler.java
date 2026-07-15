@@ -4,14 +4,13 @@ import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.PresenceService;
+import java.security.Principal;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.stereotype.Controller;
-
-import java.security.Principal;
-import java.util.Map;
 
 @Slf4j
 @Controller
@@ -22,9 +21,7 @@ public class PresenceHandler {
     private final UserRepository userRepository;
 
     @MessageMapping("/presence.heartbeat")
-    public void heartbeat(Map<String, Object> payload,
-                          @Header("simpSessionId") String sessionId,
-                          Principal principal) {
+    public void heartbeat(Map<String, Object> payload, @Header("simpSessionId") String sessionId, Principal principal) {
         User user = resolveUser(principal);
 
         boolean active = false;
@@ -41,8 +38,8 @@ public class PresenceHandler {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "User not found: %s".formatted(principal.getName())));
+        return userRepository
+                .findByEmail(principal.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(principal.getName())));
     }
 }

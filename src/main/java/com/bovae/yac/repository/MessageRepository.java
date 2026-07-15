@@ -2,22 +2,22 @@ package com.bovae.yac.repository;
 
 import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
 public interface MessageRepository extends JpaRepository<Message, UUID> {
 
     @Query("SELECT m FROM Message m LEFT JOIN FETCH m.sender WHERE m.id = :id")
     Optional<Message> findByIdWithSender(@Param("id") UUID id);
 
-    @Query("SELECT m FROM Message m LEFT JOIN FETCH m.sender LEFT JOIN FETCH m.replyTo rt LEFT JOIN FETCH rt.sender WHERE m.id = :id")
+    @Query("SELECT m FROM Message m LEFT JOIN FETCH m.sender LEFT JOIN FETCH m.replyTo rt LEFT JOIN FETCH rt.sender "
+            + "WHERE m.id = :id")
     Optional<Message> findByIdWithSenderAndReplyTo(@Param("id") UUID id);
 
     // Ascending catch-up (reconnect): messages newer than a cursor, oldest first.
@@ -37,8 +37,10 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     // Unread counts derive from actual undeleted rows so deletions don't inflate them (R1-57).
     long countByRoomAndWatermarkGreaterThan(Room room, Long watermark);
 
-    @Query("SELECT m.watermark FROM Message m WHERE m.room = :room AND m.watermark > :watermark ORDER BY m.watermark ASC")
-    List<Long> findWatermarksByRoomAndWatermarkGreaterThan(@Param("room") Room room, @Param("watermark") Long watermark);
+    @Query("SELECT m.watermark FROM Message m WHERE m.room = :room AND m.watermark > :watermark "
+            + "ORDER BY m.watermark ASC")
+    List<Long> findWatermarksByRoomAndWatermarkGreaterThan(
+            @Param("room") Room room, @Param("watermark") Long watermark);
 
     // One grouped query for a user's unread counts across many rooms (R1-46). Rooms with zero
     // unread simply don't appear in the result. Returns rows of [roomId, count].
@@ -54,7 +56,8 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     List<Object[]> findLastMessageInstantByRoomIds(@Param("roomIds") List<UUID> roomIds);
 
     @Modifying
-    @Query("UPDATE Message m SET m.replyTo = null WHERE m.replyTo IN (SELECT msg FROM Message msg WHERE msg.room = :room)")
+    @Query("UPDATE Message m SET m.replyTo = null "
+            + "WHERE m.replyTo IN (SELECT msg FROM Message msg WHERE msg.room = :room)")
     void nullifyReplyToByRoom(Room room);
 
     void deleteByRoom(Room room);

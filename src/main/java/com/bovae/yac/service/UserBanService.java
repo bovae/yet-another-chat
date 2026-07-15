@@ -9,13 +9,12 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.entity.UserBan;
 import com.bovae.yac.repository.FriendshipRepository;
 import com.bovae.yac.repository.UserBanRepository;
+import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -36,10 +35,7 @@ public class UserBanService {
             throw new ConflictException("User is already banned");
         }
 
-        UserBan userBan = UserBan.builder()
-                .blocker(blocker)
-                .blocked(blocked)
-                .build();
+        UserBan userBan = UserBan.builder().blocker(blocker).blocked(blocked).build();
 
         userBan = userBanRepository.save(userBan);
 
@@ -52,7 +48,8 @@ public class UserBanService {
 
     @Transactional
     public void unbanUser(User blocker, User blocked) {
-        UserBan userBan = userBanRepository.findByBlockerAndBlocked(blocker, blocked)
+        UserBan userBan = userBanRepository
+                .findByBlockerAndBlocked(blocker, blocked)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No ban found for blockerId=%s, blockedId=%s".formatted(blocker.getId(), blocked.getId())));
 

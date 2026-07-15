@@ -8,6 +8,8 @@ import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.UserService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.security.Principal;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -18,9 +20,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
-import java.util.UUID;
 
 @Validated
 @RestController
@@ -33,19 +32,14 @@ public class UserApiController {
 
     @GetMapping("/search")
     public ResponseEntity<UserSearchResponse> searchByUsername(
-            @RequestParam @NotBlank String username,
-            Principal principal) {
+            @RequestParam @NotBlank String username, Principal principal) {
         resolveUser(principal);
 
-        UserDto found = userService.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "User not found: %s".formatted(username)));
+        UserDto found = userService
+                .findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(username)));
 
-        return ResponseEntity.ok(new UserSearchResponse(
-                found.id(),
-                found.username(),
-                found.displayName()
-        ));
+        return ResponseEntity.ok(new UserSearchResponse(found.id(), found.username(), found.displayName()));
     }
 
     @DeleteMapping("/me")
@@ -57,22 +51,18 @@ public class UserApiController {
 
     @PutMapping("/me")
     public ResponseEntity<UserDto> updateProfile(
-            @Valid @RequestBody UpdateProfileRequest request,
-            Principal principal) {
+            @Valid @RequestBody UpdateProfileRequest request, Principal principal) {
         User user = resolveUser(principal);
         UserDto updated = userService.updateProfile(user.getId(), request.displayName(), user.getUsername());
         return ResponseEntity.ok(updated);
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found for principal: %s".formatted(principal.getName())));
     }
 
-    public record UserSearchResponse(
-            UUID id,
-            String username,
-            String displayName
-    ) {}
+    public record UserSearchResponse(UUID id, String username, String displayName) {}
 }

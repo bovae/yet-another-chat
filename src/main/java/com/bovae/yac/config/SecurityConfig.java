@@ -1,8 +1,7 @@
 package com.bovae.yac.config;
 
-import java.time.Duration;
-
 import com.bovae.yac.config.properties.SecurityProperties;
+import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,40 +26,38 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/", "/login", "/register", "/forgot-password", "/reset-password",
-                                "/css/**", "/js/**", "/webjars/**",
-                                "/api/health", "/actuator/health",
-                                "/api/password/reset", "/api/password/reset-request",
-                                "/ws/**"
-                        ).permitAll()
-                        .anyRequest().authenticated()
-                )
-                .formLogin(form -> form
-                        .loginPage("/login")
+        http.authorizeHttpRequests(auth -> auth.requestMatchers(
+                                "/",
+                                "/login",
+                                "/register",
+                                "/forgot-password",
+                                "/reset-password",
+                                "/css/**",
+                                "/js/**",
+                                "/webjars/**",
+                                "/api/health",
+                                "/actuator/health",
+                                "/api/password/reset",
+                                "/api/password/reset-request",
+                                "/ws/**")
+                        .permitAll()
+                        .anyRequest()
+                        .authenticated())
+                .formLogin(form -> form.loginPage("/login")
                         .loginProcessingUrl("/login")
                         .successHandler(loginSuccessHandler)
                         .failureUrl("/login?error=true")
                         .usernameParameter("email")
-                        .permitAll()
-                )
-                .rememberMe(remember -> remember
-                        .key(securityProperties.rememberMeKey())
+                        .permitAll())
+                .rememberMe(remember -> remember.key(securityProperties.rememberMeKey())
                         .tokenValiditySeconds((int) Duration.ofDays(30).toSeconds())
-                        .rememberMeParameter("remember-me")
-                )
-                .logout(logout -> logout
-                        .logoutUrl("/logout")
+                        .rememberMeParameter("remember-me"))
+                .logout(logout -> logout.logoutUrl("/logout")
                         .logoutSuccessUrl("/login?logout=true")
                         .invalidateHttpSession(true)
                         .deleteCookies("JSESSIONID")
-                        .permitAll()
-                )
-                .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/ws/**")
-                );
+                        .permitAll())
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/ws/**"));
 
         return http.build();
     }

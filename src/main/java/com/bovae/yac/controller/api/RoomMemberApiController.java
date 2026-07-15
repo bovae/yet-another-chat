@@ -12,6 +12,9 @@ import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import java.security.Principal;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -22,10 +25,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
-import java.util.List;
-import java.util.UUID;
 
 @Validated
 @RestController
@@ -40,9 +39,7 @@ public class RoomMemberApiController {
     private final UserRepository userRepository;
 
     @GetMapping
-    public ResponseEntity<List<RoomMemberDto>> listMembers(
-            @PathVariable UUID roomId,
-            Principal principal) {
+    public ResponseEntity<List<RoomMemberDto>> listMembers(@PathVariable UUID roomId, Principal principal) {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
         roomMemberService.requireCanRead(room, user); // R1-56
@@ -53,10 +50,7 @@ public class RoomMemberApiController {
     }
 
     @DeleteMapping("/{userId}")
-    public ResponseEntity<Void> kickMember(
-            @PathVariable UUID roomId,
-            @PathVariable UUID userId,
-            Principal principal) {
+    public ResponseEntity<Void> kickMember(@PathVariable UUID roomId, @PathVariable UUID userId, Principal principal) {
         User actingUser = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
         User targetUser = resolveUserById(userId);
@@ -87,18 +81,17 @@ public class RoomMemberApiController {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found for principal: %s".formatted(principal.getName())));
     }
 
     private User resolveUserById(UUID userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "User not found: %s".formatted(userId)));
+        return userRepository
+                .findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(userId)));
     }
 
-    public record ChangeRoleRequest(
-            @NotNull RoomRole role
-    ) {}
+    public record ChangeRoleRequest(@NotNull RoomRole role) {}
 }

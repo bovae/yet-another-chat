@@ -1,7 +1,13 @@
-.PHONY: build run test docker-up docker-down docker-logs clean infra
+.PHONY: build run test format lint docker-up docker-down docker-logs clean infra
 
 build:
 	./mvnw clean package -DskipTests
+
+format:
+	./mvnw spotless:apply
+
+lint:
+	./mvnw verify -DskipTests
 
 run:
 	./mvnw spring-boot:run

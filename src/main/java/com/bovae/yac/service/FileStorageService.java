@@ -9,16 +9,6 @@ import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.AttachmentRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.web.multipart.MultipartFile;
-
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,6 +20,16 @@ import java.nio.file.StandardCopyOption;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -63,7 +63,8 @@ public class FileStorageService {
         String storedFileName = UUID.randomUUID() + "_" + safeName;
 
         Path roomDir = Paths.get(fileStorageProperties.basePath(), room.getId().toString())
-                .toAbsolutePath().normalize();
+                .toAbsolutePath()
+                .normalize();
         Path targetPath = roomDir.resolve(storedFileName).normalize();
         if (!targetPath.startsWith(roomDir)) {
             throw new FileStorageException("Resolved path escapes the room directory");
@@ -90,17 +91,21 @@ public class FileStorageService {
 
         attachment = attachmentRepository.save(attachment);
 
-        LOG.info("File uploaded: attachmentId={}, roomId={}, fileName={}, size={}",
-                attachment.getId(), room.getId(), safeName, file.getSize());
+        LOG.info(
+                "File uploaded: attachmentId={}, roomId={}, fileName={}, size={}",
+                attachment.getId(),
+                room.getId(),
+                safeName,
+                file.getSize());
 
         return attachment;
     }
 
     @Transactional(readOnly = true)
     public Resource downloadFile(UUID attachmentId, Room room, User requester) {
-        Attachment attachment = attachmentRepository.findById(attachmentId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Attachment not found: %s".formatted(attachmentId)));
+        Attachment attachment = attachmentRepository
+                .findById(attachmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found: %s".formatted(attachmentId)));
 
         // The attachment's message must belong to the room in the URL (R1-15). Membership was
         // already checked by the caller.
@@ -113,8 +118,11 @@ public class FileStorageService {
             throw new FileStorageException("File not found on disk: %s".formatted(attachment.getOriginalFileName()));
         }
 
-        LOG.info("File downloaded: attachmentId={}, roomId={}, requesterId={}",
-                attachmentId, room.getId(), requester.getId());
+        LOG.info(
+                "File downloaded: attachmentId={}, roomId={}, requesterId={}",
+                attachmentId,
+                room.getId(),
+                requester.getId());
 
         try {
             return new UrlResource(filePath.toUri());
@@ -137,7 +145,7 @@ public class FileStorageService {
         registerAfterCommit(() -> deleteDirectoryQuietly(roomDir));
     }
 
-    private String sniffContentType(MultipartFile file) {
+    private @Nullable String sniffContentType(MultipartFile file) {
         try (InputStream in = new BufferedInputStream(file.getInputStream())) {
             return URLConnection.guessContentTypeFromStream(in);
         } catch (IOException e) {
@@ -145,7 +153,7 @@ public class FileStorageService {
         }
     }
 
-    private void validateFileSize(MultipartFile file, String sniffedType) {
+    private void validateFileSize(MultipartFile file, @Nullable String sniffedType) {
         long size = file.getSize();
         boolean isImage = sniffedType != null && sniffedType.startsWith(IMAGE_CONTENT_TYPE_PREFIX);
         if (isImage) {
@@ -157,7 +165,7 @@ public class FileStorageService {
         }
     }
 
-    private String sanitizeFileName(String original) {
+    private String sanitizeFileName(@Nullable String original) {
         if (original == null || original.isBlank()) {
             return "unnamed";
         }

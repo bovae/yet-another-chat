@@ -1,5 +1,9 @@
 package com.bovae.yac.parameterized;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Message;
@@ -9,6 +13,8 @@ import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.RoomService;
 import com.bovae.yac.service.UserService;
+import java.nio.charset.StandardCharsets;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -17,13 +23,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.nio.charset.StandardCharsets;
-import java.util.stream.Stream;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Parameterized boundary tests for message content round-trip.
@@ -61,7 +60,9 @@ class MessageContentParameterizedTest {
     void setUp() {
         UserDto senderDto = userService.register("sender@test.com", "sender", "password123");
         sender = userRepository.findById(senderDto.id()).orElseThrow();
-        room = roomService.getRoomById(roomService.createRoom("msg-content-room", "test room", RoomVisibility.PUBLIC, sender).id());
+        room = roomService.getRoomById(roomService
+                .createRoom("msg-content-room", "test room", RoomVisibility.PUBLIC, sender)
+                .id());
     }
 
     // ---- CP 17: Valid message content round-trip ----
@@ -78,8 +79,7 @@ class MessageContentParameterizedTest {
         Message message = messageService.sendMessage(room, sender, content, null);
 
         assertNotNull(message.getId());
-        assertEquals(content, message.getContent(),
-                "Content should round-trip exactly for: " + description);
+        assertEquals(content, message.getContent(), "Content should round-trip exactly for: " + description);
     }
 
     static Stream<Arguments> validMessageContents() {
@@ -88,8 +88,7 @@ class MessageContentParameterizedTest {
                 Arguments.of("Line one\nLine two\nLine three", "multiline text"),
                 Arguments.of("Hello 👋🌍🎉🔥💯", "emoji content"),
                 Arguments.of("a".repeat(3072), "exactly 3072 ASCII bytes"),
-                Arguments.of(buildExactUtf8String(3072), "exactly 3072 UTF-8 bytes with multibyte chars")
-        );
+                Arguments.of(buildExactUtf8String(3072), "exactly 3072 UTF-8 bytes with multibyte chars"));
     }
 
     // ---- CP 17: Oversized message content rejection ----
@@ -103,7 +102,8 @@ class MessageContentParameterizedTest {
     @ParameterizedTest(name = "[{index}] {1}")
     @MethodSource("oversizedMessageContents")
     void sendMessage_oversizedContent_throwsException(String content, String description) {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(
+                IllegalArgumentException.class,
                 () -> messageService.sendMessage(room, sender, content, null),
                 "Should reject oversized content for: " + description);
     }
@@ -116,8 +116,7 @@ class MessageContentParameterizedTest {
                 Arguments.of("€".repeat(1025), "1025 euro signs (3075 UTF-8 bytes)"),
                 // Each '𝄞' (musical symbol) is 4 UTF-8 bytes; 768 * 4 = 3072, add one more = 3076
                 Arguments.of("𝄞".repeat(769), "769 4-byte chars (3076 UTF-8 bytes)"),
-                Arguments.of("a".repeat(3070) + "€€", "mixed: 3070 ASCII + 2 euro signs = 3076 bytes")
-        );
+                Arguments.of("a".repeat(3070) + "€€", "mixed: 3070 ASCII + 2 euro signs = 3076 bytes"));
     }
 
     /**

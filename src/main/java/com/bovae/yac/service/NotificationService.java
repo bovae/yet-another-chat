@@ -8,18 +8,17 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.MessageRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UnreadMarkerRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -46,8 +45,11 @@ public class NotificationService {
                 marker.setLastReadWatermark(currentWatermark);
             }
         });
-        LOG.debug("Marked room as read: userId={}, roomId={}, watermark={}",
-                user.getId(), room.getId(), currentWatermark);
+        LOG.debug(
+                "Marked room as read: userId={}, roomId={}, watermark={}",
+                user.getId(),
+                room.getId(),
+                currentWatermark);
     }
 
     /** Creates a read marker at join/DM-create so never-opened rooms still accumulate unread (R1-24). */
@@ -59,7 +61,8 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public int computeUnreadCount(User user, Room room) {
-        UnreadMarker marker = unreadMarkerRepository.findByUserAndRoom(user, room).orElse(null);
+        UnreadMarker marker =
+                unreadMarkerRepository.findByUserAndRoom(user, room).orElse(null);
         if (marker == null || marker.getLastReadWatermark() == null) {
             return 0;
         }
@@ -105,8 +108,12 @@ public class NotificationService {
 
     public void broadcastNotification(User user, NotificationEvent event) {
         messagingTemplate.convertAndSendToUser(user.getEmail(), "/queue/notifications", event);
-        LOG.debug("Notification sent: userId={}, type={}, roomId={}, unreadCount={}",
-                user.getId(), event.type(), event.roomId(), event.unreadCount());
+        LOG.debug(
+                "Notification sent: userId={}, type={}, roomId={}, unreadCount={}",
+                user.getId(),
+                event.type(),
+                event.roomId(),
+                event.unreadCount());
     }
 
     // The room entity may hold a stale next_watermark after native increments, so read it fresh.

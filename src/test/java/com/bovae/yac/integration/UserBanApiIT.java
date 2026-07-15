@@ -1,5 +1,14 @@
 package com.bovae.yac.integration;
 
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Friendship;
@@ -9,6 +18,7 @@ import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.FriendshipService;
 import com.bovae.yac.service.UserBanService;
 import com.bovae.yac.service.UserService;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,17 +28,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
-
-import static org.hamcrest.Matchers.hasSize;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Integration tests for UserBanApiController: ban user, unban user,
@@ -138,8 +137,7 @@ class UserBanApiIT {
         friendshipService.acceptFriendRequest(friendship.getId(), userB);
 
         // Verify friendship exists before ban
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
 
@@ -154,8 +152,7 @@ class UserBanApiIT {
                 .andExpect(status().isCreated());
 
         // Verify friendship is terminated after ban
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
     }

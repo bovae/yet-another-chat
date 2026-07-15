@@ -1,10 +1,19 @@
 package com.bovae.yac.integration;
 
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.UserService;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,16 +25,6 @@ import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Map;
-
-import static org.hamcrest.Matchers.hasSize;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Integration tests for SessionApiController: session listing and session termination.
@@ -72,8 +71,7 @@ class SessionApiIT {
 
     @Test
     void listSessions_withNoSessions_returnsEmptyList() throws Exception {
-        mockMvc.perform(get("/api/sessions")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/sessions").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
     }
@@ -83,8 +81,7 @@ class SessionApiIT {
         createSessionForUser(userA.getEmail());
         createSessionForUser(userA.getEmail());
 
-        mockMvc.perform(get("/api/sessions")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/sessions").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[0].session_id").exists())
@@ -94,8 +91,7 @@ class SessionApiIT {
 
     @Test
     void listSessions_unauthenticated_isRejected() throws Exception {
-        mockMvc.perform(get("/api/sessions"))
-                .andExpect(status().is3xxRedirection());
+        mockMvc.perform(get("/api/sessions")).andExpect(status().is3xxRedirection());
     }
 
     // ---- Session termination ----
@@ -111,8 +107,7 @@ class SessionApiIT {
                 .andExpect(status().isNoContent());
 
         // Verify only one session remains
-        mockMvc.perform(get("/api/sessions")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/sessions").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
     }
@@ -128,8 +123,7 @@ class SessionApiIT {
 
     @Test
     void terminateSession_unauthenticated_isRejected() throws Exception {
-        mockMvc.perform(delete("/api/sessions/{id}", "some-session-id")
-                        .with(csrf()))
+        mockMvc.perform(delete("/api/sessions/{id}", "some-session-id").with(csrf()))
                 .andExpect(status().is3xxRedirection());
     }
 
@@ -137,13 +131,9 @@ class SessionApiIT {
 
     @SuppressWarnings("unchecked")
     private String createSessionForUser(String email) {
-        FindByIndexNameSessionRepository<Session> repo =
-                (FindByIndexNameSessionRepository<Session>) sessionRepository;
+        FindByIndexNameSessionRepository<Session> repo = (FindByIndexNameSessionRepository<Session>) sessionRepository;
         Session session = repo.createSession();
-        session.setAttribute(
-                FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME,
-                email
-        );
+        session.setAttribute(FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME, email);
         repo.save(session);
         return session.getId();
     }

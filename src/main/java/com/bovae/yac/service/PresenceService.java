@@ -3,15 +3,6 @@ package com.bovae.yac.service;
 import com.bovae.yac.model.dto.PresenceUpdate;
 import com.bovae.yac.model.enums.PresenceStatus;
 import com.bovae.yac.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.Cursor;
-import org.springframework.data.redis.core.ScanOptions;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -19,6 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
 
 /**
  * Multi-device presence (design D10). Each user's presence is a Redis hash keyed by STOMP
@@ -90,7 +90,10 @@ public class PresenceService {
     @Scheduled(fixedRate = 30000)
     public void cleanupStalePresence() {
         List<String> keys = new ArrayList<>();
-        ScanOptions options = ScanOptions.scanOptions().match(PRESENCE_KEY_PREFIX + "*").count(100).build();
+        ScanOptions options = ScanOptions.scanOptions()
+                .match(PRESENCE_KEY_PREFIX + "*")
+                .count(100)
+                .build();
         try (Cursor<String> cursor = stringRedisTemplate.scan(options)) {
             cursor.forEachRemaining(keys::add);
         }
@@ -155,9 +158,8 @@ public class PresenceService {
     }
 
     private void broadcastPresenceUpdate(UUID userId, PresenceStatus status) {
-        String username = userRepository.findById(userId)
-                .map(user -> user.getUsername())
-                .orElse("unknown");
+        String username =
+                userRepository.findById(userId).map(user -> user.getUsername()).orElse("unknown");
         PresenceUpdate update = new PresenceUpdate(userId, username, status, Instant.now());
         messagingTemplate.convertAndSend("/topic/presence." + userId, update);
     }
@@ -179,7 +181,7 @@ public class PresenceService {
         return parseLong(parts.length > 1 ? parts[1] : null, fallback);
     }
 
-    private long parseLong(String s, long fallback) {
+    private long parseLong(@Nullable String s, long fallback) {
         if (s == null) {
             return fallback;
         }
@@ -190,7 +192,7 @@ public class PresenceService {
         }
     }
 
-    private UUID parseUserId(String key) {
+    private @Nullable UUID parseUserId(String key) {
         try {
             return UUID.fromString(key.substring(PRESENCE_KEY_PREFIX.length()));
         } catch (IllegalArgumentException ex) {

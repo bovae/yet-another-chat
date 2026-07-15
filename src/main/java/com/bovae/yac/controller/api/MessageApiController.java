@@ -16,6 +16,9 @@ import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import jakarta.validation.Valid;
+import java.security.Principal;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,10 +33,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
-import java.util.List;
-import java.util.UUID;
 
 @Validated
 @RestController
@@ -71,15 +70,14 @@ public class MessageApiController {
 
     @PostMapping
     public ResponseEntity<ChatMessageResponse> sendMessage(
-            @PathVariable UUID roomId,
-            @Valid @RequestBody ChatMessageRequest request,
-            Principal principal) {
+            @PathVariable UUID roomId, @Valid @RequestBody ChatMessageRequest request, Principal principal) {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
 
         Message replyTo = null;
         if (request.replyToId() != null) {
-            replyTo = messageRepository.findByIdWithSender(request.replyToId())
+            replyTo = messageRepository
+                    .findByIdWithSender(request.replyToId())
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Reply-to message not found: %s".formatted(request.replyToId())));
         }
@@ -110,10 +108,7 @@ public class MessageApiController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteMessage(
-            @PathVariable UUID roomId,
-            @PathVariable UUID id,
-            Principal principal) {
+    public ResponseEntity<Void> deleteMessage(@PathVariable UUID roomId, @PathVariable UUID id, Principal principal) {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
 
@@ -129,7 +124,8 @@ public class MessageApiController {
     }
 
     private User resolveUser(Principal principal) {
-        return userRepository.findByEmail(principal.getName())
+        return userRepository
+                .findByEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found for principal: %s".formatted(principal.getName())));
     }
@@ -140,7 +136,8 @@ public class MessageApiController {
         String replyToContentSnippet = null;
 
         if (replyTo != null) {
-            replyToSenderUsername = replyTo.getSender() != null ? replyTo.getSender().getUsername() : "Deleted user";
+            replyToSenderUsername =
+                    replyTo.getSender() != null ? replyTo.getSender().getUsername() : "Deleted user";
             String content = replyTo.getContent();
             replyToContentSnippet = content.length() > 100 ? content.substring(0, 100) : content;
         }
@@ -159,7 +156,6 @@ public class MessageApiController {
                 message.isEdited(),
                 message.getWatermark(),
                 message.getCreatedAt(),
-                List.of()
-        );
+                List.of());
     }
 }

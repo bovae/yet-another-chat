@@ -1,10 +1,9 @@
 package com.bovae.yac.model.dto;
 
-import java.util.UUID;
-
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
 
 class MessageDeletedEventTest {
 

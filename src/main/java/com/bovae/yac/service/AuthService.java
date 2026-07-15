@@ -2,23 +2,22 @@ package com.bovae.yac.service;
 
 import com.bovae.yac.exception.ResourceNotFoundException;
 import com.bovae.yac.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.session.FindByIndexNameSessionRepository;
-import org.springframework.session.Session;
-import org.springframework.stereotype.Service;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetails;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
+import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
@@ -32,16 +31,14 @@ public class AuthService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        var user = userRepository.findByEmail(email)
+        var user = userRepository
+                .findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException(USER_NOT_FOUND.formatted(email)));
 
         LOG.debug("Loaded user for authentication: {}", user.getUsername());
 
         return new org.springframework.security.core.userdetails.User(
-                user.getEmail(),
-                user.getPasswordHash(),
-                List.of(new SimpleGrantedAuthority("ROLE_USER"))
-        );
+                user.getEmail(), user.getPasswordHash(), List.of(new SimpleGrantedAuthority("ROLE_USER")));
     }
 
     /**
@@ -61,13 +58,12 @@ public class AuthService implements UserDetailsService {
                             session.getCreationTime(),
                             session.getLastAccessedTime(),
                             userAgent,
-                            ipAddress
-                    );
+                            ipAddress);
                 })
                 .toList();
     }
 
-    private String extractIpAddress(Session session) {
+    private @Nullable String extractIpAddress(Session session) {
         String capturedIp = session.getAttribute("CLIENT_IP");
         if (capturedIp != null) {
             return capturedIp;
@@ -105,7 +101,6 @@ public class AuthService implements UserDetailsService {
             String sessionId,
             Instant creationTime,
             Instant lastAccessedTime,
-            String userAgent,
-            String ipAddress
-    ) {}
+            @Nullable String userAgent,
+            @Nullable String ipAddress) {}
 }

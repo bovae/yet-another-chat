@@ -1,5 +1,7 @@
 package com.bovae.yac.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Room;
@@ -20,8 +22,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration tests for presence heartbeat flows and unread notification computation.
@@ -135,7 +135,9 @@ class PresenceNotificationIT {
     @Test
     void sendingMessages_incrementsUnreadCountForNonViewingMembers() {
         // Create a room with userA as owner
-        Room room = roomService.getRoomById(roomService.createRoom("unread-incr-room", "test", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("unread-incr-room", "test", RoomVisibility.PUBLIC, userA)
+                .id());
 
         // UserB joins the room
         roomMemberService.joinPublicRoom(room, userB);
@@ -168,7 +170,9 @@ class PresenceNotificationIT {
     @Test
     void openingRoom_resetsUnreadCountToZero() {
         // Create a room with userA as owner
-        Room room = roomService.getRoomById(roomService.createRoom("unread-reset-room", "test", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("unread-reset-room", "test", RoomVisibility.PUBLIC, userA)
+                .id());
 
         // UserB joins the room
         roomMemberService.joinPublicRoom(room, userB);

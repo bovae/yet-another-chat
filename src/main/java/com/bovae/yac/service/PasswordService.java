@@ -6,6 +6,14 @@ import com.bovae.yac.model.entity.PasswordResetToken;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.PasswordResetTokenRepository;
 import com.bovae.yac.repository.UserRepository;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
+import java.util.Objects;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,14 +25,6 @@ import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.HexFormat;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -87,7 +87,8 @@ public class PasswordService {
     public void resetPassword(String rawToken, String newPassword) {
         String tokenHash = hashToken(rawToken);
 
-        PasswordResetToken resetToken = passwordResetTokenRepository.findByTokenHash(tokenHash)
+        PasswordResetToken resetToken = passwordResetTokenRepository
+                .findByTokenHash(tokenHash)
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid password reset token"));
 
         if (resetToken.getExpiresAt().isBefore(Instant.now())) {
@@ -102,7 +103,7 @@ public class PasswordService {
         passwordResetTokenRepository.save(resetToken);
 
         User user = userRepository.findById(resetToken.getUser().getId()).orElseThrow();
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordHash(encodePassword(newPassword));
         userRepository.save(user);
 
         // Invalidate existing sessions; remember-me cookies are keyed on the password hash and
@@ -118,14 +119,15 @@ public class PasswordService {
      */
     @Transactional
     public void changePassword(UUID userId, String currentPassword, String newPassword) {
-        User user = userRepository.findById(userId)
+        User user = userRepository
+                .findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: %s".formatted(userId)));
 
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             throw new ForbiddenException("Current password is incorrect");
         }
 
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordHash(encodePassword(newPassword));
         userRepository.save(user);
 
         invalidateSessions(user.getEmail());
@@ -133,9 +135,12 @@ public class PasswordService {
         LOG.info("Password changed for user: id={}", userId);
     }
 
+    private String encodePassword(String rawPassword) {
+        return Objects.requireNonNull(passwordEncoder.encode(rawPassword), "PasswordEncoder returned a null hash");
+    }
+
     private void invalidateSessions(String email) {
-        sessionRepository.findByPrincipalName(email).keySet()
-                .forEach(sessionRepository::deleteById);
+        sessionRepository.findByPrincipalName(email).keySet().forEach(sessionRepository::deleteById);
     }
 
     private void sendResetEmail(User user, String rawToken) {

@@ -20,12 +20,6 @@ import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -35,6 +29,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -56,7 +56,7 @@ public class MessageService {
     private final FileStorageService fileStorageService;
 
     @Transactional
-    public Message sendMessage(Room room, User sender, String content, Message replyTo) {
+    public Message sendMessage(Room room, User sender, String content, @Nullable Message replyTo) {
         assertCanPost(room, sender);
         validateContentSize(content);
 
@@ -77,17 +77,21 @@ public class MessageService {
 
         message = messageRepository.save(message);
 
-        LOG.info("Message sent: messageId={}, roomId={}, senderId={}, watermark={}",
-                message.getId(), room.getId(), sender.getId(), watermark);
+        LOG.info(
+                "Message sent: messageId={}, roomId={}, senderId={}, watermark={}",
+                message.getId(),
+                room.getId(),
+                sender.getId(),
+                watermark);
 
         return message;
     }
 
     @Transactional
     public Message editMessage(UUID messageId, User author, String newContent) {
-        Message message = messageRepository.findByIdWithSenderAndReplyTo(messageId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Message not found: %s".formatted(messageId)));
+        Message message = messageRepository
+                .findByIdWithSenderAndReplyTo(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found: %s".formatted(messageId)));
 
         if (message.getSender() == null || !message.getSender().getId().equals(author.getId())) {
             throw new ForbiddenException("Only the author can edit this message");
@@ -109,21 +113,21 @@ public class MessageService {
 
     @Transactional
     public void deleteMessage(UUID messageId, User requestingUser, Room room) {
-        Message message = messageRepository.findById(messageId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Message not found: %s".formatted(messageId)));
+        Message message = messageRepository
+                .findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found: %s".formatted(messageId)));
 
         // The message must belong to the room named in the URL, before role checks (R1-25).
         if (!message.getRoom().getId().equals(room.getId())) {
             throw new ResourceNotFoundException("Message not found in this room: %s".formatted(messageId));
         }
 
-        boolean isAuthor = message.getSender() != null
-                && message.getSender().getId().equals(requestingUser.getId());
+        boolean isAuthor =
+                message.getSender() != null && message.getSender().getId().equals(requestingUser.getId());
 
         if (!isAuthor) {
-            RoomMember member = roomMemberRepository.findById(
-                    new RoomMemberId(room.getId(), requestingUser.getId()))
+            RoomMember member = roomMemberRepository
+                    .findById(new RoomMemberId(room.getId(), requestingUser.getId()))
                     .orElseThrow(() -> new ForbiddenException("User is not a member of this room"));
 
             if (member.getRole() != RoomRole.ADMIN && member.getRole() != RoomRole.OWNER) {
@@ -150,7 +154,7 @@ public class MessageService {
      * {@code nextCursor} is the oldest returned watermark (the next {@code before}).
      */
     @Transactional(readOnly = true)
-    public MessagePage getMessageHistory(Room room, Long before, int size) {
+    public MessagePage getMessageHistory(Room room, @Nullable Long before, int size) {
         long effectiveBefore = (before != null) ? before : Long.MAX_VALUE;
 
         List<Message> descending = messageRepository.findByRoomAndWatermarkLessThanWithFetches(
@@ -191,20 +195,16 @@ public class MessageService {
 
     private List<ChatMessageResponse> toResponses(List<Message> messages) {
         // Batch-load attachments for all messages to avoid N+1 queries
-        List<UUID> messageIds = messages.stream()
-                .map(Message::getId)
-                .toList();
+        List<UUID> messageIds = messages.stream().map(Message::getId).toList();
 
         Map<UUID, List<AttachmentInfo>> attachmentsByMessageId;
         if (messageIds.isEmpty()) {
             attachmentsByMessageId = Collections.emptyMap();
         } else {
-            attachmentsByMessageId = attachmentRepository.findByMessageIdIn(messageIds)
-                    .stream()
+            attachmentsByMessageId = attachmentRepository.findByMessageIdIn(messageIds).stream()
                     .collect(Collectors.groupingBy(
                             a -> a.getMessage().getId(),
-                            Collectors.mapping(this::toAttachmentInfo, Collectors.toList())
-                    ));
+                            Collectors.mapping(this::toAttachmentInfo, Collectors.toList())));
         }
 
         return messages.stream()
@@ -215,15 +215,14 @@ public class MessageService {
     /** Loads a persisted message (with sender, reply-to, attachments) as a broadcast DTO. */
     @Transactional(readOnly = true)
     public ChatMessageResponse getMessageResponse(UUID messageId) {
-        Message message = messageRepository.findByIdWithSenderAndReplyTo(messageId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Message not found: %s".formatted(messageId)));
+        Message message = messageRepository
+                .findByIdWithSenderAndReplyTo(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found: %s".formatted(messageId)));
         return toResponse(message);
     }
 
     private ChatMessageResponse toResponse(Message message) {
-        List<AttachmentInfo> attachmentInfos = attachmentRepository.findByMessageId(message.getId())
-                .stream()
+        List<AttachmentInfo> attachmentInfos = attachmentRepository.findByMessageId(message.getId()).stream()
                 .map(this::toAttachmentInfo)
                 .toList();
 
@@ -238,7 +237,8 @@ public class MessageService {
 
         if (replyTo != null) {
             replyToId = replyTo.getId();
-            replyToSenderUsername = replyTo.getSender() != null ? replyTo.getSender().getUsername() : DELETED_USER;
+            replyToSenderUsername =
+                    replyTo.getSender() != null ? replyTo.getSender().getUsername() : DELETED_USER;
             String content = replyTo.getContent();
             replyToContentSnippet = content.length() > 100 ? content.substring(0, 100) : content;
         } else if (message.getOriginalReplyToId() != null) {
@@ -261,8 +261,7 @@ public class MessageService {
                 message.isEdited(),
                 message.getWatermark(),
                 message.getCreatedAt(),
-                attachments
-        );
+                attachments);
     }
 
     private AttachmentInfo toAttachmentInfo(Attachment attachment) {
@@ -271,8 +270,7 @@ public class MessageService {
                 attachment.getOriginalFileName(),
                 attachment.getContentType(),
                 attachment.getFileSize(),
-                attachment.getComment()
-        );
+                attachment.getComment());
     }
 
     /**
@@ -298,9 +296,8 @@ public class MessageService {
 
         int byteLength = content.getBytes(StandardCharsets.UTF_8).length;
         if (byteLength > MAX_CONTENT_BYTES) {
-            throw new IllegalArgumentException(
-                    "Message content exceeds maximum size of %d bytes (was %d bytes)"
-                            .formatted(MAX_CONTENT_BYTES, byteLength));
+            throw new IllegalArgumentException("Message content exceeds maximum size of %d bytes (was %d bytes)"
+                    .formatted(MAX_CONTENT_BYTES, byteLength));
         }
     }
 
@@ -308,19 +305,18 @@ public class MessageService {
         List<RoomMemberDto> members = roomMemberService.listMembers(room);
 
         // Skip friendship/ban checks for self-DM (Saved Messages) rooms
-        long distinctUserCount = members.stream()
-                .map(RoomMemberDto::userId)
-                .distinct()
-                .count();
+        long distinctUserCount =
+                members.stream().map(RoomMemberDto::userId).distinct().count();
         if (distinctUserCount <= 1) {
             return;
         }
 
         for (RoomMemberDto member : members) {
             if (!member.userId().equals(sender.getId())) {
-                User otherUser = userRepository.findById(member.userId())
-                        .orElseThrow(() -> new ResourceNotFoundException(
-                                "User not found: %s".formatted(member.userId())));
+                User otherUser = userRepository
+                        .findById(member.userId())
+                        .orElseThrow(
+                                () -> new ResourceNotFoundException("User not found: %s".formatted(member.userId())));
                 if (userBanService.isBanExistsBetween(sender, otherUser)) {
                     throw new ForbiddenException("Cannot send messages in this direct chat due to a user ban");
                 }

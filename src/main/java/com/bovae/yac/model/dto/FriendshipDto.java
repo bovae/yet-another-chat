@@ -1,7 +1,6 @@
 package com.bovae.yac.model.dto;
 
 import com.bovae.yac.model.enums.FriendshipStatus;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -15,5 +14,4 @@ public record FriendshipDto(
         String recipientDisplayName,
         FriendshipStatus status,
         String requestText,
-        Instant createdAt
-) {}
+        Instant createdAt) {}

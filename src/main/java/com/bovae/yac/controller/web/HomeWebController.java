@@ -1,9 +1,8 @@
 package com.bovae.yac.controller.web;
 
+import java.security.Principal;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
-
-import java.security.Principal;
 
 @Controller
 public class HomeWebController {

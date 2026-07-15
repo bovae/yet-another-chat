@@ -2,13 +2,12 @@ package com.bovae.yac.ws;
 
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.PresenceService;
+import java.security.Principal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
-
-import java.security.Principal;
 
 /**
  * Removes a user's session from presence the moment its WebSocket disconnects, so status
@@ -28,7 +27,8 @@ public class PresenceEventListener {
         if (user == null) {
             return;
         }
-        userRepository.findByEmail(user.getName()).ifPresent(u ->
-                presenceService.removeSession(u.getId(), event.getSessionId()));
+        userRepository
+                .findByEmail(user.getName())
+                .ifPresent(u -> presenceService.removeSession(u.getId(), event.getSessionId()));
     }
 }

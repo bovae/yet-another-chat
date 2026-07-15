@@ -3,13 +3,12 @@ package com.bovae.yac.controller.web;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.AuthService;
+import java.security.Principal;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-
-import java.security.Principal;
-import java.util.List;
 
 @Controller
 @RequiredArgsConstructor
@@ -20,8 +19,7 @@ public class ProfileWebController {
 
     @GetMapping("/profile")
     public String profile(Model model, Principal principal) {
-        User user = userRepository.findByEmail(principal.getName())
-                .orElseThrow();
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
         model.addAttribute("user", user);
         return "profile/index";
     }

@@ -1,5 +1,15 @@
 package com.bovae.yac.integration;
 
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Friendship;
@@ -27,16 +37,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.is;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Multi-user scenario integration tests exercising cross-user interaction flows:
@@ -117,8 +117,8 @@ class MultiUserScenarioIT {
                 .andExpect(status().isCreated());
 
         // Find the pending friendship to accept it
-        Friendship pending = friendshipRepository.findByRequesterAndRecipient(userA, userB)
-                .orElseThrow();
+        Friendship pending =
+                friendshipRepository.findByRequesterAndRecipient(userA, userB).orElseThrow();
 
         // User B accepts the friend request
         mockMvc.perform(post("/api/friends/{id}/accept", pending.getId())
@@ -127,14 +127,12 @@ class MultiUserScenarioIT {
                 .andExpect(status().isOk());
 
         // User A sees User B in friend list
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
 
         // User B sees User A in friend list
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userB.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userB.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
     }
@@ -151,8 +149,7 @@ class MultiUserScenarioIT {
         userBanService.banUser(userA, userB);
 
         // Verify friendship is deleted
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
 
@@ -168,7 +165,9 @@ class MultiUserScenarioIT {
 
         // User B cannot send messages in a shared room to User A (via direct chat)
         // Create a public room where both are members to test message blocking
-        Room room = roomService.getRoomById(roomService.createRoom("ban-msg-room", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("ban-msg-room", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
         roomMemberService.joinPublicRoom(room, userB);
 
         // User B can still send messages in a public room (user ban only affects DMs and friend requests)
@@ -190,7 +189,8 @@ class MultiUserScenarioIT {
         // Set up friendship and direct chat
         Friendship friendship = friendshipService.sendFriendRequest(userA, userB, null);
         friendshipService.acceptFriendRequest(friendship.getId(), userB);
-        Room directChat = roomService.getRoomById(directChatService.getOrCreateDirectChat(userA, userB).id());
+        Room directChat = roomService.getRoomById(
+                directChatService.getOrCreateDirectChat(userA, userB).id());
 
         // Both can send messages before ban
         messageService.sendMessage(directChat, userA, "Hello from A", null);
@@ -224,7 +224,9 @@ class MultiUserScenarioIT {
 
     @Test
     void adminKick_kickedMemberCannotAccessMessagesAndRoomBanCreated() throws Exception {
-        Room room = roomService.getRoomById(roomService.createRoom("kick-room", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("kick-room", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
         roomMemberService.joinPublicRoom(room, userB);
 
         // User A (owner) kicks User B
@@ -259,8 +261,12 @@ class MultiUserScenarioIT {
     @Test
     void ownerAccountDeletion_ownedRoomsCascadeDeleted() throws Exception {
         // User A creates rooms and User B joins one
-        Room room1 = roomService.getRoomById(roomService.createRoom("owned-room-1", "desc", RoomVisibility.PUBLIC, userA).id());
-        Room room2 = roomService.getRoomById(roomService.createRoom("owned-room-2", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room room1 = roomService.getRoomById(roomService
+                .createRoom("owned-room-1", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
+        Room room2 = roomService.getRoomById(roomService
+                .createRoom("owned-room-2", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
         roomMemberService.joinPublicRoom(room1, userB);
         messageService.sendMessage(room1, userA, "Message in room 1", null);
         messageService.sendMessage(room1, userB, "User B message", null);
@@ -287,7 +293,9 @@ class MultiUserScenarioIT {
 
     @Test
     void messageExchange_bothUsersSeeMessagesInWatermarkOrder() throws Exception {
-        Room room = roomService.getRoomById(roomService.createRoom("exchange-room", "desc", RoomVisibility.PUBLIC, userA).id());
+        Room room = roomService.getRoomById(roomService
+                .createRoom("exchange-room", "desc", RoomVisibility.PUBLIC, userA)
+                .id());
         roomMemberService.joinPublicRoom(room, userB);
 
         // User A sends first message
@@ -346,7 +354,9 @@ class MultiUserScenarioIT {
 
     @Test
     void privateRoomInvitationFlow_inviteAcceptAndSendMessage() throws Exception {
-        Room privateRoom = roomService.getRoomById(roomService.createRoom("private-invite-room", "desc", RoomVisibility.PRIVATE, userA).id());
+        Room privateRoom = roomService.getRoomById(roomService
+                .createRoom("private-invite-room", "desc", RoomVisibility.PRIVATE, userA)
+                .id());
 
         // User A invites User B
         mockMvc.perform(post("/api/rooms/{roomId}/invitations", privateRoom.getId())
@@ -359,7 +369,8 @@ class MultiUserScenarioIT {
                 .andExpect(status().isCreated());
 
         // Find the invitation
-        RoomInvitation invitation = roomInvitationRepository.findByRoomAndInvitee(privateRoom, userB)
+        RoomInvitation invitation = roomInvitationRepository
+                .findByRoomAndInvitee(privateRoom, userB)
                 .orElseThrow();
 
         // User B accepts the invitation
@@ -398,8 +409,7 @@ class MultiUserScenarioIT {
         userBanService.banUser(userA, userB);
 
         // Verify friendship is gone
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
 
@@ -407,13 +417,11 @@ class MultiUserScenarioIT {
         userBanService.unbanUser(userA, userB);
 
         // Friendship is NOT restored — still empty
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userA.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userA.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
 
-        mockMvc.perform(get("/api/friends")
-                        .with(user(userB.getEmail()).roles("USER")))
+        mockMvc.perform(get("/api/friends").with(user(userB.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
 

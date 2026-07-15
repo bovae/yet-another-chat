@@ -1,14 +1,25 @@
 package com.bovae.yac.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.model.entity.PasswordResetToken;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.PasswordResetTokenRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.PasswordService;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.session.FindByIndexNameSessionRepository;
-import org.springframework.session.Session;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,22 +27,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.doReturn;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
 
 /**
  * Unit tests for {@link PasswordService}.
@@ -78,12 +77,11 @@ class PasswordServiceTest {
      */
     @Test
     void createResetToken_returnsRawTokenAndPersistsHashedToken() {
-        when(passwordResetTokenRepository.save(any(PasswordResetToken.class)))
-                .thenAnswer(invocation -> {
-                    PasswordResetToken token = invocation.getArgument(0);
-                    token.setId(UUID.randomUUID());
-                    return token;
-                });
+        when(passwordResetTokenRepository.save(any(PasswordResetToken.class))).thenAnswer(invocation -> {
+            PasswordResetToken token = invocation.getArgument(0);
+            token.setId(UUID.randomUUID());
+            return token;
+        });
 
         String rawToken = passwordService.createResetToken(existingUser);
 
@@ -119,15 +117,12 @@ class PasswordServiceTest {
                 .used(false)
                 .build();
 
-        when(passwordResetTokenRepository.findByTokenHash(anyString()))
-                .thenReturn(Optional.of(resetToken));
-        when(userRepository.findById(existingUser.getId()))
-                .thenReturn(Optional.of(existingUser));
+        when(passwordResetTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(resetToken));
+        when(userRepository.findById(existingUser.getId())).thenReturn(Optional.of(existingUser));
         when(passwordEncoder.encode(newPassword)).thenReturn(encodedNewPassword);
         when(passwordResetTokenRepository.save(any(PasswordResetToken.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(userRepository.save(any(User.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
         doReturn(Map.of()).when(sessionRepository).findByPrincipalName(existingUser.getEmail());
 
         passwordService.resetPassword(rawToken, newPassword);
@@ -157,8 +152,7 @@ class PasswordServiceTest {
                 .used(false)
                 .build();
 
-        when(passwordResetTokenRepository.findByTokenHash(anyString()))
-                .thenReturn(Optional.of(expiredToken));
+        when(passwordResetTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(expiredToken));
 
         assertThatThrownBy(() -> passwordService.resetPassword(rawToken, "newPass"))
                 .isInstanceOf(ForbiddenException.class)
@@ -179,7 +173,8 @@ class PasswordServiceTest {
         String encodedNewPassword = "$2a$10$brandNewHash";
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
-        when(passwordEncoder.matches(currentPassword, existingUser.getPasswordHash())).thenReturn(true);
+        when(passwordEncoder.matches(currentPassword, existingUser.getPasswordHash()))
+                .thenReturn(true);
         when(passwordEncoder.encode(newPassword)).thenReturn(encodedNewPassword);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
         doReturn(Map.of()).when(sessionRepository).findByPrincipalName(existingUser.getEmail());
@@ -201,7 +196,8 @@ class PasswordServiceTest {
         String wrongPassword = "wrongPass";
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(existingUser));
-        when(passwordEncoder.matches(wrongPassword, existingUser.getPasswordHash())).thenReturn(false);
+        when(passwordEncoder.matches(wrongPassword, existingUser.getPasswordHash()))
+                .thenReturn(false);
 
         assertThatThrownBy(() -> passwordService.changePassword(userId, wrongPassword, "newPass"))
                 .isInstanceOf(ForbiddenException.class)

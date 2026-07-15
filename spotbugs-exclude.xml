@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- Exposing internal representation: idiomatic in Spring DTOs/entities with Lombok accessors -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    <!-- Noisy since SpotBugs 4.7; Spring beans routinely validate in constructors -->
+    <Match>
+        <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+    </Match>
+    <!-- MapStruct-generated mappers -->
+    <Match>
+        <Class name="~.*MapperImpl"/>
+    </Match>
+</FindBugsFilter>

@@ -1,21 +1,20 @@
 package com.bovae.yac.unit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.bovae.yac.model.dto.FriendshipDto;
 import com.bovae.yac.model.dto.FriendshipMapper;
 import com.bovae.yac.model.entity.Friendship;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.FriendshipStatus;
-import org.junit.jupiter.api.Test;
-import org.mapstruct.factory.Mappers;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 class FriendshipMapperTest {
 
@@ -107,19 +106,41 @@ class FriendshipMapperTest {
 
     @Test
     void toDtoList_mapsAllFriendships() {
-        User alice = User.builder().id(UUID.randomUUID()).username("alice").displayName("Alice")
-                .email("a@e.com").passwordHash("h").build();
-        User bob = User.builder().id(UUID.randomUUID()).username("bob").displayName("Bob")
-                .email("b@e.com").passwordHash("h").build();
-        User carol = User.builder().id(UUID.randomUUID()).username("carol").displayName("Carol")
-                .email("c@e.com").passwordHash("h").build();
+        User alice = User.builder()
+                .id(UUID.randomUUID())
+                .username("alice")
+                .displayName("Alice")
+                .email("a@e.com")
+                .passwordHash("h")
+                .build();
+        User bob = User.builder()
+                .id(UUID.randomUUID())
+                .username("bob")
+                .displayName("Bob")
+                .email("b@e.com")
+                .passwordHash("h")
+                .build();
+        User carol = User.builder()
+                .id(UUID.randomUUID())
+                .username("carol")
+                .displayName("Carol")
+                .email("c@e.com")
+                .passwordHash("h")
+                .build();
 
         List<Friendship> friendships = List.of(
-                Friendship.builder().id(UUID.randomUUID()).requester(alice).recipient(bob)
-                        .status(FriendshipStatus.ACCEPTED).build(),
-                Friendship.builder().id(UUID.randomUUID()).requester(alice).recipient(carol)
-                        .status(FriendshipStatus.PENDING).build()
-        );
+                Friendship.builder()
+                        .id(UUID.randomUUID())
+                        .requester(alice)
+                        .recipient(bob)
+                        .status(FriendshipStatus.ACCEPTED)
+                        .build(),
+                Friendship.builder()
+                        .id(UUID.randomUUID())
+                        .requester(alice)
+                        .recipient(carol)
+                        .status(FriendshipStatus.PENDING)
+                        .build());
 
         List<FriendshipDto> dtos = mapper.toDtoList(friendships);
 

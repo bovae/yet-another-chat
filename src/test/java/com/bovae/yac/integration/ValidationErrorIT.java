@@ -1,5 +1,15 @@
 package com.bovae.yac.integration;
 
+import static org.hamcrest.Matchers.is;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Message;
@@ -9,6 +19,7 @@ import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.RoomService;
 import com.bovae.yac.service.UserService;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,18 +30,6 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
-
-import static org.hamcrest.Matchers.is;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Integration tests for input validation and error handling.
@@ -67,7 +66,9 @@ class ValidationErrorIT {
     void setUp() {
         UserDto userADto = userService.register("val-alice@test.com", "valalice", "testpass123");
         userA = userRepository.findById(userADto.id()).orElseThrow();
-        room = roomService.getRoomById(roomService.createRoom("val-test-room", "Validation test room", RoomVisibility.PUBLIC, userA).id());
+        room = roomService.getRoomById(roomService
+                .createRoom("val-test-room", "Validation test room", RoomVisibility.PUBLIC, userA)
+                .id());
     }
 
     // ---- Req 13.1: Blank message content returns 400 ----
@@ -223,12 +224,7 @@ class ValidationErrorIT {
         byte[] data = new byte[3 * 1024 * 1024 + 1];
         byte[] pngMagic = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
         System.arraycopy(pngMagic, 0, data, 0, pngMagic.length);
-        MockMultipartFile oversizedImage = new MockMultipartFile(
-                "file",
-                "large-image.png",
-                "image/png",
-                data
-        );
+        MockMultipartFile oversizedImage = new MockMultipartFile("file", "large-image.png", "image/png", data);
 
         mockMvc.perform(multipart("/api/rooms/{roomId}/attachments", room.getId())
                         .file(oversizedImage)

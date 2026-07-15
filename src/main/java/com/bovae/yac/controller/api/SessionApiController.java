@@ -1,6 +1,8 @@
 package com.bovae.yac.controller.api;
 
 import com.bovae.yac.service.AuthService;
+import java.security.Principal;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -9,9 +11,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
-import java.util.List;
 
 @Validated
 @RestController
@@ -28,9 +27,7 @@ public class SessionApiController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> terminateSession(
-            @PathVariable String id,
-            Principal principal) {
+    public ResponseEntity<Void> terminateSession(@PathVariable String id, Principal principal) {
         // Only the owning principal may terminate a session; otherwise 404 (R1-11).
         authService.terminateSession(id, principal.getName());
         return ResponseEntity.noContent().build();

@@ -1,19 +1,18 @@
 package com.bovae.yac.unit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
 import com.bovae.yac.model.dto.RoomDto;
 import com.bovae.yac.model.dto.RoomMapper;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
-import org.junit.jupiter.api.Test;
-import org.mapstruct.factory.Mappers;
-
 import java.time.Instant;
 import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 class RoomMapperTest {
 
