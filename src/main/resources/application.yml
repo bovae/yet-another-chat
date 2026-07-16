@@ -65,7 +65,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: when-authorized
@@ -84,6 +84,9 @@ app:
     max-image-size: 3MB
 
 logging:
+  # traceId is populated per-request by TraceIdFilter; surfaces in the default console pattern.
+  pattern:
+    correlation: "[%X{traceId:-}] "
   level:
     root: INFO
     com.bovae: DEBUG

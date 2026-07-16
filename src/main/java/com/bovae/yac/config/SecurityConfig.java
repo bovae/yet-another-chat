@@ -37,6 +37,7 @@ public class SecurityConfig {
                                 "/webjars/**",
                                 "/api/health",
                                 "/actuator/health",
+                                "/actuator/prometheus",
                                 "/api/password/reset",
                                 "/api/password/reset-request",
                                 "/ws/**",
