@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.bovae.yac.controller.web.ChatWebController;
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.model.dto.MessagePage;
+import com.bovae.yac.model.dto.RoomDto;
 import com.bovae.yac.model.dto.RoomMemberDto;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
@@ -20,6 +21,7 @@ import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.DirectChatService;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomMemberService;
@@ -59,6 +61,9 @@ class ChatWebControllerTest {
     private NotificationService notificationService;
 
     @Mock
+    private DirectChatService directChatService;
+
+    @Mock
     private UserRepository userRepository;
 
     @Mock
@@ -85,6 +90,27 @@ class ChatWebControllerTest {
                 .build();
         when(principal.getName()).thenReturn(user.getEmail());
         when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
+    }
+
+    // --- saved messages route (R5-17) ---
+
+    @Test
+    void savedMessages_shouldRedirectToTheSelfDmRoom() {
+        UUID savedRoomId = UUID.randomUUID();
+        RoomDto saved = new RoomDto(
+                savedRoomId,
+                "saved-messages-" + user.getId(),
+                null,
+                RoomVisibility.DIRECT,
+                user.getId(),
+                user.getUsername(),
+                1L,
+                null);
+        when(directChatService.getOrCreateSavedMessages(user)).thenReturn(saved);
+
+        String view = controller.savedMessages(principal);
+
+        assertThat(view).isEqualTo("redirect:/chat/rooms/" + savedRoomId);
     }
 
     // --- access guards ---

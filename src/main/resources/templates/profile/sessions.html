@@ -50,6 +50,9 @@
     </div>
   </div>
 
+  <!-- Shared confirm + error modals (R5-09) -->
+  <div th:replace="~{fragments/modals :: modals}"></div>
+
   <script th:src="@{/webjars/bootstrap/js/bootstrap.bundle.min.js}"></script>
   <script>
     function terminateSession(btn) {
@@ -67,7 +70,7 @@
         if (resp.ok) {
           btn.closest('.card').remove();
         } else {
-          alert('Failed to terminate session');
+          window.showErrorModal('Failed to terminate session');
         }
       });
     }

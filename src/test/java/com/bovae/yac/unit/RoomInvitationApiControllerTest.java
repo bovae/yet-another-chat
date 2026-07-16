@@ -3,6 +3,7 @@ package com.bovae.yac.unit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,6 +13,7 @@ import com.bovae.yac.controller.api.RoomInvitationApiController;
 import com.bovae.yac.controller.api.RoomInvitationApiController.InviteRequest;
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.exception.ResourceNotFoundException;
+import com.bovae.yac.model.dto.NotificationEvent;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.RoomInvitation;
 import com.bovae.yac.model.entity.RoomMember;
@@ -23,6 +25,7 @@ import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.MessageBroadcastService;
+import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import java.security.Principal;
@@ -52,6 +55,9 @@ class RoomInvitationApiControllerTest {
 
     @Mock
     private MessageBroadcastService messageBroadcastService;
+
+    @Mock
+    private NotificationService notificationService;
 
     @Mock
     private RoomInvitationRepository roomInvitationRepository;
@@ -145,6 +151,12 @@ class RoomInvitationApiControllerTest {
         assertThat(saved.getRoom()).isSameAs(room);
         assertThat(saved.getInviter()).isSameAs(caller);
         assertThat(saved.getInvitee()).isSameAs(invitee);
+
+        // The invitee is pushed a live ROOM_INVITATION_CREATED so their panel updates (R5-06).
+        ArgumentCaptor<NotificationEvent> eventCaptor = ArgumentCaptor.forClass(NotificationEvent.class);
+        verify(notificationService).broadcastNotification(eq(invitee), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo("ROOM_INVITATION_CREATED");
+        assertThat(eventCaptor.getValue().roomId()).isEqualTo(roomId);
     }
 
     @Test

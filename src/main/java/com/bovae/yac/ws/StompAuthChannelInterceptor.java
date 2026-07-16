@@ -3,6 +3,7 @@ package com.bovae.yac.ws;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
+import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UserRepository;
@@ -36,6 +37,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private final UserRepository userRepository;
     private final RoomRepository roomRepository;
     private final RoomMemberRepository roomMemberRepository;
+    private final RoomBanRepository roomBanRepository;
     private final PresenceVisibilityService presenceVisibilityService;
 
     @Override
@@ -73,16 +75,31 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         Matcher presenceMatcher = PRESENCE_TOPIC.matcher(destination);
         if (presenceMatcher.matches()) {
             authorizePresence(principal, UUID.fromString(presenceMatcher.group(1)));
+            return;
         }
-        // Personal queues (/user/**, /queue/**) are already gated to authenticated users.
+        // Personal destinations (/user/queue/**) are scoped by Spring to the authenticated principal.
+        if (destination.startsWith("/user/")) {
+            return;
+        }
+        // Deny-by-default (R4-01): any other /topic/** or /queue/** destination — including
+        // wildcard patterns like /topic/** or /topic/room.** — is rejected, since AntPathMatcher
+        // would otherwise match a wildcard subscription against every broadcast destination.
+        LOG.warn("Rejected SUBSCRIBE to unauthorized destination {} by {}", destination, principal.getName());
+        throw new MessageDeliveryException("Subscription destination not allowed");
     }
 
     private void authorizeRoom(Principal principal, UUID roomId) {
         Room room = roomRepository.findById(roomId).orElseThrow(() -> new MessageDeliveryException("Room not found"));
+        User user = resolveUser(principal);
+        // Bans are checked first, independent of visibility, mirroring RoomMemberService.requireCanRead
+        // — a banned user must not eavesdrop even on a PUBLIC room's live stream (R4-06).
+        if (roomBanRepository.existsByRoomAndUser(room, user)) {
+            LOG.warn("Rejected SUBSCRIBE to room {} by banned user {}", roomId, principal.getName());
+            throw new MessageDeliveryException("Banned from this room");
+        }
         if (room.getVisibility() == RoomVisibility.PUBLIC) {
             return; // public rooms follow the same visibility rule as history reads
         }
-        User user = resolveUser(principal);
         if (!roomMemberRepository.existsByRoomAndUser(room, user)) {
             LOG.warn("Rejected SUBSCRIBE to room {} by non-member {}", roomId, principal.getName());
             throw new MessageDeliveryException("Not a member of this room");

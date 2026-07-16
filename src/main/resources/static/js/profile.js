@@ -140,31 +140,30 @@
     }
 
     btn.addEventListener('click', function () {
-      if (!confirm('Are you sure you want to delete your account? This action is irreversible.')) {
-        return;
-      }
-
-      fetch('/api/users/me', {
-        method: 'DELETE',
-        headers: apiHeaders()
-      })
-      .then(function (response) {
-        if (response.status === 204 || response.ok) {
-          window.location.href = '/login';
-          return;
-        }
-        return response.json().then(function (err) {
+      // In-app confirm modal instead of the native confirm() dialog (R5-09).
+      window.showConfirmModal('Are you sure you want to delete your account? This action is irreversible.', function () {
+        fetch('/api/users/me', {
+          method: 'DELETE',
+          headers: apiHeaders()
+        })
+        .then(function (response) {
+          if (response.status === 204 || response.ok) {
+            window.location.href = '/login';
+            return;
+          }
+          return response.json().then(function (err) {
+            var card = btn.closest('.card-body');
+            if (card) {
+              showFeedback(card, err.message || 'Failed to delete account.', true);
+            }
+          });
+        })
+        .catch(function () {
           var card = btn.closest('.card-body');
           if (card) {
-            showFeedback(card, err.message || 'Failed to delete account.', true);
+            showFeedback(card, 'An error occurred while deleting account.', true);
           }
         });
-      })
-      .catch(function () {
-        var card = btn.closest('.card-body');
-        if (card) {
-          showFeedback(card, 'An error occurred while deleting account.', true);
-        }
       });
     });
   }

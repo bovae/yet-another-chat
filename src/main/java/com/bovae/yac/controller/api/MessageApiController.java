@@ -99,7 +99,7 @@ public class MessageApiController {
         User user = resolveUser(principal);
         Room room = roomService.getRoomById(roomId);
 
-        Message message = messageService.editMessage(id, user, request.content());
+        Message message = messageService.editMessage(id, user, request.content(), room);
 
         // Broadcast the edit so viewers update in place instead of dropping it as a duplicate (R1-04).
         messageBroadcastService.broadcastEdit(room, message.getId(), message.getContent());

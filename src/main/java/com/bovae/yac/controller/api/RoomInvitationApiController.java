@@ -2,6 +2,7 @@ package com.bovae.yac.controller.api;
 
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.exception.ResourceNotFoundException;
+import com.bovae.yac.model.dto.NotificationEvent;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.RoomInvitation;
 import com.bovae.yac.model.entity.RoomMember;
@@ -12,6 +13,7 @@ import com.bovae.yac.repository.RoomInvitationRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.MessageBroadcastService;
+import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import jakarta.validation.Valid;
@@ -39,6 +41,7 @@ public class RoomInvitationApiController {
     private final RoomService roomService;
     private final RoomMemberService roomMemberService;
     private final MessageBroadcastService messageBroadcastService;
+    private final NotificationService notificationService;
     private final RoomInvitationRepository roomInvitationRepository;
     private final RoomMemberRepository roomMemberRepository;
     private final UserRepository userRepository;
@@ -69,6 +72,11 @@ public class RoomInvitationApiController {
                 .build();
 
         roomInvitationRepository.save(invitation);
+
+        // Live arrival in the invitee's Room Invitations panel and navbar badge (R5-06),
+        // mirroring the friend-request pattern (R2-03).
+        notificationService.broadcastNotification(
+                invitee, new NotificationEvent("ROOM_INVITATION_CREATED", room.getId(), room.getName(), 0));
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }

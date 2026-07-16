@@ -41,6 +41,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Unit tests for {@link PasswordService}.
@@ -290,6 +292,31 @@ class PasswordServiceTest {
         passwordService.requestReset(existingUser.getEmail());
 
         verify(mailSender).send(any(SimpleMailMessage.class));
+    }
+
+    /**
+     * Validates R4-11: with a transaction active, the reset email is deferred to after-commit —
+     * not sent while the transaction (and its DB connection) is still open.
+     */
+    @Test
+    void requestReset_defersEmailToAfterCommit_whenTransactionActive() {
+        when(userRepository.findByEmail(existingUser.getEmail())).thenReturn(Optional.of(existingUser));
+        when(passwordResetTokenRepository.save(any(PasswordResetToken.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            passwordService.requestReset(existingUser.getEmail());
+
+            // Registered for after-commit, so nothing is sent while the transaction is still open.
+            verify(mailSender, never()).send(any(SimpleMailMessage.class));
+
+            // Simulate commit — the registered synchronization runs and the email goes out.
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+            verify(mailSender).send(any(SimpleMailMessage.class));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     // --- hashToken defensive guard (SHA-256 unavailable) ---

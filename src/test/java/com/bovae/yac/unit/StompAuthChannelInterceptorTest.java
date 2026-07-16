@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
+import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UserRepository;
@@ -53,6 +54,9 @@ class StompAuthChannelInterceptorTest {
 
     @Mock
     private RoomMemberRepository roomMemberRepository;
+
+    @Mock
+    private RoomBanRepository roomBanRepository;
 
     @Mock
     private PresenceVisibilityService presenceVisibilityService;
@@ -108,14 +112,37 @@ class StompAuthChannelInterceptorTest {
 
     @ParameterizedTest(name = "destination={0}")
     @NullSource
-    @ValueSource(strings = {"/user/queue/messages", "/queue/private"})
-    void preSend_shouldPassThroughSubscribe_whenDestinationIsNotAGuardedTopic(String destination) {
+    @ValueSource(strings = {"/user/queue/messages", "/user/queue/notifications"})
+    void preSend_shouldPassThroughSubscribe_whenDestinationIsPersonalOrNull(String destination) {
         Message<byte[]> message = stompMessage(StompCommand.SUBSCRIBE, principal, destination);
 
         Message<?> result = interceptor.preSend(message, null);
 
         assertThat(result).isSameAs(message);
         verifyNoInteractions(userRepository, roomRepository, roomMemberRepository, presenceVisibilityService);
+    }
+
+    /**
+     * Validates R4-01: deny-by-default. Any destination that is not an exact room/presence topic
+     * or a personal /user/ queue — including wildcard patterns AntPathMatcher would otherwise match
+     * against every broadcast — is rejected.
+     */
+    @ParameterizedTest(name = "destination={0}")
+    @ValueSource(
+            strings = {
+                "/topic/**",
+                "/topic/room.**",
+                "/queue/**",
+                "/queue/private",
+                "/topic/presence.**",
+                "/topic/anything-else"
+            })
+    void preSend_shouldRejectSubscribe_whenDestinationIsWildcardOrUnrecognized(String destination) {
+        Message<byte[]> message = stompMessage(StompCommand.SUBSCRIBE, principal, destination);
+
+        assertThatThrownBy(() -> interceptor.preSend(message, null))
+                .isInstanceOf(MessageDeliveryException.class)
+                .hasMessageContaining("not allowed");
     }
 
     // --- Room subscription authorization ---
@@ -125,14 +152,34 @@ class StompAuthChannelInterceptorTest {
         UUID roomId = UUID.randomUUID();
         Room publicRoom = room(roomId, RoomVisibility.PUBLIC);
         when(roomRepository.findById(roomId)).thenReturn(Optional.of(publicRoom));
+        when(userRepository.findByEmail(USER_EMAIL)).thenReturn(Optional.of(user));
+        when(roomBanRepository.existsByRoomAndUser(publicRoom, user)).thenReturn(false);
 
         Message<byte[]> message = stompMessage(StompCommand.SUBSCRIBE, principal, "/topic/room." + roomId);
 
         Message<?> result = interceptor.preSend(message, null);
 
         assertThat(result).isSameAs(message);
+        // Membership is not required for a public room, but the ban gate still runs.
         verify(roomMemberRepository, never()).existsByRoomAndUser(any(), any());
-        verifyNoInteractions(userRepository, presenceVisibilityService);
+        verifyNoInteractions(presenceVisibilityService);
+    }
+
+    /** Validates R4-06: a banned user is rejected from a PUBLIC room's live stream. */
+    @Test
+    void preSend_shouldRejectRoomSubscribe_whenUserIsBannedFromPublicRoom() {
+        UUID roomId = UUID.randomUUID();
+        Room publicRoom = room(roomId, RoomVisibility.PUBLIC);
+        when(roomRepository.findById(roomId)).thenReturn(Optional.of(publicRoom));
+        when(userRepository.findByEmail(USER_EMAIL)).thenReturn(Optional.of(user));
+        when(roomBanRepository.existsByRoomAndUser(publicRoom, user)).thenReturn(true);
+
+        Message<byte[]> message = stompMessage(StompCommand.SUBSCRIBE, principal, "/topic/room." + roomId);
+
+        assertThatThrownBy(() -> interceptor.preSend(message, null))
+                .isInstanceOf(MessageDeliveryException.class)
+                .hasMessageContaining("Banned from this room");
+        verify(roomMemberRepository, never()).existsByRoomAndUser(any(), any());
     }
 
     @Test

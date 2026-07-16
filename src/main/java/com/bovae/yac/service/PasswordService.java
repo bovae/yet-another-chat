@@ -25,6 +25,8 @@ import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @RequiredArgsConstructor
@@ -52,8 +54,24 @@ public class PasswordService {
     public void requestReset(String email) {
         userRepository.findByEmail(email).ifPresent(user -> {
             String rawToken = createResetToken(user);
-            sendResetEmail(user, rawToken);
+            // Send after the token commits so a slow SMTP server never pins the DB connection for
+            // the duration of the send (R4-11); timeouts (application.yml) bound the send itself.
+            runAfterCommit(() -> sendResetEmail(user, rawToken));
         });
+    }
+
+    /** Runs {@code action} once the current transaction commits, or immediately if none is active. */
+    private void runAfterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 
     /**

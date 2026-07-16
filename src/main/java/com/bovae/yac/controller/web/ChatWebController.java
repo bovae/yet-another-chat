@@ -2,6 +2,7 @@ package com.bovae.yac.controller.web;
 
 import com.bovae.yac.exception.ForbiddenException;
 import com.bovae.yac.model.dto.MessagePage;
+import com.bovae.yac.model.dto.RoomDto;
 import com.bovae.yac.model.dto.RoomMemberDto;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
@@ -9,6 +10,7 @@ import com.bovae.yac.model.enums.RoomRole;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.DirectChatService;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.NotificationService;
 import com.bovae.yac.service.RoomMemberService;
@@ -32,6 +34,7 @@ public class ChatWebController {
     private final RoomMemberService roomMemberService;
     private final MessageService messageService;
     private final NotificationService notificationService;
+    private final DirectChatService directChatService;
     private final UserRepository userRepository;
     private final RoomBanRepository roomBanRepository;
 
@@ -40,6 +43,14 @@ public class ChatWebController {
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
         model.addAttribute("currentUser", user);
         return "chat/index";
+    }
+
+    /** One-click Saved Messages: get-or-create the self-DM and open it (navbar link, R5-17). */
+    @GetMapping("/chat/saved-messages")
+    public String savedMessages(Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        RoomDto saved = directChatService.getOrCreateSavedMessages(user);
+        return "redirect:/chat/rooms/" + saved.id();
     }
 
     @GetMapping("/chat/rooms/{id}")
@@ -74,7 +85,11 @@ public class ChatWebController {
 
         model.addAttribute("room", room);
 
-        if (room.getVisibility() == RoomVisibility.DIRECT && room.getName().startsWith("saved-messages-")) {
+        boolean isSavedMessages =
+                room.getVisibility() == RoomVisibility.DIRECT && room.getName().startsWith("saved-messages-");
+        model.addAttribute("isSavedMessages", isSavedMessages);
+
+        if (isSavedMessages) {
             model.addAttribute("displayName", "Saved Messages");
         } else if (room.getVisibility() == RoomVisibility.DIRECT
                 && room.getName().startsWith("dm-")) {

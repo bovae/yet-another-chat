@@ -290,11 +290,17 @@
         var items = list.querySelectorAll('li');
         items.forEach(function (li) {
           if (!term) {
-            li.style.display = '';
+            li.style.removeProperty('display');
             return;
           }
           var text = li.textContent.toLowerCase();
-          li.style.display = text.indexOf(term) !== -1 ? '' : 'none';
+          if (text.indexOf(term) !== -1) {
+            li.style.removeProperty('display');
+          } else {
+            // Room rows carry Bootstrap's `d-flex` (display: flex !important); an inline
+            // `display: none` alone loses to it, so set it !important to actually hide (R5-05).
+            li.style.setProperty('display', 'none', 'important');
+          }
         });
       });
 
@@ -830,26 +836,26 @@
     if (!friendshipId) {
       return;
     }
-    if (!window.confirm('Remove this contact?')) {
-      return;
-    }
-    fetch('/api/friends/' + friendshipId, {
-      method: 'DELETE',
-      headers: apiHeaders()
-    })
-    .then(function (response) {
-      if (response.ok || response.status === 204) {
-        refreshSidebar();
-      } else {
-        return response.json().then(function (err) {
-          if (window.showErrorModal) {
-            window.showErrorModal(err.message || 'Failed to remove contact');
-          }
-        });
-      }
-    })
-    .catch(function (err) {
-      console.error('[Sidebar] Remove friend error:', err);
+    // In-app confirm modal instead of the native confirm() dialog (R5-09).
+    window.showConfirmModal('Remove this contact?', function () {
+      fetch('/api/friends/' + friendshipId, {
+        method: 'DELETE',
+        headers: apiHeaders()
+      })
+      .then(function (response) {
+        if (response.ok || response.status === 204) {
+          refreshSidebar();
+        } else {
+          return response.json().then(function (err) {
+            if (window.showErrorModal) {
+              window.showErrorModal(err.message || 'Failed to remove contact');
+            }
+          });
+        }
+      })
+      .catch(function (err) {
+        console.error('[Sidebar] Remove friend error:', err);
+      });
     });
   }
 

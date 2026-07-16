@@ -91,7 +91,8 @@
       text = names[0] + ' and ' + names[1] + ' are typing...';
     } else {
       var others = names.length - 2;
-      text = names[0] + ', ' + names[1] + ', and ' + others + ' others are typing...';
+      text = names[0] + ', ' + names[1] + ', and ' + others + (others === 1 ? ' other' : ' others')
+        + ' are typing...';
     }
 
     el.textContent = text;

@@ -60,6 +60,14 @@ public class MessageService {
         assertCanPost(room, sender);
         validateContentSize(content);
 
+        // The reply target must belong to the room being posted to. Both the WS and REST callers
+        // resolve replyTo by raw UUID with no room scoping, so without this a member of room A can
+        // quote a message from a private room B and leak B's sender + content snippet into A
+        // (R4-02, R4-05). One guard in the shared service covers both call sites.
+        if (replyTo != null && !replyTo.getRoom().getId().equals(room.getId())) {
+            throw new ResourceNotFoundException("Reply target message not found in this room");
+        }
+
         // Atomic watermark reservation: the UPDATE's row lock serializes concurrent
         // senders so watermarks are gap-free and unique (R1-07).
         roomRepository.incrementWatermark(room.getId());
@@ -88,10 +96,17 @@ public class MessageService {
     }
 
     @Transactional
-    public Message editMessage(UUID messageId, User author, String newContent) {
+    public Message editMessage(UUID messageId, User author, String newContent, Room room) {
         Message message = messageRepository
                 .findByIdWithSenderAndReplyTo(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException("Message not found: %s".formatted(messageId)));
+
+        // The message must belong to the room named in the URL, so the edit broadcast is routed to
+        // the message's real room and not a room the author happens to also belong to (R4-14),
+        // mirroring the guard deleteMessage already applies.
+        if (!message.getRoom().getId().equals(room.getId())) {
+            throw new ResourceNotFoundException("Message not found in this room: %s".formatted(messageId));
+        }
 
         if (message.getSender() == null || !message.getSender().getId().equals(author.getId())) {
             throw new ForbiddenException("Only the author can edit this message");

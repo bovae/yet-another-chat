@@ -18,6 +18,7 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 | R2 | 2026-07-12 | Follow-up: presence display, Saved Messages, friend requests, UUID-in-UI leaks, FE/UX gaps + redesign | FE/UX audit agent + live Playwright two-user session (alice/bob) exercising presence dots, friend-request flow, Saved Messages, DM creation/naming | R2-01 … R2-09 | 2 High, 3 Medium, 4 Low |
 | R3 | 2026-07-12 | Navigation bar + left/right sidebars vs wireframe; UI test-automation feasibility | Navigation-surfaces audit agent + live Playwright walkthrough of navbar/profile/sessions pages | R3-01 … R3-10 | 4 Medium, 6 Low |
 | R4 | 2026-07-15 | Full stack (src/main, src/test incl. e2e, infra: docker-compose/CI/Makefile/README/pom) minus R1–R3 verified-clean areas; baseline `main @ d7ad4be` | 6 parallel area-audit agents (be-core ×2, be-auth, be-test, fe, infra) × 4 dimensions (correctness/security/performance/architecture) + per-finding adversarial verification | R4-01 … R4-16 | 1 High, 11 Medium, 4 Low |
+| R5 | 2026-07-16 | User-reported live/UX regressions (6 items), directed UX changes (3), the full R4 backlog, a fresh review sweep, then a directed follow-up (navbar + sidebar redesign, sweep-finding fixes); baseline `main @ fda9ea4` | Live two-user Playwright (alice/bob/carol) + curl repro of each reported item, then per-item root-cause; R4 fixes with adversarial regression tests; 4-lens review sweep with per-finding adversarial verification; navbar/sidebar IA implemented + verified live | R5-01 … R5-18 | 6 Medium, 12 Low |
 
 **R1 headline** — the "live updates unreliable" symptom is not one bug but four, all confirmed:
 1. Rooms open on the **oldest** 50 messages, never the newest (R1-01).
@@ -28,6 +29,16 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 **R2 headline** — the "online statuses don't work" complaint is root-caused and *verified live*: a freshly loaded, focused tab shows **AFK**, not ONLINE, and only flips to green after the user physically moves the mouse (R2-01). Friend requests and Saved Messages **do work functionally** (accept persists; Saved Messages sends and labels correctly), but friend requests never arrive live and give no pending-count cue (R2-03). UI labels use real usernames/display names throughout — the *only* raw-UUID leak is the orphaned-DM fallback (R2-06). A silent message-loss path on a dropped socket (R2-02) and mobile panels being fully hidden (R2-05) are the other notable new gaps. Redesign guidance is in **UX Redesign Suggestions** at the end.
 
 **R3 headline** — added an automated-UI-test item (R3-01): Playwright is feasible on this Java/no-Node stack via **Playwright-for-Java** (Maven dep, runs in the JVM), gated behind its own Maven profile so it stays out of the fast build; a manual Playwright workflow already exists at `src/test/e2e/README.md` to seed the scenarios. Navigation findings: the sidebar "Search rooms" box only filters *already-joined* rooms and can't discover catalog rooms (R3-03); per-member "Add friend"/"Block user" is admin-gated so ordinary members can't friend/ban from the user list (R3-02, refines R1-50); rooms/DMs and the member list render unsorted (R3-04, R3-05); and the navbar lacks active-page highlighting and any global unread/request badge (R3-09, R3-10).
+
+**R5 headline** — the six user-reported symptoms were each reproduced live and root-caused; **none was the old fix silently reverting** — all six are new defects or incomplete earlier fixes, filed R5-01…R5-06 (all fixed + regression-tested, verified live):
+1. Editing a message updated the sender's bubble but **not the reply-preview of messages quoting it** on already-open clients — `onMessageEdited` never refreshed sibling `.reply-quote`s the way the delete path does (R5-01, incomplete R1-04; persisted render was always correct).
+2. The **"Reconnecting…" banner flashed on every room open** because `onConnectionChange` fires synchronously with `isConnected()==false` before the async CONNECT completes (R5-02).
+3. Member list was **live for leave/kick/ban but not for joins** — `onRoomEvent` had a deliberate `MEMBER_JOINED` no-op (R5-03, incomplete R1-21; the catalog's "fixed" overstated it).
+4. **Removing a contact never notified the other side** — `removeFriend` emitted no WS event unlike send/accept (R5-04).
+5. **Sidebar room search didn't hide non-matching rooms** — the filter set inline `display:none` but room `<li>`s carry Bootstrap `d-flex` (`display:flex !important`), which won; catalog discovery worked, joined-room filtering was dead (R5-05, CSS regression on R3-03 that static analysis missed and only the live run caught).
+6. **Room invitations arrived only on reload** — `inviteUser` pushed no WS notification and the client had no handler (R5-06, same gap R2-03 closed for friend requests).
+
+The three directed UX changes shipped as R5-07 (hide the members panel for Saved Messages), R5-08 (float message hover-actions as an overlay so unhovered rows don't reserve a row / shift), and R5-09 (one reusable confirm+error modal fragment replacing every native `alert()`/`confirm()`). The full R4 backlog (R4-01…R4-16) is now fixed, with 403/denial regression tests for the security items (R4-01 wildcard SUBSCRIBE, R4-02/R4-05 cross-room reply leak, R4-06 banned-user eavesdrop, R4-07 private-history IDOR, R4-08 SUBSCRIBE authz). The review sweep added R5-10…R5-16: one Medium (R5-10, the room-ban list drops bans whose issuer deleted their account — an incomplete-remediation echo of R1-28) plus Lows. In a directed follow-up all of these were then resolved: **R5-10** (LEFT JOIN FETCH + null-guard), **R5-11** (a `LEAST/GREATEST` unordered-pair unique index, migration 006), **R5-12** (account deletion now cascade-cleans an owned DM that becomes memberless), and the three trivial Lows R5-13/R5-14/R5-15; **R5-16** is closed no-action (dev-only stack-trace via devtools, excluded from the prod jar — verified no prod impact). The same follow-up shipped the two accepted design proposals: **R5-17** repurposes the navbar to global destinations (dropping the "Private Rooms"/"Contacts" section-anchors that merely duplicated the sidebar, promoting Saved Messages), and **R5-18** reorganises the sidebar into Conversations / People zones with management affordances tucked behind header controls. Both were verified live.
 
 **R4 headline** — a whole-stack sweep against `main @ d7ad4be` found several R1 remediations held only partway. The STOMP SUBSCRIBE interceptor added for R1-09/R1-65 still authorizes wildcard destinations, so a single `SUBSCRIBE /topic/**` frame re-opens the whole-system eavesdrop it was meant to close (R4-01, the round's only High); a banned user likewise keeps live read access to a public room via SUBSCRIBE (R4-06), and a cross-room `reply_to_id` leaks a private message's content snippet and sender across room boundaries on both the REST and WS send paths (R4-02, R4-05). The security-critical R1-08/R1-09 guards ship with zero regression coverage (R4-07, R4-08). Rounding out the round: account deletion can cascade-destroy a counterpart's entire DM (R4-04), the R1-44 unread fan-out reload is now unbounded (R4-03), missing SMTP timeouts let an unauthenticated forgot-password exhaust the DB pool (R4-11), and the documented `make run` dev workflow fails to start because `REMEMBER_ME_KEY` has no default (R4-12).
 
@@ -57,7 +68,7 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 - [x] R1-18 — Remove all Property-Based Tests (slow); port uniquely-covered behaviour first *(user request)*
 - [x] R2-01 — Freshly loaded/focused tab shows AFK, not ONLINE, until the mouse moves *(verified)*
 - [x] R2-02 — Message silently lost (and input cleared) when the STOMP socket is down
-- [ ] R4-01 — Fix for R1-09/R1-65 incomplete: wildcard STOMP SUBSCRIBE bypasses room-membership and presence-visibility checks
+- [x] R4-01 — Fix for R1-09/R1-65 incomplete: wildcard STOMP SUBSCRIBE bypasses room-membership and presence-visibility checks
 
 ### Medium
 
@@ -106,17 +117,23 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 - [x] R3-02 — Per-member "Add friend"/"Block user" is admin-gated; members can't friend/ban from the user list
 - [x] R3-03 — Sidebar "Search rooms" only filters joined rooms; can't discover catalog rooms
 - [x] R3-04 — Sidebar rooms & DMs render unsorted (no recency/alphabetical order)
-- [ ] R4-02 — Reply-to message not scoped to the room on send → cross-room content/username leak
-- [ ] R4-03 — Batch unread fan-out loads an unbounded watermark list on every send/delete (grows with room history when any member lags)
-- [ ] R4-04 — Account deletion cascade-destroys a DM the deleter created, wiping the other participant's entire conversation and messages
-- [ ] R4-05 — Cross-room reply reference leaks a private message's content snippet and sender across room boundaries (read-guard bypass)
-- [ ] R4-06 — Fix for R1-09 incomplete: banned user can eavesdrop on a PUBLIC room's live messages via SUBSCRIBE
-- [ ] R4-07 — R1-08 message-history IDOR guard (requireCanRead) has zero regression coverage — private-room read never asserted 403
-- [ ] R4-08 — SUBSCRIBE authorization (StompAuthChannelInterceptor, R1-09/R1-65) is untested — every WebSocketIT subscribe hits the PUBLIC-room short-circuit
-- [ ] R4-09 — R1-53 fix incomplete: WebSocketIT still has four fixed Thread.sleep(500) sites before subscription-dependent sends
-- [ ] R4-10 — Navbar aggregate unread badge counts the actively-viewed room and is never re-cleared after read-ack
-- [ ] R4-11 — No SMTP timeouts + synchronous mail send inside @Transactional lets unauthenticated forgot-password exhaust the DB connection pool
-- [ ] R4-12 — R1-35 fix regression: documented `make run` dev workflow fails startup — REMEMBER_ME_KEY has no default
+- [x] R4-02 — Reply-to message not scoped to the room on send → cross-room content/username leak
+- [x] R4-03 — Batch unread fan-out loads an unbounded watermark list on every send/delete (grows with room history when any member lags)
+- [x] R4-04 — Account deletion cascade-destroys a DM the deleter created, wiping the other participant's entire conversation and messages
+- [x] R4-05 — Cross-room reply reference leaks a private message's content snippet and sender across room boundaries (read-guard bypass)
+- [x] R4-06 — Fix for R1-09 incomplete: banned user can eavesdrop on a PUBLIC room's live messages via SUBSCRIBE
+- [x] R4-07 — R1-08 message-history IDOR guard (requireCanRead) has zero regression coverage — private-room read never asserted 403
+- [x] R4-08 — SUBSCRIBE authorization (StompAuthChannelInterceptor, R1-09/R1-65) is untested — every WebSocketIT subscribe hits the PUBLIC-room short-circuit
+- [x] R4-09 — R1-53 fix incomplete: WebSocketIT still has four fixed Thread.sleep(500) sites before subscription-dependent sends
+- [x] R4-10 — Navbar aggregate unread badge counts the actively-viewed room and is never re-cleared after read-ack
+- [x] R4-11 — No SMTP timeouts + synchronous mail send inside @Transactional lets unauthenticated forgot-password exhaust the DB connection pool
+- [x] R4-12 — R1-35 fix regression: documented `make run` dev workflow fails startup — REMEMBER_ME_KEY has no default
+- [x] R5-01 — Editing a message doesn't update the reply-preview of messages quoting it on open clients (incomplete R1-04) *(verified live)*
+- [x] R5-03 — Member list not updated live on join (leave/kick/ban already were; incomplete R1-21) *(verified live)*
+- [x] R5-04 — Removing a contact isn't propagated to the other user via WS *(verified live)*
+- [x] R5-05 — Sidebar room-search filter can't hide rooms — `d-flex !important` overrides inline `display:none` (R3-03 regression) *(verified live)*
+- [x] R5-06 — Room invitations arrive only on reload — no WS push + no client handler (same gap as R2-03) *(verified live)*
+- [x] R5-10 — Room-ban list drops (INNER JOIN FETCH) bans whose issuing admin deleted their account → invisible + un-unbannable
 
 ### Low
 
@@ -152,13 +169,25 @@ Living register of gaps, bugs, and improvements found during code review. Requir
 - [x] R3-05 — Right-panel member list unsorted (owner/admins not surfaced first)
 - [x] R3-06 — Room-info panel omits the explicit "Owner: <name>" line
 - [x] R3-07 — Sidebar lists fail silently — fetch error leaves the "No rooms/contacts yet" placeholder
-- [x] R3-08 — "Sessions" buried in the Profile dropdown, not a top-level nav item
+- [x] R3-08 — "Sessions" buried in the Profile dropdown, not a top-level nav item *(later reverted per user direction — Sessions lives in the Profile dropdown only; see R5-17)*
 - [x] R3-09 — Navbar never highlights the active page
 - [x] R3-10 — No aggregate unread/request badge on the navbar (invisible on non-chat pages)
-- [ ] R4-13 — get-or-create DM endpoint returns 409 under concurrent creation instead of the existing room (R1-68 fix incomplete)
-- [ ] R4-14 — editMessage never verifies the message belongs to the URL room, so its edit broadcast is routed to the wrong /topic/room
-- [ ] R4-15 — WebSocketIT.unauthenticatedConnection_cannotSendToAppDestinations passes via 5s timeout and never exercises the send it names
-- [ ] R4-16 — Image/paste upload: placeholder text message is broadcast before the file, and an upload failure leaves an orphaned '[Image: …]' message with no user feedback
+- [x] R4-13 — get-or-create DM endpoint returns 409 under concurrent creation instead of the existing room (R1-68 fix incomplete)
+- [x] R4-14 — editMessage never verifies the message belongs to the URL room, so its edit broadcast is routed to the wrong /topic/room
+- [x] R4-15 — WebSocketIT.unauthenticatedConnection_cannotSendToAppDestinations passes via 5s timeout and never exercises the send it names
+- [x] R4-16 — Image/paste upload: placeholder text message is broadcast before the file, and an upload failure leaves an orphaned '[Image: …]' message with no user feedback
+- [x] R5-02 — "Reconnecting…" banner flashes on room open before the first CONNECT completes *(verified live)*
+- [x] R5-07 — Members panel/badge/toggle rendered for Saved Messages (self-DM) where a member list is meaningless *(directed UX)*
+- [x] R5-08 — Message hover-actions occupy layout space so unhovered messages look misaligned; floated as an overlay *(directed UX)*
+- [x] R5-09 — Native `alert()`/`confirm()` dialogs across pages replaced by one reusable in-app modal fragment *(directed UX)*
+- [x] R5-11 — Mutual simultaneous friend requests create two friendship rows → duplicate contact + half-working unfriend
+- [x] R5-12 — Account deletion permanently orphans a self-DM's rows + on-disk files (side effect of the R4-04 DIRECT-skip)
+- [x] R5-13 — Off-canvas mobile drawers reference nonexistent `aria-labelledby` IDs → no accessible name
+- [x] R5-14 — "Leave room" button rendered on direct messages where leaving always 403s
+- [x] R5-15 — Typing indicator prints ungrammatical "1 others are typing" for exactly three typers
+- [x] R5-16 — REST error bodies include a stack trace only under devtools (dev); excluded from the prod jar — no prod impact, closed no-action
+- [x] R5-17 — Navbar section-anchor links ("Private Rooms"/"Contacts") duplicated the sidebar; repurposed to global destinations + Saved Messages *(directed UX)*
+- [x] R5-18 — Sidebar reorganised into Conversations / People zones; management affordances moved behind header controls *(directed UX)*
 
 ---
 
@@ -739,3 +768,89 @@ On a new message in the room being viewed, `onNotification` (`static/js/app.js:3
 **R4-12 · Medium · R1-35 fix regression: documented `make run` dev workflow fails startup — REMEMBER_ME_KEY has no default**
 `application.yml:75` binds `app.security.remember-me-key: ${REMEMBER_ME_KEY}` with no default, and `SecurityProperties.rememberMeKey` is `@NotBlank` under `@Validated @ConfigurationProperties`, so a missing/blank key fails context startup. The README "Development" section (`README.md:30-42`) tells developers to run `make infra` then `make run`, but the Makefile `run` target (`Makefile:7-8`) is just `./mvnw spring-boot:run` with no env var, and neither `application-dev.yml` nor the run target supplies `REMEMBER_ME_KEY` (only surefire/failsafe and docker-compose set it). A developer following the README on a clean machine hits an immediate startup abort — the R1-35 hardening (removing the weak default) regressed the documented local workflow.
 *Fix:* Set a local `REMEMBER_ME_KEY` in the Makefile `run` target (or `spring-boot.run.jvmArguments`), add a dev-only default in `application-dev.yml`, or document exporting it in the README Development section.
+
+---
+
+### Round R5 — Reported regressions, directed UX, R4 backlog & review sweep (2026-07-16)
+
+Reproduced each of six user-reported symptoms live in a two-user (alice/bob, +carol) session against `mvnw spring-boot:run`, root-caused, and confirmed each is a **new defect or an incomplete earlier fix — not the old fix silently reverting**. Fixed all six plus the three directed UX changes and the entire R4 backlog, then ran a fresh 4-lens review sweep for anything new. Every WS-propagation fix is guarded by a Playwright-for-Java E2E test (`LiveSocialE2E`); the security fixes have MockMvc/IT/unit denial tests.
+
+**Reported bugs (fixed, verified live)**
+
+**R5-01 · Medium · Reply-preview not updated live when the referenced message is edited** *(verified live)*
+Editing message M updates M's own bubble but every message quoting M keeps its pre-edit snippet on already-open clients. `onMessageEdited` (`static/js/app.js`) rewrote only the edited bubble's `.message-text` + `(edited)` marker, never the sibling `.reply-quote`s — unlike the delete path (`onMessageDeleted`), which already rewrites `.message-item[data-reply-to-id=M] .reply-quote`. Incomplete R1-04. The persisted render was always correct: `MessageService.toResponse` re-derives the 100-char snippet from the referenced message on every load, so a reload showed the edited text — only the live path lagged.
+*Fix:* Extend `onMessageEdited` to rewrite the trailing text node of every `.message-item[data-reply-to-id=M] .reply-quote`, truncating to 100 chars to match the server render. Client-only. Guard: `LiveSocialE2E.replyPreview_updatesLive_whenReferencedMessageIsEdited`.
+
+**R5-02 · Low · "Reconnecting…" banner flashes on room open** *(verified live)*
+`onConnectionChange` (`static/js/stomp-client.js`) invokes a newly-registered callback synchronously with `isConnected()`, which on initial load is `false` (activate() is async), so `updateConnectionState(false)` un-hides the banner ~35ms in; the CONNECT completes ~35ms later and re-hides it — a visible flash on every load. *Reproduced with a MutationObserver: visible:true at 38ms, false at 70ms; after the fix the banner never showed.*
+*Fix:* In `updateConnectionState` (`static/js/app.js`) delay *showing* the banner ~1.5s (cleared on connect), so a transient disconnected state that recovers quickly never flashes; hiding and the Send-disable stay immediate. Client-only.
+
+**R5-03 · Medium · Member list not updated live on join** *(verified live)*
+All five membership mutations emit the right `RoomEvent`s and the client subscribes to `/topic/room.{id}.events`, but `onRoomEvent` (`static/js/app.js`) handled only `MEMBER_LEFT`/`MEMBER_BANNED` — `MEMBER_JOINED` hit a deliberate no-op ("event lacks role"), so joiners never appeared until reload. Incomplete R1-21 (leave/kick/ban *were* live; the catalog's "fixed" overstated it). Both join paths always create the member as `RoomRole.MEMBER`, so the role is known without a server change. *Reproduced: carol joined General; bob's panel stayed at 2 until reload; after the fix carol appeared and the count went to 3 live.*
+*Fix:* Add a `MEMBER_JOINED` branch that appends a member `<li>` (presence dot + name) and increments `#member-count`, de-duping on the existing dot. **Plus a server-side completion the E2E caught:** the "Join Room" banner posts to `RoomWebController.joinRoom` (`/rooms/{id}/join`), which — unlike the API `RoomApiController.joinRoom` — emitted no event, so the *primary* join path never broadcast at all (the manual curl repro used the API path and masked it). Added `messageBroadcastService.broadcastMembership(room, user, "MEMBER_JOINED")` to the web controller. Guard: `LiveSocialE2E.memberList_addsJoiner_liveWithoutReload` (joins via the banner) + unit `RoomWebControllerTest`.
+
+**R5-04 · Medium · Removing a contact isn't propagated to the other user** *(verified live)*
+`FriendshipService.removeFriend` deleted the row and logged but emitted no WS event, so the counterpart's contact list stayed stale until reload — unlike `sendFriendRequest`/`acceptFriendRequest`, which push a user-queue notification (R2-03). *Reproduced: alice removed bob; bob's `#contact-list` still showed alice until reload; after the fix it cleared to "No contacts yet" live.*
+*Fix:* After the delete, `notificationService.broadcastNotification(otherParticipant, new NotificationEvent("FRIEND_REMOVED", null, null, 0))`, and add `FRIEND_REMOVED` to the client's sidebar-refresh branch in `onNotification`. Guard: unit `FriendshipServiceTest` (both participant directions) + `LiveSocialE2E.contactRemoval_propagatesLive_toTheOtherUser`.
+
+**R5-05 · Medium · Sidebar room search can't hide rooms (CSS regression on R3-03)** *(verified live)*
+R3-03's discover-the-catalog behaviour works, but the *joined-room filter* is dead: `setupSearch` (`static/js/sidebar.js`) sets `li.style.display='none'` on non-matching rows, but room `<li>`s carry Bootstrap's `d-flex` utility (`display:flex !important`), which beats the inline style — so the computed display stays `flex` and rooms never hide. *Static analysis reported "works"; the live run caught it — searching "zebra" left "General" visible; direct inspection showed `style.display:none` but computed `flex`.*
+*Fix:* Use `li.style.setProperty('display','none','important')` to hide and `removeProperty('display')` to restore. Client-only. Guard: `LiveSocialE2E.sidebarSearch_hidesNonMatchingRooms`.
+
+**R5-06 · Medium · Room invitations arrive only on reload** *(verified live)*
+`RoomInvitationApiController.inviteUser` persisted the invitation but pushed nothing (didn't even inject `NotificationService`), and `onNotification` had no invitation branch — the exact gap R2-03 closed for friend requests. *Reproduced: alice invited bob to a new private room; bob's Room Invitations panel stayed empty until reload; after the fix it appeared live with the count badge.*
+*Fix:* Emit `broadcastNotification(invitee, new NotificationEvent("ROOM_INVITATION_CREATED", room.getId(), room.getName(), 0))` after save, and add `ROOM_INVITATION_CREATED` to the client's sidebar-refresh branch. Guard: unit `RoomInvitationApiControllerTest` + `LiveSocialE2E.roomInvitation_arrivesLive_inTheInviteesPanel`.
+
+**Directed UX changes**
+
+**R5-07 · Low · Members panel shown for Saved Messages (self-DM)**
+The members drawer, "N members" badge and 👥 toggle rendered for every room including a self-DM, where a one-person member list is meaningless.
+*Fix:* `ChatWebController` exposes an `isSavedMessages` flag (DIRECT + `saved-messages-` name); `chat/room.html` gates the badge/toggle and the whole `chat-members` drawer behind `th:unless="${isSavedMessages}"`. Verified live: Saved Messages shows no panel; normal rooms still do.
+
+**R5-08 · Low · Message hover-actions occupy layout space**
+`.message-actions` used `opacity:0` but stayed in flow, so every message reserved a blank action row and unhovered messages looked misaligned.
+*Fix:* Position `.message-actions` `absolute` over the bubble's top-right (bubble `position:relative`), revealed on `:hover`/`:focus-within`; touch devices (`@media (hover:none)`) keep them visible (R2-07). No layout shift. CSS-only.
+
+**R5-09 · Low · Native `alert()`/`confirm()` dialogs**
+Four native-dialog sites remained (`sidebar.js` remove-contact, `profile.js` delete-account, `admin-modals.html` delete-room, `sessions.html` terminate-session), plus per-page copies of the error modal in `room.html`/`rooms/create.html`.
+*Fix:* One reusable `fragments/modals.html` (confirm + error markup and a guarded `showConfirmModal`/`showErrorModal` helper) included on chat/index/room/create/profile/sessions; all four native calls routed through it; the duplicate per-page modals removed. Verified live: delete-account shows the in-app modal, not the browser dialog.
+
+**Review sweep (new findings)**
+
+**R5-10 · Medium · Room-ban list drops bans whose issuing admin deleted their account** *(fixed)*
+`RoomBanRepository.findByRoomWithUserAndBannedBy` used `JOIN FETCH rb.bannedBy` — an INNER join — but migration 004 made `room_bans.banned_by_id` nullable `ON DELETE SET NULL` (the R1-28 preservation), and a non-owner admin's ban survives their account deletion with `banned_by_id = NULL`. The INNER join filtered that row out of `GET /api/rooms/{roomId}/bans`, so owners/admins never saw it and couldn't surface its id to unban — the user stayed permanently blocked (the ban is still enforced everywhere else). The codebase already uses `LEFT JOIN FETCH` for the identically-nullable `messages.sender`.
+*Fix:* `LEFT JOIN FETCH rb.bannedBy` **and** null-guard `bannedBy` in `RoomBanApiController.toBanResponse` (with `@Nullable` on the `bannedById`/`bannedByUsername` response fields). Guard: `ModerationApiIT.listBans_stillShowsBan_whenIssuingAdminDeletedAccount`.
+
+**R5-11 · Low · Mutual simultaneous friend requests create two friendship rows** *(fixed)*
+`sendFriendRequest` is a check-then-insert with no lock; the base `UNIQUE(requester_id, recipient_id)` covers only the ordered pair, so concurrent A→B and B→A requests both committed. `listFriends` then showed the contact twice and `removeFriend` (single-row delete) left the pair still friends via the mirror row. Narrow concurrency window.
+*Fix:* migration `006-friendship-unordered-unique` de-duplicates any existing unordered pair, then adds a unique index on `(LEAST(requester_id, recipient_id), GREATEST(requester_id, recipient_id))` so at most one row per pair can exist; the losing concurrent insert now fails and `GlobalApiExceptionHandler` maps it to 409. Guard: `FriendshipApiIT.friendship_reversePair_rejectedByUnorderedUniqueIndex`.
+
+**R5-12 · Low · Account deletion orphans a self-DM's rows and on-disk files** *(fixed)*
+Side effect of the R4-04 DIRECT-skip: a self-DM (Saved Messages) the deleter owns was skipped by the owned-room purge, then `owner_id`/`sender_id` went `NULL` and its membership was removed, leaving a memberless, ownerless room with its messages, attachment rows, and `file-storage/{roomId}` directory never reclaimed. Slow-growing storage/row leak, unreachable thereafter.
+*Fix:* `deleteAccount` skips an owned DIRECT room only while `countByRoom(room) > 1` (a live counterpart remains, R4-04); a self-DM or a DM whose counterpart already left falls through to `deleteRoomCascade`, reclaiming rows + files. Guards: `AccountDeletionApiIT.deleteAccount_reclaimsOrphanedSelfDm` and `deleteAccount_preservesDmWithLiveCounterpart`.
+
+**R5-13 · Low · Off-canvas drawers reference nonexistent `aria-labelledby` IDs** *(fixed)*
+The mobile sidebar/members drawers (`chat/room.html`, `chat/index.html`) set `aria-labelledby="sidebarDrawerLabel"`/`"membersDrawerLabel"`, but no element with those ids exists — a broken ARIA reference leaving the drawer with no accessible name (WCAG 4.1.2). Gap left by the R2-05 off-canvas conversion.
+*Fix:* replaced with literal `aria-label="Rooms and contacts"` / `"Room members"`.
+
+**R5-14 · Low · "Leave room" button rendered on direct messages** *(fixed)*
+The members drawer renders for every DM except Saved Messages, and the "Leave room" button was guarded only by `room.owner.id != currentUser.id`; a DM's non-initiator satisfied that and got a button whose `POST /leave` always 403s (`RoomMemberService.leaveRoom` forbids DIRECT). A guaranteed dead-end.
+*Fix:* added `and room.visibility.name() != 'DIRECT'` to the button's `th:if`.
+
+**R5-15 · Low · Typing indicator grammar for exactly three typers** *(fixed)*
+`typing.js` always used "others"; with three typers `others === 1`, producing "…and 1 others are typing…".
+*Fix:* singular/plural on `others === 1`.
+
+**R5-16 · Low · REST error bodies include a stack trace (dev-only)** *(closed — no prod impact)*
+A malformed request (e.g. a wrong HTTP method) returns a JSON body containing a full Java stack trace + internal message. Cause: `spring-boot-devtools` is on the classpath in dev and its `DevToolsPropertyDefaultsPostProcessor` sets `server.error.include-stacktrace=ALWAYS`. Devtools is `optional`/`runtime` and Boot excludes it from the repackaged production jar, so the leak does not reach production (distinct from R1-37, which was the WS exception-leak path).
+*Resolution:* closed no-action — confirmed the exposure is intended devtools dev-debugging behaviour and is absent from the production artifact, so there is no prod impact. No code change.
+
+### Navigation / UX redesign (R5 follow-up)
+
+**R5-17 · Low · Navbar repurposed to global destinations** *(directed UX)*
+The navbar's "Private Rooms" and "Contacts" items linked to `/chat?section=…`, which only scrolled/expanded a sidebar accordion the always-present sidebar already shows — a pointless round-trip. On non-chat pages they just bounced to `/chat`.
+*Change:* the navbar now carries only global, cross-page destinations — **Browse rooms** (`/rooms/catalog`) and **Saved Messages** (new `GET /chat/saved-messages` that get-or-creates the self-DM and redirects) — plus the existing aggregate notification badge and avatar menu. The "Private Rooms"/"Contacts" section-anchors were dropped (that content lives in the sidebar). Per user direction, **Sessions** was also removed from the top-level bar and is reached only from the Profile ▾ dropdown (superseding R3-08, which had promoted it to top-level). Guard: `ChatWebControllerTest.savedMessages_shouldRedirectToTheSelfDmRoom`; verified live.
+
+**R5-18 · Low · Sidebar reorganised into Conversations / People zones** *(directed UX)*
+The sidebar was a long flat stack (search, room accordion, contacts, an always-expanded add-contact form, a blocked-users button, a redundant Actions block) with everything competing for attention.
+*Change:* two labelled zones — **Conversations** (the rooms/DMs accordion, with a `＋` create-room control in the header) and **People** (contacts + the JS-inserted Friend Requests / Room Invitations, with `＋` add-contact and `⚙` blocked-users tucked into the header). The add-contact form is now collapsed behind the `＋` instead of always-open, and the redundant Actions block was removed (Browse moved to the navbar). All JS-populated list ids are preserved, so `sidebar.js` population and its inserted request/invitation sections (anchored after `#contact-list`) keep working. Verified live.

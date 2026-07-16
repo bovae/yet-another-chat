@@ -98,7 +98,8 @@
     <button th:if="${currentUserRole != null and (currentUserRole.name() == 'OWNER' or currentUserRole.name() == 'ADMIN')}"
             class="btn btn-outline-primary btn-sm w-100 mb-2"
             data-bs-toggle="modal" data-bs-target="#manageRoomModal">Manage Room</button>
-    <button th:if="${room.owner.id != currentUser.id}"
+    <!-- Direct messages cannot be left (server returns 403), so don't offer the button there (R5-14) -->
+    <button th:if="${room.owner.id != currentUser.id and room.visibility.name() != 'DIRECT'}"
             class="btn btn-outline-warning btn-sm w-100 mb-2"
             onclick="leaveRoom()">Leave room</button>
   </div>

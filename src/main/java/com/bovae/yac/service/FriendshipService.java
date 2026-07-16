@@ -130,9 +130,17 @@ public class FriendshipService {
             throw new ForbiddenException("Only participants of the friendship can remove it");
         }
 
+        // Capture the other participant before delete so we can notify the side that didn't act.
+        User otherParticipant = isRequester ? friendship.getRecipient() : friendship.getRequester();
+
         friendshipRepository.delete(friendship);
 
         LOG.info("Friendship removed: friendshipId={}, removedBy={}", friendshipId, user.getId());
+
+        // The remover's own client refreshes on the DELETE response; push to the other side so
+        // their contacts list updates live instead of staying stale until reload (R5-04).
+        notificationService.broadcastNotification(
+                otherParticipant, new NotificationEvent("FRIEND_REMOVED", null, null, 0));
     }
 
     public boolean areFriends(User userA, User userB) {

@@ -35,6 +35,11 @@ spring:
           auth: false
           starttls:
             enable: false
+          # Fail fast so an unreachable/black-holed SMTP host never blocks indefinitely and,
+          # combined with the after-commit send, never holds a DB connection (R4-11).
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
   session:
     timeout: 30d

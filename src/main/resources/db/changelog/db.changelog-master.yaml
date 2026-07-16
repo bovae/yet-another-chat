@@ -8,4 +8,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/migrations/004-schema-hardening.sql
   - include:
+      file: db/changelog/migrations/006-friendship-unordered-unique.sql
+  - include:
       file: db/changelog/migrations/005-dev-seed-data.sql

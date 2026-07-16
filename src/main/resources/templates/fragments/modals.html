@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<body>
+
+<!--
+  Reusable confirm + error modals (R5-09). One source, included on every page that needs an
+  in-app dialog, replacing native alert()/confirm(). The helper script defines
+  window.showConfirmModal / window.showErrorModal only if not already present, so app.js's
+  copies stay canonical on chat pages while standalone pages (profile, sessions, create) still work.
+-->
+<div th:fragment="modals">
+  <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="confirmModalLabel">Confirm</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p id="confirmModalMessage"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger btn-sm" id="confirmModalConfirmBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title text-danger" id="errorModalLabel">Error</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p id="errorModalMessage"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      if (typeof window.showErrorModal !== 'function') {
+        window.showErrorModal = function (message) {
+          var modalEl = document.getElementById('errorModal');
+          if (!modalEl) {
+            return;
+          }
+          var msgEl = document.getElementById('errorModalMessage');
+          if (msgEl) {
+            msgEl.textContent = message;
+          }
+          new bootstrap.Modal(modalEl).show();
+        };
+      }
+      if (typeof window.showConfirmModal !== 'function') {
+        window.showConfirmModal = function (message, onConfirm) {
+          var modalEl = document.getElementById('confirmModal');
+          if (!modalEl) {
+            return;
+          }
+          var msgEl = document.getElementById('confirmModalMessage');
+          if (msgEl) {
+            msgEl.textContent = message;
+          }
+          var confirmBtn = document.getElementById('confirmModalConfirmBtn');
+          if (confirmBtn) {
+            // Clone-and-replace to drop any previously stacked listeners.
+            var newBtn = confirmBtn.cloneNode(true);
+            confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+            newBtn.addEventListener('click', function () {
+              var modal = bootstrap.Modal.getInstance(modalEl);
+              if (modal) {
+                modal.hide();
+              }
+              onConfirm();
+            });
+          }
+          new bootstrap.Modal(modalEl).show();
+        };
+      }
+    })();
+  </script>
+</div>
+
+</body>
+</html>

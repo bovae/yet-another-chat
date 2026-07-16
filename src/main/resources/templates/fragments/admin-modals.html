@@ -97,7 +97,7 @@
               </form>
               <hr>
               <button type="button" class="btn btn-outline-danger btn-sm"
-                      onclick="if (confirm('Delete this room? This is irreversible.')) deleteRoom();">
+                      onclick="showConfirmModal('Delete this room? This is irreversible.', deleteRoom);">
                 Delete Room
               </button>
             </div>

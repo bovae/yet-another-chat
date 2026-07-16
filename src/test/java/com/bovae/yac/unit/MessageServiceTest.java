@@ -226,7 +226,7 @@ class MessageServiceTest {
         when(roomMemberService.isMember(room, sender)).thenReturn(true);
         when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Message result = messageService.editMessage(messageId, sender, "Updated content");
+        Message result = messageService.editMessage(messageId, sender, "Updated content", room);
 
         assertThat(result.getContent()).isEqualTo("Updated content");
         assertThat(result.isEdited()).isTrue();
@@ -251,7 +251,7 @@ class MessageServiceTest {
 
         when(messageRepository.findByIdWithSenderAndReplyTo(messageId)).thenReturn(Optional.of(existingMessage));
 
-        assertThatThrownBy(() -> messageService.editMessage(messageId, otherUser, "Hacked content"))
+        assertThatThrownBy(() -> messageService.editMessage(messageId, otherUser, "Hacked content", room))
                 .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("Only the author");
 
@@ -490,7 +490,7 @@ class MessageServiceTest {
         UUID messageId = UUID.randomUUID();
         when(messageRepository.findByIdWithSenderAndReplyTo(messageId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> messageService.editMessage(messageId, sender, "New content"))
+        assertThatThrownBy(() -> messageService.editMessage(messageId, sender, "New content", room))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Message not found");
 
@@ -510,7 +510,7 @@ class MessageServiceTest {
 
         when(messageRepository.findByIdWithSenderAndReplyTo(messageId)).thenReturn(Optional.of(orphanMessage));
 
-        assertThatThrownBy(() -> messageService.editMessage(messageId, sender, "New content"))
+        assertThatThrownBy(() -> messageService.editMessage(messageId, sender, "New content", room))
                 .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("Only the author");
 
@@ -538,7 +538,7 @@ class MessageServiceTest {
 
         String oversizedContent = "a".repeat(3073);
 
-        assertThatThrownBy(() -> messageService.editMessage(messageId, sender, oversizedContent))
+        assertThatThrownBy(() -> messageService.editMessage(messageId, sender, oversizedContent, room))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("exceeds maximum size");
 

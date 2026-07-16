@@ -303,8 +303,14 @@
     if (window.YAC && window.YAC.navbar && window.YAC.navbar.refresh) {
       window.YAC.navbar.refresh();
     }
-    // Friend-request events arrive live: refresh the sidebar panels/contacts (R2-03).
-    if (type === 'FRIEND_REQUEST_CREATED' || type === 'FRIEND_REQUEST_ACCEPTED') {
+    // Social/invitation events arrive live: refresh the sidebar panels/contacts.
+    // R2-03: friend requests. R5-04: contact removal. R5-06: room invitations.
+    if (
+      type === 'FRIEND_REQUEST_CREATED' ||
+      type === 'FRIEND_REQUEST_ACCEPTED' ||
+      type === 'FRIEND_REMOVED' ||
+      type === 'ROOM_INVITATION_CREATED'
+    ) {
       if (window.YAC && window.YAC.sidebar && window.YAC.sidebar.refresh) {
         window.YAC.sidebar.refresh();
       }
@@ -351,6 +357,13 @@
     readAckTimer = setTimeout(function () {
       readAckTimer = null;
       fetch('/api/rooms/' + roomId + '/read', { method: 'POST', headers: apiHeaders() })
+        .then(function () {
+          // The server marker for the active room has advanced; refresh the navbar aggregate so
+          // its badge drops the room we're reading instead of showing a phantom count (R4-10).
+          if (window.YAC && window.YAC.navbar && window.YAC.navbar.refresh) {
+            window.YAC.navbar.refresh();
+          }
+        })
         .catch(function (err) {
           console.error('[App] Error acknowledging read:', err);
         });
@@ -380,7 +393,47 @@
     if (type === 'MEMBER_LEFT' || type === 'MEMBER_BANNED') {
       removeMemberFromList(affectedUserId);
     }
-    // ponytail: MEMBER_JOINED not live-rendered (event lacks role); joiner shows on next load.
+    if (type === 'MEMBER_JOINED') {
+      // Both join paths create the member as RoomRole.MEMBER, so no role badge is needed (R5-03).
+      addMemberToList(affectedUserId, event.username || event.user_name);
+    }
+  }
+
+  function addMemberToList(userId, username) {
+    if (!userId) {
+      return;
+    }
+    var list = document.getElementById('member-list-items');
+    if (!list) {
+      return;
+    }
+    // The joiner receives this event on both the topic and their own queue, and is already
+    // in their freshly-loaded list — skip if a row for this user already exists.
+    if (list.querySelector('.presence-dot[data-user-id="' + userId + '"]')) {
+      return;
+    }
+    var li = document.createElement('li');
+    li.className = 'd-flex align-items-center py-1';
+    var dot = document.createElement('span');
+    dot.className = 'presence-dot me-2 bg-secondary';
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('data-user-id', userId);
+    dot.setAttribute('title', 'Offline');
+    dot.setAttribute('aria-label', 'Offline');
+    dot.style.cssText = 'width: 8px; height: 8px; border-radius: 50%; display: inline-block;';
+    li.appendChild(dot);
+    var name = document.createElement('span');
+    name.className = 'flex-grow-1 text-truncate';
+    name.textContent = username || 'User';
+    li.appendChild(name);
+    list.appendChild(li);
+    var countBadge = document.getElementById('member-count');
+    if (countBadge) {
+      var n = parseInt(countBadge.textContent, 10);
+      if (!isNaN(n)) {
+        countBadge.textContent = n + 1;
+      }
+    }
   }
 
   function removeMemberFromList(userId) {
@@ -426,6 +479,17 @@
       editedEl.textContent = '(edited)';
       headerDiv.appendChild(editedEl);
     }
+    // Refresh the reply-preview of any message quoting this one, mirroring onMessageDeleted (R5-01).
+    // Truncate to 100 chars to match MessageService.toResponse so the live view and a reload agree.
+    var snippet = event.content.length > 100 ? event.content.substring(0, 100) : event.content;
+    var replies = document.querySelectorAll('.message-item[data-reply-to-id="' + messageId + '"] .reply-quote');
+    replies.forEach(function (quote) {
+      var lastNode = quote.lastChild;
+      if (lastNode && lastNode.nodeType === 3) {
+        // Rewrite only the trailing ': <snippet>' text node, preserving the 'Replying to <strong>user</strong>' prefix.
+        lastNode.textContent = ': ' + snippet;
+      }
+    });
   }
 
   // Single unread-badge implementation lives in sidebar.js; delegate to it (R1-80).
@@ -573,10 +637,25 @@
   }
 
   // Toggle the "Reconnecting…" banner and Send availability with the socket state (R2-02).
+  // Showing the banner is delayed so the transient disconnected state on initial load
+  // (activate() is async, so the first state reported is always "not connected") and brief
+  // reconnect blips that recover quickly don't flash the label (R5-02).
+  var connectionBannerTimer = null;
+
   function updateConnectionState(connected) {
     var banner = document.getElementById('connection-banner');
     if (banner) {
-      banner.classList.toggle('d-none', connected);
+      if (connected) {
+        // Hide immediately and cancel any pending show so a quick (re)connect never flashes.
+        clearTimeout(connectionBannerTimer);
+        connectionBannerTimer = null;
+        banner.classList.add('d-none');
+      } else if (!connectionBannerTimer) {
+        connectionBannerTimer = setTimeout(function () {
+          connectionBannerTimer = null;
+          banner.classList.remove('d-none');
+        }, 1500);
+      }
     }
     var sendBtn = document.getElementById('send-btn');
     if (sendBtn) {
@@ -623,12 +702,13 @@
       return;
     }
 
-    // First send a placeholder message, then attach the image
-    // For now, we send the message via REST and then upload the attachment
+    // The attachment must reference a message, so a placeholder message is created first, then the
+    // file is uploaded. If the upload fails, the placeholder is deleted and the failure is surfaced
+    // rather than leaving an orphaned '[Image: …]' message with no image (R4-16).
     var csrfHeader = getCsrfHeader();
     var csrfValue = getCsrfToken();
+    var placeholderMessageId = null;
 
-    // Send a message first to get a messageId for the attachment
     fetch('/api/rooms/' + roomId + '/messages', {
       method: 'POST',
       headers: apiHeaders(),
@@ -644,7 +724,7 @@
       return response.json();
     })
     .then(function (msg) {
-      // Now upload the attachment
+      placeholderMessageId = msg.id;
       var formData = new FormData();
       formData.append('file', file, file.name || 'pasted-image.png');
       formData.append('messageId', msg.id);
@@ -672,11 +752,25 @@
     })
     .then(function (response) {
       if (!response.ok) {
-        console.error('[App] Image upload failed:', response.status);
+        return response.json()
+          .catch(function () {
+            return {};
+          })
+          .then(function (err) {
+            throw new Error(err.message || 'Failed to upload image');
+          });
       }
     })
     .catch(function (err) {
       console.error('[App] Error uploading image:', err);
+      showErrorModal(err.message || 'Failed to upload image');
+      // Remove the orphaned placeholder so it doesn't reference an image that never uploaded.
+      if (placeholderMessageId) {
+        fetch('/api/rooms/' + roomId + '/messages/' + placeholderMessageId, {
+          method: 'DELETE',
+          headers: apiHeaders()
+        }).catch(function () {});
+      }
     });
   }
 

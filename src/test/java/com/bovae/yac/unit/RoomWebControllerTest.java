@@ -16,6 +16,7 @@ import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.MessageBroadcastService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import java.security.Principal;
@@ -51,6 +52,9 @@ class RoomWebControllerTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private MessageBroadcastService messageBroadcastService;
 
     @Mock
     private Principal principal;
@@ -128,6 +132,8 @@ class RoomWebControllerTest {
 
         assertThat(view).isEqualTo("redirect:/chat/rooms/" + id);
         verify(roomMemberService).joinPublicRoom(room, user);
+        // The banner join broadcasts so members see the joiner live (R5-03).
+        verify(messageBroadcastService).broadcastMembership(room, user, "MEMBER_JOINED");
     }
 
     @Test
