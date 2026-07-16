@@ -206,7 +206,6 @@
                 <executions>
                     <execution>
                         <goals>
-                            <!-- Generates META-INF/build-info.properties backing the BuildProperties bean (OpenApiConfig). -->
                             <goal>build-info</goal>
                         </goals>
                     </execution>
@@ -292,6 +291,52 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>versions-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>analyze-dependencies</id>
+                        <goals>
+                            <goal>analyze-only</goal>
+                        </goals>
+                        <phase>verify</phase>
+                        <configuration>
+                            <!--
+                              Fails the build on unused *declared* dependencies so agents/devs
+                              cannot leave dead libraries on the classpath. The "used undeclared"
+                              direction is intentionally suppressed: this project follows the
+                              Spring Boot starter idiom (see AGENTS.md), where ~40 managed
+                              transitives are pulled in by starters and are deliberately NOT
+                              declared directly.
+                            -->
+                            <failOnWarning>true</failOnWarning>
+                            <ignoredUsedUndeclaredDependencies>
+                                <!-- Transitives supplied by Spring Boot starters / test starters. -->
+                                <ignoredUsedUndeclaredDependency>*</ignoredUsedUndeclaredDependency>
+                            </ignoredUsedUndeclaredDependencies>
+                            <ignoredUnusedDeclaredDependencies>
+                                <!-- Aggregator starters: contribute transitives, no direct classes. -->
+                                <ignoredUnusedDeclaredDependency>org.springframework.boot:spring-boot-starter-*</ignoredUnusedDeclaredDependency>
+                                <!-- Runtime-only: JDBC driver, devtools, auto-configured libs. -->
+                                <ignoredUnusedDeclaredDependency>org.postgresql:postgresql</ignoredUnusedDeclaredDependency>
+                                <ignoredUnusedDeclaredDependency>org.springframework.boot:spring-boot-devtools</ignoredUnusedDeclaredDependency>
+                                <ignoredUnusedDeclaredDependency>org.springdoc:springdoc-openapi-starter-webmvc-ui</ignoredUnusedDeclaredDependency>
+                                <ignoredUnusedDeclaredDependency>io.github.wimdeblauwe:htmx-spring-boot-thymeleaf</ignoredUnusedDeclaredDependency>
+                                <!-- WebJars: front-end assets served off the classpath at runtime. -->
+                                <ignoredUnusedDeclaredDependency>org.webjars:*</ignoredUnusedDeclaredDependency>
+                                <ignoredUnusedDeclaredDependency>org.webjars.npm:*</ignoredUnusedDeclaredDependency>
+                                <!-- Test infra wired via annotations/reflection (@Testcontainers). -->
+                                <ignoredUnusedDeclaredDependency>org.testcontainers:junit-jupiter</ignoredUnusedDeclaredDependency>
+                            </ignoredUnusedDeclaredDependencies>
+                            <ignoredNonTestScopedDependencies>
+                                <!-- Logback is the runtime logging backend, not a test-only dep. -->
+                                <ignoredNonTestScopedDependency>ch.qos.logback:*</ignoredNonTestScopedDependency>
+                            </ignoredNonTestScopedDependencies>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>

@@ -48,6 +48,12 @@ Direct Maven:
 
 **spotless, checkstyle, pmd/cpd** bind to the `validate` phase — they fire on every
 `package`/`verify`/`build`, not just a separate lint step. **spotbugs** runs in `verify`.
+**maven-dependency-plugin (`analyze-only`)** also runs in `verify` with `failOnWarning=true`:
+it fails the build on **unused declared dependencies** so dead libraries can't linger on the
+classpath. It deliberately ignores the "used-undeclared" direction because this project follows
+the Spring Boot **starter idiom** — ~40 managed transitives come from starters and are not
+declared directly. Aggregator starters, WebJars, the JDBC driver, devtools, and reflection-wired
+test infra are allow-listed in the plugin config. Run ad hoc with `./mvnw dependency:analyze`.
 Config: `checkstyle.xml`, `pmd-ruleset.xml`, `spotbugs-exclude.xml`, `.editorconfig`.
 CI (`.github/workflows/ci.yml`) runs `./mvnw verify` on push/PR to `main` and `develop`.
 
