@@ -145,6 +145,11 @@ Handlers in `ws/`: `/app/chat.{send,edit,delete}`, `/app/presence.heartbeat`, `/
 - Set up test data via service calls in `@BeforeEach`, not raw SQL.
 - Unit: `@ExtendWith(MockitoExtension.class)`, `@Mock`/`@InjectMocks`, cover happy + edge + error paths.
 - Naming: `methodUnderTest_shouldBehavior_whenCondition`. Parametrize (2+ similar cases) instead of duplicating.
+- **N+1 query detection:** the batched read paths (message history, room sidebar) are guarded by
+  `NPlusOneQueryIT`, which uses `HibernateQueryCounter` (Hibernate `Statistics.getPrepareStatementCount()`)
+  to assert the JDBC statement count stays **constant** as row counts grow 4x. Dropping a `JOIN FETCH`
+  or reintroducing a per-row lookup makes the count scale with the data and fails the build. When adding
+  a service read that loads a collection of entities, add a similar constant-query-count assertion.
 
 ## Domain Rules (gotchas)
 
