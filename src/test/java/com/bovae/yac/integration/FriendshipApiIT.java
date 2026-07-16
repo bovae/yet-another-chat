@@ -1,5 +1,6 @@
 package com.bovae.yac.integration;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -13,6 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.entity.Friendship;
 import com.bovae.yac.model.entity.User;
+import com.bovae.yac.model.enums.FriendshipStatus;
+import com.bovae.yac.repository.FriendshipRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.FriendshipService;
 import com.bovae.yac.service.UserService;
@@ -22,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +53,9 @@ class FriendshipApiIT {
     private FriendshipService friendshipService;
 
     @Autowired
+    private FriendshipRepository friendshipRepository;
+
+    @Autowired
     private UserRepository userRepository;
 
     private User userA;
@@ -60,6 +67,25 @@ class FriendshipApiIT {
         userA = IntegrationTestSupport.registerUser(userService, userRepository, "alice@test.com", "alice");
         userB = IntegrationTestSupport.registerUser(userService, userRepository, "bob@test.com", "bob");
         userC = IntegrationTestSupport.registerUser(userService, userRepository, "carol@test.com", "carol");
+    }
+
+    // ---- Unordered-pair uniqueness (R5-11) ----
+
+    @Test
+    void friendship_reversePair_rejectedByUnorderedUniqueIndex() {
+        Friendship ab = friendshipService.sendFriendRequest(userA, userB, null);
+        friendshipService.acceptFriendRequest(ab.getId(), userB);
+
+        // A direct B->A row is a distinct ordered key but the same unordered pair; the unique
+        // index must reject it so mutual concurrent requests can't create a duplicate contact.
+        Friendship reverse = Friendship.builder()
+                .requester(userB)
+                .recipient(userA)
+                .status(FriendshipStatus.PENDING)
+                .build();
+
+        assertThatThrownBy(() -> friendshipRepository.saveAndFlush(reverse))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     // ---- Send friend request ----

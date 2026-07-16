@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.bovae.yac.config.TestcontainersConfig;
+import com.bovae.yac.model.dto.RoomDto;
 import com.bovae.yac.model.entity.Friendship;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
@@ -16,6 +17,7 @@ import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.RoomRepository;
 import com.bovae.yac.repository.UserBanRepository;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.DirectChatService;
 import com.bovae.yac.service.FriendshipService;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.RoomMemberService;
@@ -58,6 +60,9 @@ class AccountDeletionApiIT {
 
     @Autowired
     private FriendshipService friendshipService;
+
+    @Autowired
+    private DirectChatService directChatService;
 
     @Autowired
     private UserBanService userBanService;
@@ -131,6 +136,37 @@ class AccountDeletionApiIT {
                 .andExpect(status().isNoContent());
 
         assertThat(roomRepository.findById(ownedRoom.getId())).isEmpty();
+    }
+
+    // ---- R5-12: orphaned self-DM reclaimed; live DM preserved ----
+
+    @Test
+    void deleteAccount_reclaimsOrphanedSelfDm() throws Exception {
+        RoomDto saved = directChatService.getOrCreateSavedMessages(userA);
+        assertThat(roomRepository.findById(saved.id())).isPresent();
+
+        mockMvc.perform(delete("/api/users/me")
+                        .with(user(userA.getEmail()).roles("USER"))
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
+
+        // The single-member self-DM has no counterpart to preserve it for → fully reclaimed.
+        assertThat(roomRepository.findById(saved.id())).isEmpty();
+    }
+
+    @Test
+    void deleteAccount_preservesDmWithLiveCounterpart() throws Exception {
+        Friendship f = friendshipService.sendFriendRequest(userA, userB, null);
+        friendshipService.acceptFriendRequest(f.getId(), userB);
+        RoomDto dm = directChatService.getOrCreateDirectChat(userA, userB);
+
+        mockMvc.perform(delete("/api/users/me")
+                        .with(user(userA.getEmail()).roles("USER"))
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
+
+        // A live counterpart (bob) remains, so the conversation is kept, not reclaimed (R4-04).
+        assertThat(roomRepository.findById(dm.id())).isPresent();
     }
 
     // ---- Cascade: memberships in other rooms removed ----

@@ -197,6 +197,42 @@ class FriendshipServiceTest {
         assertThat(eventCaptor.getValue().type()).isEqualTo("FRIEND_REQUEST_ACCEPTED");
     }
 
+    /** Validates R5-04: the requester removing pushes FRIEND_REMOVED to the recipient (the other side). */
+    @Test
+    void removeFriend_byRequester_broadcastsRemovedEventToRecipient() {
+        UUID friendshipId = UUID.randomUUID();
+        Friendship accepted = Friendship.builder()
+                .id(friendshipId)
+                .requester(userA)
+                .recipient(userB)
+                .status(FriendshipStatus.ACCEPTED)
+                .build();
+        when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.of(accepted));
+
+        friendshipService.removeFriend(friendshipId, userA);
+
+        verify(notificationService).broadcastNotification(eq(userB), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo("FRIEND_REMOVED");
+    }
+
+    /** Validates R5-04: the recipient removing pushes FRIEND_REMOVED to the requester (the other side). */
+    @Test
+    void removeFriend_byRecipient_broadcastsRemovedEventToRequester() {
+        UUID friendshipId = UUID.randomUUID();
+        Friendship accepted = Friendship.builder()
+                .id(friendshipId)
+                .requester(userA)
+                .recipient(userB)
+                .status(FriendshipStatus.ACCEPTED)
+                .build();
+        when(friendshipRepository.findById(friendshipId)).thenReturn(Optional.of(accepted));
+
+        friendshipService.removeFriend(friendshipId, userB);
+
+        verify(notificationService).broadcastNotification(eq(userA), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().type()).isEqualTo("FRIEND_REMOVED");
+    }
+
     // -----------------------------------------------------------------------
     // sendFriendRequest with existing UserBan throws ForbiddenException
     // -----------------------------------------------------------------------

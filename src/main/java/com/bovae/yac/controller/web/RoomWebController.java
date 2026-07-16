@@ -6,6 +6,7 @@ import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.repository.RoomMemberRepository;
 import com.bovae.yac.repository.UserRepository;
+import com.bovae.yac.service.MessageBroadcastService;
 import com.bovae.yac.service.RoomMemberService;
 import com.bovae.yac.service.RoomService;
 import java.security.Principal;
@@ -31,6 +32,7 @@ public class RoomWebController {
     private final RoomMemberService roomMemberService;
     private final RoomMemberRepository roomMemberRepository;
     private final UserRepository userRepository;
+    private final MessageBroadcastService messageBroadcastService;
 
     @GetMapping("/catalog")
     public String catalog(
@@ -64,6 +66,9 @@ public class RoomWebController {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         Room room = roomService.getRoomById(id);
         roomMemberService.joinPublicRoom(room, user);
+        // Broadcast so members viewing the room see the joiner live, matching the API join path
+        // — the "Join Room" banner is the primary join UX and previously emitted nothing (R5-03).
+        messageBroadcastService.broadcastMembership(room, user, "MEMBER_JOINED");
         return "redirect:/chat/rooms/" + id;
     }
 }

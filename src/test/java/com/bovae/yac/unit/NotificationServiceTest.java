@@ -168,18 +168,18 @@ class NotificationServiceTest {
     // --- computeUnreadCounts (batch) ---
 
     /**
-     * Batch counts derive from undeleted watermarks past each member's marker; a member whose
-     * marker has a null watermark and a member with no marker at all both count zero.
+     * The grouped per-user count query (R4-03) drives the map: a member present in the result
+     * gets that count; a member absent (no marker, or zero unread) gets zero.
      */
     @Test
-    void computeUnreadCounts_countsUndeletedMessagesPastEachMemberMarker() {
+    void computeUnreadCounts_mapsGroupedCounts_absentMembersCountZero() {
         User other = otherUser();
         RoomMember memberUser = RoomMember.builder().room(room).user(user).build();
         RoomMember memberOther = RoomMember.builder().room(room).user(other).build();
 
-        when(unreadMarkerRepository.findByRoom(room)).thenReturn(List.of(markerOf(user, 5L), markerOf(other, null)));
-        when(messageRepository.findWatermarksByRoomAndWatermarkGreaterThan(room, 5L))
-                .thenReturn(List.of(6L, 7L, 8L));
+        // Only `user` appears in the grouped result; `other` is absent → 0.
+        when(messageRepository.countUnreadPerUserInRoom(roomId))
+                .thenReturn(List.<Object[]>of(new Object[] {user.getId(), 3L}));
 
         Map<UUID, Integer> counts = notificationService.computeUnreadCounts(room, List.of(memberUser, memberOther));
 
@@ -187,37 +187,27 @@ class NotificationServiceTest {
         assertThat(counts.get(other.getId())).isZero();
     }
 
-    /** With no markers at all, every member's batch count is zero and no watermark query runs. */
+    /** With an empty grouped result, every member's batch count is zero. */
     @Test
-    void computeUnreadCounts_allZero_whenNoMarkersExist() {
+    void computeUnreadCounts_allZero_whenGroupedResultEmpty() {
         RoomMember memberUser = RoomMember.builder().room(room).user(user).build();
-        when(unreadMarkerRepository.findByRoom(room)).thenReturn(List.of());
+        when(messageRepository.countUnreadPerUserInRoom(roomId)).thenReturn(List.of());
 
         Map<UUID, Integer> counts = notificationService.computeUnreadCounts(room, List.of(memberUser));
 
         assertThat(counts.get(user.getId())).isZero();
     }
 
-    /**
-     * A watermark strictly greater than the member's marker counts; one equal to (boundary) or
-     * below the marker does not. The member with lastRead=7 against watermarks [6,7,8,9] pins the
-     * strict comparison: equal (7) and below (6) are excluded, so only 8 and 9 count.
-     */
+    /** Counts above the DISPLAY_CAP (999) are clamped. */
     @Test
-    void computeUnreadCounts_countsOnlyWatermarksStrictlyAboveEachMemberMarker() {
-        User other = otherUser();
+    void computeUnreadCounts_clampsToDisplayCap() {
         RoomMember memberUser = RoomMember.builder().room(room).user(user).build();
-        RoomMember memberOther = RoomMember.builder().room(room).user(other).build();
+        when(messageRepository.countUnreadPerUserInRoom(roomId))
+                .thenReturn(List.<Object[]>of(new Object[] {user.getId(), 5000L}));
 
-        when(unreadMarkerRepository.findByRoom(room)).thenReturn(List.of(markerOf(user, 5L), markerOf(other, 7L)));
-        // minLastRead = 5; the watermark list includes 7 (== other's marker) and 6 (< other's marker).
-        when(messageRepository.findWatermarksByRoomAndWatermarkGreaterThan(room, 5L))
-                .thenReturn(List.of(6L, 7L, 8L, 9L));
+        Map<UUID, Integer> counts = notificationService.computeUnreadCounts(room, List.of(memberUser));
 
-        Map<UUID, Integer> counts = notificationService.computeUnreadCounts(room, List.of(memberUser, memberOther));
-
-        assertThat(counts.get(user.getId())).isEqualTo(4);
-        assertThat(counts.get(other.getId())).isEqualTo(2);
+        assertThat(counts.get(user.getId())).isEqualTo(999);
     }
 
     // --- helpers ---
@@ -228,14 +218,6 @@ class NotificationServiceTest {
                 .email("other@test.com")
                 .username("other")
                 .passwordHash("$2a$10$hash")
-                .build();
-    }
-
-    private UnreadMarker markerOf(User markerUser, Long lastReadWatermark) {
-        return UnreadMarker.builder()
-                .user(markerUser)
-                .room(room)
-                .lastReadWatermark(lastReadWatermark)
                 .build();
     }
 }

@@ -131,12 +131,9 @@ class WebSocketIT {
 
         BlockingQueue<Map> received = new LinkedBlockingQueue<>();
         session.subscribe("/topic/room." + room.getId(), new QueueFrameHandler<>(received, Map.class));
-        Thread.sleep(500); // allow subscription to register
 
         Map<String, Object> payload = Map.of("room_id", room.getId().toString(), "content", "Hello via WebSocket!");
-        session.send("/app/chat.send", payload);
-
-        Map message = received.poll(5, TimeUnit.SECONDS);
+        Map message = sendUntilReceived(session, "/app/chat.send", payload, received);
         assertThat(message).isNotNull();
         assertThat(message.get("content")).isEqualTo("Hello via WebSocket!");
         assertThat(message.get("room_id")).isEqualTo(room.getId().toString());
@@ -181,12 +178,9 @@ class WebSocketIT {
 
         BlockingQueue<Map> received = new LinkedBlockingQueue<>();
         session.subscribe("/topic/room." + room.getId() + ".events", new QueueFrameHandler<>(received, Map.class));
-        Thread.sleep(500);
 
         Map<String, Object> payload = Map.of("room_id", room.getId().toString());
-        session.send("/app/typing", payload);
-
-        Map event = received.poll(5, TimeUnit.SECONDS);
+        Map event = sendUntilReceived(session, "/app/typing", payload, received);
         assertThat(event).isNotNull();
         assertThat(event.get("type")).isEqualTo("TYPING");
         assertThat(event.get("room_id")).isEqualTo(room.getId().toString());
@@ -205,14 +199,11 @@ class WebSocketIT {
 
         BlockingQueue<Map> errors = new LinkedBlockingQueue<>();
         session.subscribe("/user/queue/errors", new QueueFrameHandler<>(errors, Map.class));
-        Thread.sleep(500);
 
         // Send message to a non-existent room
         UUID fakeRoomId = UUID.randomUUID();
         Map<String, Object> payload = Map.of("room_id", fakeRoomId.toString(), "content", "This should fail");
-        session.send("/app/chat.send", payload);
-
-        Map error = errors.poll(5, TimeUnit.SECONDS);
+        Map error = sendUntilReceived(session, "/app/chat.send", payload, errors);
         assertThat(error).isNotNull();
         assertThat(error.get("status")).isNotNull();
         assertThat(error.get("message")).isNotNull();
@@ -221,13 +212,14 @@ class WebSocketIT {
     // ---- Requirement 12.5: Unauthenticated STOMP connections are rejected ----
 
     /**
-     * Validates Requirement 12.5: Unauthenticated STOMP connections cannot send
-     * messages to /app/** destinations.
+     * Validates Requirement 12.5 / R1-62: an unauthenticated CONNECT is rejected, so no usable
+     * session is established (the interceptor throws before CONNECTED, closing the transport).
+     * Split out of the former catch-all so the CONNECT rejection is asserted directly (R4-15).
      */
     @Test
-    void unauthenticatedConnection_cannotSendToAppDestinations() throws Exception {
+    void unauthenticatedConnect_isRejected() throws Exception {
         CompletableFuture<StompSession> sessionFuture = new CompletableFuture<>();
-        CompletableFuture<StompHeaders> errorFuture = new CompletableFuture<>();
+        CompletableFuture<Throwable> failureFuture = new CompletableFuture<>();
 
         WebSocketStompClient stompClient = createStompClient();
         String wsUrl = "ws://localhost:" + port + "/ws";
@@ -246,34 +238,71 @@ class WebSocketIT {
                             @NonNull StompHeaders headers,
                             @NonNull byte[] payload,
                             @NonNull Throwable exception) {
-                        errorFuture.complete(headers);
+                        failureFuture.complete(exception);
                     }
 
                     @Override
                     public void handleTransportError(@NonNull StompSession session, @NonNull Throwable exception) {
-                        errorFuture.completeExceptionally(exception);
+                        failureFuture.complete(exception);
                     }
                 });
 
-        // The CONNECT may succeed (MessageSecurityConfig permits CONNECT for all),
-        // but sending to /app/** should fail for unauthenticated users.
-        // We verify by attempting to subscribe and send — the session should
-        // either not connect or the send should trigger an error/disconnect.
-        try {
-            StompSession session = sessionFuture.get(5, TimeUnit.SECONDS);
-            stompSessions.add(session);
+        // The rejection surfaces as an error/transport failure and no successful CONNECTED frame.
+        Throwable failure = failureFuture.get(5, TimeUnit.SECONDS);
+        assertThat(failure).isNotNull();
+        assertThat(sessionFuture).isNotCompleted();
+    }
 
-            // Try to send to an authenticated-only destination
-            Map<String, Object> payload = Map.of("room_id", room.getId().toString(), "content", "Should not work");
-            session.send("/app/chat.send", payload);
+    /**
+     * Validates Requirement 12.5 / R4-15: an authenticated but non-member send to a room is denied
+     * — the handler rejects it and the error is delivered to the sender's personal error queue.
+     */
+    @Test
+    void authenticatedNonMember_sendToRoom_deliversErrorToUserQueue() throws Exception {
+        // A private room only userA belongs to; userB is authenticated but not a member.
+        Room privateRoom = roomService.getRoomById(roomService
+                .createRoom(
+                        "ws-priv-" + UUID.randomUUID().toString().substring(0, 8), "p", RoomVisibility.PRIVATE, userA)
+                .id());
 
-            // Await the server-side disconnect rather than sleeping a fixed interval (R1-53).
-            awaitUntil(() -> !session.isConnected());
-            assertThat(session.isConnected()).isFalse();
-        } catch (Exception e) {
-            // Connection or send was rejected — this is the expected behavior
-            assertThat(e).isNotNull();
-        }
+        String sessionCookieB = authenticateViaHttp(userB.getEmail(), "testpass123");
+        StompSession sessionB = connectStomp(sessionCookieB);
+
+        BlockingQueue<Map> errors = new LinkedBlockingQueue<>();
+        sessionB.subscribe("/user/queue/errors", new QueueFrameHandler<>(errors, Map.class));
+
+        Map<String, Object> payload = Map.of("room_id", privateRoom.getId().toString(), "content", "I am not a member");
+        Map error = sendUntilReceived(sessionB, "/app/chat.send", payload, errors);
+
+        assertThat(error).isNotNull();
+        assertThat(error.get("message")).isNotNull();
+    }
+
+    /**
+     * Validates R1-09 / R4-08 at the transport level: a non-member's SUBSCRIBE to a private room is
+     * rejected by the channel interceptor, so a message broadcast to that room never reaches them.
+     */
+    @Test
+    void nonMemberSubscribeToPrivateRoom_receivesNoBroadcast() throws Exception {
+        Room privateRoom = roomService.getRoomById(roomService
+                .createRoom(
+                        "ws-priv-" + UUID.randomUUID().toString().substring(0, 8), "p", RoomVisibility.PRIVATE, userA)
+                .id());
+
+        String sessionCookieB = authenticateViaHttp(userB.getEmail(), "testpass123");
+        StompSession sessionB = connectStomp(sessionCookieB);
+
+        // The interceptor rejects this SUBSCRIBE; userB must receive nothing on the topic.
+        BlockingQueue<Map> receivedByB = new LinkedBlockingQueue<>();
+        sessionB.subscribe("/topic/room." + privateRoom.getId(), new QueueFrameHandler<>(receivedByB, Map.class));
+
+        String sessionCookieA = authenticateViaHttp(userA.getEmail(), "testpass123");
+        StompSession sessionA = connectStomp(sessionCookieA);
+        Map<String, Object> payload = Map.of("room_id", privateRoom.getId().toString(), "content", "members only");
+        sessionA.send("/app/chat.send", payload);
+
+        // Give the broadcast ample time; the non-member's rejected subscription must stay empty.
+        assertThat(receivedByB.poll(2, TimeUnit.SECONDS)).isNull();
     }
 
     // ---- Requirement 12.6: Message sent by User A received by User B ----
@@ -293,14 +322,10 @@ class WebSocketIT {
         // User B subscribes to the room topic
         BlockingQueue<Map> receivedByB = new LinkedBlockingQueue<>();
         sessionB.subscribe("/topic/room." + room.getId(), new QueueFrameHandler<>(receivedByB, Map.class));
-        Thread.sleep(500);
 
-        // User A sends a message
+        // User A sends a message; resend until B's subscription is live and receives it (R4-09).
         Map<String, Object> payload = Map.of("room_id", room.getId().toString(), "content", "Hello from User A!");
-        sessionA.send("/app/chat.send", payload);
-
-        // User B should receive the message
-        Map message = receivedByB.poll(5, TimeUnit.SECONDS);
+        Map message = sendUntilReceived(sessionA, "/app/chat.send", payload, receivedByB);
         assertThat(message).isNotNull();
         assertThat(message.get("content")).isEqualTo("Hello from User A!");
         assertThat(message.get("sender_username")).isEqualTo(userA.getUsername());
@@ -317,6 +342,23 @@ class WebSocketIT {
             }
             Thread.sleep(50);
         }
+    }
+
+    /**
+     * Sends a frame and waits for a matching delivery, resending until the subscription is live
+     * instead of sleeping a fixed interval before a single send (R4-09). The SimpleBroker gives no
+     * SUBSCRIBE ack, so under CI load the first send can race ahead of subscription registration and
+     * be lost with no replay; resending closes that race deterministically. Returns null on timeout.
+     */
+    private <T> T sendUntilReceived(StompSession session, String destination, Object payload, BlockingQueue<T> queue)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 5000;
+        T item = null;
+        while (item == null && System.currentTimeMillis() < deadline) {
+            session.send(destination, payload);
+            item = queue.poll(250, TimeUnit.MILLISECONDS);
+        }
+        return item;
     }
 
     private WebSocketStompClient createStompClient() {

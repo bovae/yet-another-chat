@@ -37,10 +37,13 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     // Unread counts derive from actual undeleted rows so deletions don't inflate them (R1-57).
     long countByRoomAndWatermarkGreaterThan(Room room, Long watermark);
 
-    @Query("SELECT m.watermark FROM Message m WHERE m.room = :room AND m.watermark > :watermark "
-            + "ORDER BY m.watermark ASC")
-    List<Long> findWatermarksByRoomAndWatermarkGreaterThan(
-            @Param("room") Room room, @Param("watermark") Long watermark);
+    // One grouped query for every member's unread count within a single room (R4-03): the DB
+    // aggregates so the result is bounded by the member count, not the room's message history.
+    // Members whose unread count is zero (or who have no marker) simply don't appear. [userId, count].
+    @Query("SELECT um.user.id, count(m) FROM UnreadMarker um, Message m "
+            + "WHERE um.room.id = :roomId AND m.room.id = um.room.id "
+            + "AND m.watermark > um.lastReadWatermark GROUP BY um.user.id")
+    List<Object[]> countUnreadPerUserInRoom(@Param("roomId") UUID roomId);
 
     // One grouped query for a user's unread counts across many rooms (R1-46). Rooms with zero
     // unread simply don't appear in the result. Returns rows of [roomId, count].

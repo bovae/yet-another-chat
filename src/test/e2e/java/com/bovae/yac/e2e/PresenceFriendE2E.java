@@ -86,7 +86,9 @@ class PresenceFriendE2E extends E2ETestBase {
             y.locator("button[type=submit]").click();
             y.waitForURL("**/chat");
 
-            // X sends Y a friend request from the sidebar.
+            // X sends Y a friend request from the sidebar (add-contact is collapsed behind the
+            // People "＋" after the R5-18 sidebar reorg).
+            x.locator("[data-bs-target='#addContactPanel']").click();
             x.locator("#add-friend-username").fill(yUser);
             x.locator("form:has(#add-friend-username) button[type=submit]").click();
 

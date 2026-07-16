@@ -135,6 +135,21 @@ class AccessControlIT {
                 .andExpect(status().isForbidden());
     }
 
+    // ---- R4-07: Non-member reading a private room's message history receives 403 (R1-08 guard) ----
+
+    @Test
+    void nonMember_getPrivateRoomMessages_returns403() throws Exception {
+        // Public rooms are readable by non-members, so the IDOR guard only bites for a PRIVATE room.
+        Room privateRoom = roomService.getRoomById(roomService
+                .createRoom("ac-private-history", "private", RoomVisibility.PRIVATE, owner)
+                .id());
+        messageService.sendMessage(privateRoom, owner, "secret history", null);
+
+        mockMvc.perform(get("/api/rooms/{roomId}/messages", privateRoom.getId())
+                        .with(user(outsider.getEmail()).roles("USER")))
+                .andExpect(status().isForbidden());
+    }
+
     // ---- Req 9.3: Non-admin attempting kick receives 403 ----
 
     @Test

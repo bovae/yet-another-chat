@@ -108,12 +108,31 @@
   flex-shrink: 0;
 }
 
+/* Actions overlay the top-right of the bubble instead of taking a row in the flow, so an
+   unhovered message reserves no extra height and nothing shifts on hover (R5-08). */
+.message-item .message-bubble {
+  position: relative;
+}
+
 .message-item .message-actions {
+  position: absolute;
+  top: -0.9rem;
+  right: 0;
+  margin: 0;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  padding: 1px 2px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
   opacity: 0;
   transition: opacity 0.2s ease;
 }
 
-.message-bubble:hover .message-actions {
+/* Reveal on hover, and on keyboard focus within the bubble so actions stay reachable without a mouse. */
+.message-bubble:hover .message-actions,
+.message-bubble:focus-within .message-actions {
   opacity: 1;
 }
 

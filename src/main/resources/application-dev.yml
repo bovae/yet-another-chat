@@ -4,3 +4,9 @@ spring:
   liquibase:
     # Dev profile runs the seed migration (context:dev) in addition to the schema changesets.
     contexts: dev
+
+app:
+  security:
+    # Dev-only default so `make run` (dev profile) starts without exporting the key (R4-12).
+    # Production runs without the dev profile and still requires REMEMBER_ME_KEY (R1-35).
+    remember-me-key: ${REMEMBER_ME_KEY:dev-local-remember-me-key-not-for-production}

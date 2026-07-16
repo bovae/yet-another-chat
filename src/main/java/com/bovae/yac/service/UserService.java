@@ -7,6 +7,7 @@ import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.dto.UserMapper;
 import com.bovae.yac.model.entity.Room;
 import com.bovae.yac.model.entity.User;
+import com.bovae.yac.model.enums.RoomVisibility;
 import com.bovae.yac.repository.FriendshipRepository;
 import com.bovae.yac.repository.PasswordResetTokenRepository;
 import com.bovae.yac.repository.RoomMemberRepository;
@@ -84,13 +85,23 @@ public class UserService {
 
         LOG.info("Deleting account for user: username={}, id={}", user.getUsername(), user.getId());
 
-        // 1. Delete all rooms owned by user (cascade: messages, attachments, members, bans, invitations)
+        // 1. Delete rooms owned by user (cascade: messages, attachments, members, bans, invitations).
+        //    DIRECT rooms are excluded (R4-04): a DM is "owned" by whoever opened it, but cascade-
+        //    deleting it would wipe the counterpart's entire conversation. Instead it follows the
+        //    membership-removal path below, and rooms.owner_id ON DELETE SET NULL + messages.sender_id
+        //    ON DELETE SET NULL (R1-28) leave the DM intact with the deleter's messages as "Deleted user".
         List<Room> ownedRooms = roomRepository.findByOwner(user);
         for (Room room : ownedRooms) {
+            // Preserve a DM only while a live counterpart remains (R4-04). A self-DM, or a DM whose
+            // counterpart already deleted, has no one to keep it for — cascade-delete it so its rows
+            // and on-disk files are reclaimed instead of orphaned forever (R5-12).
+            if (room.getVisibility() == RoomVisibility.DIRECT && roomMemberRepository.countByRoom(room) > 1) {
+                continue;
+            }
             roomService.deleteRoomCascade(room);
         }
 
-        // 2. Remove user's memberships from other rooms
+        // 2. Remove user's memberships from other rooms (including any DM they opened)
         roomMemberRepository.deleteAll(roomMemberRepository.findByUser(user));
 
         // 3. Delete all friendships involving user

@@ -17,6 +17,8 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,8 +33,17 @@ public class DirectChatService {
     private final UserBanService userBanService;
     private final NotificationService notificationService;
     private final RoomMapper roomMapper;
+    // Self-reference so the transactional create runs through the Spring proxy; used to recover
+    // from a lost create race in a fresh transaction (R4-13). ObjectProvider is resolved lazily,
+    // so it introduces no circular-dependency at startup.
+    private final ObjectProvider<DirectChatService> self;
 
-    @Transactional
+    /**
+     * Idempotent get-or-create for a direct chat. Deliberately NOT {@code @Transactional}: the
+     * atomic write happens in {@link #createDirectChat}, and losing a concurrent create race must
+     * be recoverable by re-reading in a fresh transaction — which is impossible from inside the
+     * transaction whose insert just failed (R4-13, completing R1-68).
+     */
     public RoomDto getOrCreateDirectChat(User userA, User userB) {
         boolean selfDm = userA.getId().equals(userB.getId());
 
@@ -53,15 +64,23 @@ public class DirectChatService {
             return roomMapper.toDto(existing.get());
         }
 
+        try {
+            return self.getObject().createDirectChat(userA, userB, roomName, selfDm);
+        } catch (DataIntegrityViolationException e) {
+            // A concurrent caller won the create race against the unique DM name (R1-68); return
+            // the winning room instead of surfacing a 409, fulfilling the get-or-create contract.
+            return roomMapper.toDto(roomRepository.findByName(roomName).orElseThrow(() -> e));
+        }
+    }
+
+    @Transactional
+    public RoomDto createDirectChat(User userA, User userB, String roomName, boolean selfDm) {
         Room room = Room.builder()
                 .name(roomName)
                 .visibility(RoomVisibility.DIRECT)
                 .owner(userA)
                 .nextWatermark(1L)
                 .build();
-        // The deterministic DM name is DB-unique, so a concurrent create losing the race raises
-        // DataIntegrityViolationException → 409 (R1-68); the retried getOrCreate then finds the
-        // winning room, so both callers resolve to the one DIRECT room.
         room = roomRepository.save(room);
 
         RoomMember memberA = RoomMember.builder()

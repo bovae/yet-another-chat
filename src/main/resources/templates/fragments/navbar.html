@@ -8,22 +8,18 @@
     <span class="navbar-toggler-icon"></span>
   </button>
   <div class="collapse navbar-collapse" id="navbarNav">
+    <!-- Navbar carries only global, cross-page destinations (R5-17). Rooms and contacts live in the
+         always-present sidebar, so the old "Private Rooms"/"Contacts" section-anchor links (which
+         merely scrolled a sidebar section) were dropped; "Saved Messages" is promoted here as a
+         one-click destination reachable from any page. -->
     <ul class="navbar-nav me-auto">
       <li class="nav-item">
         <a class="nav-link" th:classappend="${activePath != null and activePath.startsWith('/rooms/catalog')} ? 'active'"
-           th:href="@{/rooms/catalog}">Public Rooms</a>
+           th:href="@{/rooms/catalog}">Browse rooms</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" th:classappend="${activePath == '/chat' and activeSection == 'private'} ? 'active'"
-           th:href="@{/chat(section='private')}">Private Rooms</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" th:classappend="${activePath == '/chat' and activeSection == 'contacts'} ? 'active'"
-           th:href="@{/chat(section='contacts')}">Contacts</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" th:classappend="${activePath != null and activePath.startsWith('/profile/sessions')} ? 'active'"
-           th:href="@{/profile/sessions}">Sessions</a>
+        <a class="nav-link" th:classappend="${activePath != null and activePath.startsWith('/chat/saved-messages')} ? 'active'"
+           th:href="@{/chat/saved-messages}">Saved Messages</a>
       </li>
     </ul>
     <!-- Aggregate notification badge, visible on pages without the sidebar (R3-10) -->

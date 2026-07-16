@@ -231,7 +231,8 @@ class MessageApiControllerTest {
                 .edited(true)
                 .build();
         EditMessageRequest request = new EditMessageRequest("edited content");
-        when(messageService.editMessage(messageId, user, "edited content")).thenReturn(edited);
+        when(messageService.editMessage(messageId, user, "edited content", room))
+                .thenReturn(edited);
 
         ResponseEntity<ChatMessageResponse> response = controller.editMessage(roomId, messageId, request, principal);
 
@@ -260,7 +261,7 @@ class MessageApiControllerTest {
                 .replyTo(replyTo)
                 .build();
         EditMessageRequest request = new EditMessageRequest("still here");
-        when(messageService.editMessage(messageId, user, "still here")).thenReturn(edited);
+        when(messageService.editMessage(messageId, user, "still here", room)).thenReturn(edited);
 
         ResponseEntity<ChatMessageResponse> response = controller.editMessage(roomId, messageId, request, principal);
 

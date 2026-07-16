@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -105,17 +106,25 @@ public class RoomBanApiController {
     }
 
     private BanResponse toBanResponse(RoomBan ban) {
+        // bannedBy is null when the issuing admin deleted their account (R5-10); surface the ban
+        // anyway so it can still be lifted, with an unknown issuer rather than an NPE.
+        User bannedBy = ban.getBannedBy();
         return new BanResponse(
                 ban.getId(),
                 ban.getUser().getId(),
                 ban.getUser().getUsername(),
-                ban.getBannedBy().getId(),
-                ban.getBannedBy().getUsername(),
+                bannedBy != null ? bannedBy.getId() : null,
+                bannedBy != null ? bannedBy.getUsername() : null,
                 ban.getCreatedAt());
     }
 
     public record BanResponse(
-            UUID id, UUID userId, String username, UUID bannedById, String bannedByUsername, Instant createdAt) {}
+            UUID id,
+            UUID userId,
+            String username,
+            @Nullable UUID bannedById,
+            @Nullable String bannedByUsername,
+            Instant createdAt) {}
 
     public record BanRequest(@NotNull UUID userId) {}
 }

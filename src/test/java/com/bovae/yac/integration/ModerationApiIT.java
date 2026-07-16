@@ -14,8 +14,10 @@ import com.bovae.yac.config.TestcontainersConfig;
 import com.bovae.yac.model.dto.UserDto;
 import com.bovae.yac.model.entity.Message;
 import com.bovae.yac.model.entity.Room;
+import com.bovae.yac.model.entity.RoomBan;
 import com.bovae.yac.model.entity.User;
 import com.bovae.yac.model.enums.RoomVisibility;
+import com.bovae.yac.repository.RoomBanRepository;
 import com.bovae.yac.repository.UserRepository;
 import com.bovae.yac.service.MessageService;
 import com.bovae.yac.service.ModerationService;
@@ -65,6 +67,9 @@ class ModerationApiIT {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private RoomBanRepository roomBanRepository;
 
     private User owner;
     private User member;
@@ -138,6 +143,24 @@ class ModerationApiIT {
                         .with(user(owner.getEmail()).roles("USER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
+    }
+
+    @Test
+    void listBans_stillShowsBan_whenIssuerIsNull() throws Exception {
+        // When the issuing admin deletes their account, room_bans.banned_by_id goes NULL
+        // (ON DELETE SET NULL). Simulate that end state directly (a committed cross-transaction
+        // delete can't be reproduced inside one @Transactional test). Before the fix the INNER
+        // JOIN FETCH dropped this null-issuer row → size 0; the ban must stay visible so it can
+        // still be lifted (R5-10).
+        RoomBan orphanIssuerBan =
+                RoomBan.builder().room(room).user(outsider).bannedBy(null).build();
+        roomBanRepository.save(orphanIssuerBan);
+
+        mockMvc.perform(get("/api/rooms/{roomId}/bans", room.getId())
+                        .with(user(owner.getEmail()).roles("USER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].username").value("outsider"));
     }
 
     @Test

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -33,6 +34,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataIntegrityViolationException;
 
 /**
  * Unit tests for {@link DirectChatService} — existing rooms are now resolved structurally by the
@@ -59,6 +62,9 @@ class DirectChatServiceTest {
     @Mock
     private RoomMapper roomMapper;
 
+    @Mock
+    private ObjectProvider<DirectChatService> self;
+
     @InjectMocks
     private DirectChatService directChatService;
 
@@ -67,6 +73,10 @@ class DirectChatServiceTest {
 
     @BeforeEach
     void setUp() {
+        // The create path is invoked through the self proxy; in unit tests it resolves back to
+        // the instance under test so createDirectChat runs against the mocked repositories.
+        lenient().when(self.getObject()).thenReturn(directChatService);
+
         userA = User.builder()
                 .id(UUID.randomUUID())
                 .email("alice@test.com")
@@ -185,6 +195,35 @@ class DirectChatServiceTest {
         assertThat(secondResult.id()).isEqualTo(createdRoom.getId());
 
         verify(roomRepository, times(1)).save(any(Room.class));
+    }
+
+    /**
+     * Validates R4-13: losing the create race (the DB unique DM name rejects the second insert)
+     * returns the winning room instead of surfacing a 409.
+     */
+    @Test
+    void getOrCreateDirectChat_whenConcurrentCreateLosesRace_returnsWinningRoom() {
+        when(friendshipService.areFriends(userA, userB)).thenReturn(true);
+        when(userBanService.isBanExistsBetween(userA, userB)).thenReturn(false);
+
+        Room winner = Room.builder()
+                .id(UUID.randomUUID())
+                .name("dm-winner")
+                .visibility(RoomVisibility.DIRECT)
+                .owner(userB)
+                .build();
+
+        // First lookup finds nothing → create; the insert loses the unique-name race; the recovery
+        // lookup then returns the winning room.
+        when(roomRepository.findByName(anyString()))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(roomRepository.save(any(Room.class))).thenThrow(new DataIntegrityViolationException("duplicate dm name"));
+        when(roomMapper.toDto(winner)).thenReturn(toDto(winner));
+
+        RoomDto result = directChatService.getOrCreateDirectChat(userA, userB);
+
+        assertThat(result.id()).isEqualTo(winner.getId());
     }
 
     // --- listDirectChats ---

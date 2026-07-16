@@ -18,6 +18,9 @@ public interface RoomBanRepository extends JpaRepository<RoomBan, UUID> {
 
     List<RoomBan> findByRoom(Room room);
 
-    @Query("SELECT rb FROM RoomBan rb JOIN FETCH rb.user JOIN FETCH rb.bannedBy WHERE rb.room = :room")
+    // LEFT JOIN on bannedBy: banned_by_id is nullable (ON DELETE SET NULL, R1-28), so an INNER
+    // join would silently drop bans whose issuing admin deleted their account, hiding them from
+    // the ban list and making the still-enforced ban impossible to lift (R5-10).
+    @Query("SELECT rb FROM RoomBan rb JOIN FETCH rb.user LEFT JOIN FETCH rb.bannedBy WHERE rb.room = :room")
     List<RoomBan> findByRoomWithUserAndBannedBy(@Param("room") Room room);
 }
