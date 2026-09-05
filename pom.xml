@@ -22,7 +22,7 @@
         <lombok.version>1.18.46</lombok.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <htmx-spring-boot.version>5.1.0</htmx-spring-boot.version>
-        <htmx.version>2.0.10</htmx.version>
+        <htmx.version>4.0.0</htmx.version>
         <htmx-ext-ws.version>2.0.4</htmx-ext-ws.version>
         <bootstrap.version>5.3.8</bootstrap.version>
         <stompjs.version>7.0.0</stompjs.version>
